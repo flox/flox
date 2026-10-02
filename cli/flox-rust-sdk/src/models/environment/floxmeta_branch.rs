@@ -11,6 +11,7 @@ use super::{ManagedPointer, path_hash};
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
 use crate::models::environment::generations::Generations;
+use crate::models::environment::managed_environment::GENERATION_LOCK_FILENAME;
 use crate::models::floxmeta::{BRANCH_NAME_PATH_SEPARATOR, FloxMeta, FloxMetaError, floxmeta_dir};
 use crate::providers::git::{
     GitCommandBranchHashError,
@@ -391,6 +392,32 @@ pub(crate) fn last_fetched_remote_generations(
         Err(GitCommandBranchHashError::DoesNotExist) => Ok(None),
         Err(err) => Err(FloxmetaBranchError::GitBranchHash(err)),
     }
+}
+
+/// The generations of an environment pulled from FloxHub into the `.flox`
+/// directory `dot_flox_path`, at the revision its generation lock records,
+/// without waiting for the floxmeta lock, fetching or writing anything.
+///
+/// [None] if it hasn't been opened on this machine.
+/// Reading them fails if this machine doesn't have that revision.
+pub(crate) fn local_generations(
+    flox: &Flox,
+    pointer: &ManagedPointer,
+    dot_flox_path: &Path,
+) -> Result<Option<Generations>, FloxmetaBranchError> {
+    let Some(lock) = GenerationLock::read_maybe(dot_flox_path.join(GENERATION_LOCK_FILENAME))?
+    else {
+        return Ok(None);
+    };
+    let floxmeta = match FloxMeta::open_local(flox, pointer) {
+        Ok(floxmeta) => floxmeta,
+        Err(FloxMetaError::NotFound(_)) => return Ok(None),
+        Err(err) => return Err(FloxmetaBranchError::OpenFloxmeta(err)),
+    };
+    Ok(Some(Generations::new(
+        floxmeta.git,
+        lock.local_rev.unwrap_or(lock.rev),
+    )))
 }
 
 /// Acquire exclusive lock on floxmeta directory

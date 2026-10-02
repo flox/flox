@@ -442,6 +442,13 @@ fn format_unreadable_reason(reason: &EnvironmentError) -> String {
                 path = path.display(),
             }
         },
+        EnvironmentError::Recoverable(RecoverableMergeError::ManagedNotFetched(path)) => {
+            formatdoc! {"
+                The environment in '{path}' hasn't been fetched from FloxHub on this machine yet.
+                Run 'flox activate -d {path}' to fetch it.",
+                path = path.display(),
+            }
+        },
         reason => errors::format_error(reason).trim_end().to_string(),
     }
 }

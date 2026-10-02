@@ -1,11 +1,13 @@
 use std::collections::{HashMap, HashSet};
+use std::fs;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use flox_core::data::environment_ref::RemoteEnvironmentRef;
 use flox_manifest::lockfile::{IncludedRemote, LOCKFILE_FILENAME, LockedInclude, Lockfile};
 use flox_manifest::parsed::latest::{AutoUpgrade, IncludeDescriptor};
-use flox_manifest::{Manifest, TypedOnly};
+use flox_manifest::{MANIFEST_FILENAME, Manifest, TypedOnly};
 use itertools::Itertools;
 
 use super::core_environment::{CoreEnvironment, IncludedRemoteEnvironment};
@@ -19,12 +21,17 @@ use super::{
 };
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
+use crate::models::environment::core_environment::CoreEnvironmentError;
 use crate::models::environment::floxmeta_branch::{
     fetch_remote_generations,
     last_fetched_remote_generations,
+    local_generations,
 };
 use crate::models::environment::generations::GenerationsError;
-use crate::models::environment::managed_environment::ManagedEnvironmentError;
+use crate::models::environment::managed_environment::{
+    ManagedEnvironment,
+    ManagedEnvironmentError,
+};
 use crate::models::environment::{Environment, ManagedPointer, UnreadableIncludes};
 use crate::providers::lock_manifest::RecoverableMergeError;
 
@@ -388,6 +395,21 @@ impl IncludeFetcher {
         }
         let start = self.fetched.start_local(&dot_flox.path);
 
+        if let EnvironmentPointer::Managed(pointer) = &dot_flox.pointer {
+            let (manifest, lockfile) =
+                self.fetch_managed_dir(flox, &path, &dot_flox, pointer, unreadable_includes)?;
+            let environment_name = pointer.name.to_string();
+            self.fetched.insert_local(
+                key,
+                start,
+                environment_name.clone(),
+                manifest.clone(),
+                lockfile.clone(),
+            );
+            let name = name.clone().unwrap_or(environment_name);
+            return Ok((manifest, lockfile, name));
+        }
+
         let environment =
             UninitializedEnvironment::DotFlox(dot_flox).into_concrete_environment(flox, None)?;
         let environment_name = environment.name().to_string();
@@ -412,33 +434,8 @@ impl IncludeFetcher {
                 )?;
                 (manifest, seed)
             },
-            ConcreteEnvironment::Managed(environment) => {
-                let Some(lockfile) = environment.existing_lockfile(flox)? else {
-                    return Err(EnvironmentError::Recoverable(
-                        RecoverableMergeError::ManagedOutOfSync(path),
-                    ));
-                };
-                if environment.has_local_changes(flox)? {
-                    return Err(EnvironmentError::Recoverable(
-                        RecoverableMergeError::ManagedOutOfSync(path),
-                    ));
-                }
-                // Like a path environment, it follows its own includes
-                let include_fetcher =
-                    self.for_included(environment.parent_path()?, environment.dot_flox_path());
-                let (manifest, seed) = CoreEnvironment::new(
-                    environment.dot_flox_path().join(ENV_DIR_NAME),
-                    include_fetcher,
-                )
-                .manifest_following_includes(
-                    flox,
-                    lockfile,
-                    unreadable_includes,
-                )?;
-                (manifest, seed)
-            },
-            ConcreteEnvironment::Remote(_) => {
-                unreachable!("opening a path cannot result in a remote environment");
+            ConcreteEnvironment::Managed(_) | ConcreteEnvironment::Remote(_) => {
+                unreachable!("a path pointer opens a path environment");
             },
         };
 
@@ -451,6 +448,77 @@ impl IncludeFetcher {
         );
         let name = name.clone().unwrap_or(environment_name);
         Ok((manifest, lockfile, name))
+    }
+
+    /// Read the current generation of an environment pulled from FloxHub into
+    /// the included directory `path`, as this machine has it, with the latest
+    /// changes to the environments it follows, see
+    /// [CoreEnvironment::manifest_following_includes].
+    ///
+    /// Unlike opening it, this doesn't wait for the floxmeta lock, contact
+    /// FloxHub or write anything.
+    /// Like a path environment's unlocked changes, changes in the directory
+    /// that aren't in a generation aren't used.
+    fn fetch_managed_dir(
+        &self,
+        flox: &Flox,
+        path: &Path,
+        dot_flox: &DotFlox,
+        pointer: &ManagedPointer,
+        unreadable_includes: UnreadableIncludes,
+    ) -> Result<(Manifest<TypedOnly>, Lockfile), EnvironmentError> {
+        let not_fetched = || {
+            EnvironmentError::Recoverable(RecoverableMergeError::ManagedNotFetched(
+                path.to_path_buf(),
+            ))
+        };
+        let generations = local_generations(flox, pointer, &dot_flox.path)
+            .map_err(ManagedEnvironmentError::FloxmetaBranch)?
+            .ok_or_else(not_fetched)?;
+        let (Ok(lockfile_contents), Ok(manifest_contents)) = (
+            generations.current_gen_lockfile(),
+            generations.current_gen_manifest_contents(),
+        ) else {
+            return Err(not_fetched());
+        };
+        let lockfile =
+            Lockfile::from_str(&lockfile_contents).map_err(EnvironmentError::Lockfile)?;
+
+        let dot_flox_path = CanonicalPath::new(&dot_flox.path)
+            .map_err(|err| EnvironmentError::DotFloxNotFound(err.path))?;
+        let include_fetcher = self.for_included(path.to_path_buf(), dot_flox_path);
+        let env_dir = dot_flox.path.join(ENV_DIR_NAME);
+        // The directory only has a copy of the generation once it's been used
+        let generation_copy;
+        let env_dir = if env_dir.exists() {
+            let checkout = CoreEnvironment::new(&env_dir, include_fetcher.clone());
+            if !ManagedEnvironment::validate_checkout(&checkout, &generations)? {
+                return Err(EnvironmentError::Recoverable(
+                    RecoverableMergeError::ManagedOutOfSync(path.to_path_buf()),
+                ));
+            }
+            env_dir
+        } else {
+            generation_copy = tempfile::tempdir_in(&flox.temp_dir)
+                .map_err(CoreEnvironmentError::MakeTemporaryEnv)?;
+            fs::write(
+                generation_copy.path().join(MANIFEST_FILENAME),
+                manifest_contents,
+            )
+            .map_err(CoreEnvironmentError::MakeTemporaryEnv)?;
+            fs::write(
+                generation_copy.path().join(LOCKFILE_FILENAME),
+                lockfile_contents,
+            )
+            .map_err(CoreEnvironmentError::MakeTemporaryEnv)?;
+            generation_copy.path().to_path_buf()
+        };
+        // Like a path environment, it follows its own includes
+        CoreEnvironment::new(env_dir, include_fetcher).manifest_following_includes(
+            flox,
+            lockfile,
+            unreadable_includes,
+        )
     }
 
     /// Fetch a remote environment.
@@ -839,6 +907,7 @@ fn list_remote(
 mod test {
     use std::fs;
 
+    use flox_core::data::environment_ref::EnvironmentOwner;
     use flox_manifest::interfaces::AsTypedOnlyManifest;
     use flox_manifest::test_helpers::with_latest_schema;
     use indoc::{formatdoc, indoc};
@@ -847,7 +916,9 @@ mod test {
     use super::*;
     use crate::flox::test_helpers::{flox_instance, flox_instance_with_optional_floxhub};
     use crate::models::env_registry::{env_registry_path, read_environment_registry};
+    use crate::models::environment::floxmeta_branch::GenerationLock;
     use crate::models::environment::generations::GenerationsExt;
+    use crate::models::environment::managed_environment::GENERATION_LOCK_FILENAME;
     use crate::models::environment::managed_environment::test_helpers::mock_managed_environment_in;
     use crate::models::environment::path_environment::test_helpers::new_path_environment_in;
     use crate::models::environment::remote_environment::RemoteEnvironment;
@@ -1073,6 +1144,83 @@ mod test {
             })
             .unwrap();
         assert_eq!(fetched, None);
+    }
+
+    /// An environment pulled from FloxHub into an included directory is read
+    /// without waiting for the floxmeta lock, which another command may hold
+    /// while it fetches
+    #[test]
+    fn fetch_managed_does_not_wait_for_floxmeta_lock() {
+        let owner: EnvironmentOwner = "owner".parse().unwrap();
+        let (flox, tempdir) = flox_instance_with_optional_floxhub(Some(&owner));
+        let environment_path = tempdir.path().join("environment");
+        fs::create_dir(&environment_path).unwrap();
+        let manifest_contents = with_latest_schema("[vars]\nfoo = \"bar\"");
+        mock_managed_environment_in(
+            &flox,
+            &manifest_contents,
+            owner.clone(),
+            &environment_path,
+            None,
+        );
+        let floxmeta_dir = floxmeta_dir(&flox, &owner);
+        let mut lock = fslock::LockFile::open(&floxmeta_dir.with_file_name(format!(
+            "{}.lock",
+            floxmeta_dir.file_name().unwrap().to_string_lossy()
+        )))
+        .unwrap();
+        lock.lock().unwrap();
+
+        let include_fetcher = IncludeFetcher::new(Some(tempdir.path().to_path_buf()));
+        let include_descriptor = IncludeDescriptor::Local {
+            dir: environment_path.file_name().unwrap().into(),
+            name: None,
+            auto_upgrade: None,
+        };
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = sender.send(include_fetcher.fetch(&flox, &include_descriptor));
+        });
+        let fetched = receiver
+            .recv_timeout(std::time::Duration::from_secs(30))
+            .expect("fetching waited for the floxmeta lock")
+            .unwrap();
+        assert_eq!(
+            fetched.locked_include.manifest,
+            toml_edit::de::from_str(&manifest_contents).unwrap()
+        );
+    }
+
+    /// An environment pulled from FloxHub into an included directory whose
+    /// current generation this machine doesn't have isn't fetched
+    #[test]
+    fn fetch_managed_fails_without_its_generation() {
+        let owner = "owner".parse().unwrap();
+        let (flox, tempdir) = flox_instance_with_optional_floxhub(Some(&owner));
+        let environment_path = tempdir.path().join("environment");
+        fs::create_dir(&environment_path).unwrap();
+        let environment =
+            mock_managed_environment_in(&flox, "version = 1\n", owner, &environment_path, None);
+        let lock_path = environment.dot_flox_path().join(GENERATION_LOCK_FILENAME);
+        let mut lock = GenerationLock::read_maybe(&lock_path).unwrap().unwrap();
+        lock.rev = "0".repeat(40);
+        lock.local_rev = None;
+        fs::write(&lock_path, serde_json::to_string(&lock).unwrap()).unwrap();
+
+        let err = IncludeFetcher::new(Some(tempdir.path().to_path_buf()))
+            .fetch(&flox, &IncludeDescriptor::Local {
+                dir: environment_path.file_name().unwrap().into(),
+                name: None,
+                auto_upgrade: None,
+            })
+            .unwrap_err();
+        assert!(
+            matches!(
+                err,
+                EnvironmentError::Recoverable(RecoverableMergeError::ManagedNotFetched(_))
+            ),
+            "{err:?}"
+        );
     }
 
     /// fetch() errors if attempting to fetch an out of sync managed environment

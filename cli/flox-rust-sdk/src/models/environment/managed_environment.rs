@@ -1328,7 +1328,7 @@ impl ManagedEnvironment {
     /// in the context of a ManagedEnvironment.
     /// A potential future version could provide more detailed comparison/diff information
     /// that may be more generally useful and see this method changed or moved.
-    fn validate_checkout<State>(
+    pub(crate) fn validate_checkout<State>(
         local: &CoreEnvironment,
         generations: &Generations<State>,
     ) -> Result<bool, ManagedEnvironmentError> {

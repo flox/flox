@@ -139,6 +139,12 @@ pub enum RecoverableMergeError {
     )]
     ManagedOutOfSync(PathBuf),
 
+    /// Following read an environment pulled from FloxHub into a directory as
+    /// this machine has it, but this machine doesn't have its current
+    /// generation
+    #[error("the environment in '{0}' hasn't been fetched from FloxHub on this machine yet")]
+    ManagedNotFetched(PathBuf),
+
     /// Use this error when we don't need an error type to reuse in multiple places
     #[error("{0}")]
     Catchall(String),

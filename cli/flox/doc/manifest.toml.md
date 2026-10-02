@@ -774,7 +774,7 @@ The fields in these include descriptors are as follows:
   [`flox-activate(1)`](./flox-activate.md).
   For a directory that holds an environment pulled from FloxHub, `true` uses
   its current local generation, as long as it has no changes that aren't in a
-  generation yet.
+  generation yet, and as this machine has it, without contacting FloxHub.
   Requires `schema-version = "1.18.0"`.
 
 The lockfile of the composing environment stores a copy of each included
