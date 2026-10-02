@@ -373,7 +373,10 @@ impl Build {
         };
 
         let catalog_lock = match &*expression_lock_rel_paths {
-            [] => None,
+            [] => {
+                validate_manifest_only_catalog_lock(&env.dot_flox_path())?;
+                None
+            },
             expression_lock_rel_paths => Some(
                 BuildLockGuard::new_existing_or_ephemeral(
                     &flox.floxhub_client,
@@ -617,14 +620,21 @@ impl Build {
 
         if rel_file_paths.is_empty() {
             if lockfile_path.exists() {
+                let old: serde_json::Value =
+                    serde_json::from_slice(&std::fs::read(&lockfile_path)?)?;
+                let discarded = old
+                    .get("locked_inputs")
+                    .or_else(|| old.get("direct_catalog_inputs"))
+                    .and_then(serde_json::Value::as_object)
+                    .map_or(0, serde_json::Map::len);
                 nef_lock_catalog::write_lock(
                     &nef_lock_catalog::BuildLock::default(),
                     &lockfile_path,
                 )?;
                 message::created(formatdoc! {"
                 No Nix expression builds found; replaced '.flox/catalog.lock' \
-                    with an empty version 2 lock.
-                    Commit the file so every revision builds against the same inputs."});
+                with an empty version 2 lock, discarding {discarded} entries.
+                Commit the file so every revision builds against the same inputs."});
             } else {
                 message::plain(
                     "No Nix expression builds found; only expression builds reference the catalog.",
@@ -647,9 +657,9 @@ impl Build {
                 Commit the file so every revision builds against the same inputs."});
         } else {
             message::created(formatdoc! {"
-                Locked {count} catalog reference(s) to '.flox/catalog.lock'.
+                Locked {count} non-base catalog reference(s) to '.flox/catalog.lock'.
                 Commit the file so every revision builds against the same inputs.",
-                count = references.len(),
+                count = references.iter().filter(|reference| !reference.to_string().starts_with("catalogs.nixpkgs.")).count(),
             });
         }
         Ok(())
@@ -919,6 +929,14 @@ pub(crate) fn expression_rel_paths(targets: &[PackageTarget]) -> Vec<PathBuf> {
         .collect()
 }
 
+fn validate_manifest_only_catalog_lock(dot_flox_path: &Path) -> Result<()> {
+    let path = catalog_lockfile_path(dot_flox_path);
+    if path.exists() {
+        nef_lock_catalog::read_lock(&path)?;
+    }
+    Ok(())
+}
+
 pub(crate) fn packages_to_build<'o>(
     manifest: &'o Manifest<MigratedTypedOnly>,
     expression_ref: &'o NixFlakeref,
@@ -958,6 +976,20 @@ mod test {
     use tempfile::tempdir_in;
 
     use super::*;
+
+    #[test]
+    fn manifest_only_build_refuses_v1_catalog_lock() {
+        let project = tempfile::tempdir().unwrap();
+        let dot_flox = project.path().join(".flox");
+        std::fs::create_dir(&dot_flox).unwrap();
+        std::fs::write(catalog_lockfile_path(&dot_flox), r#"{"version":1}"#).unwrap();
+        let error = validate_manifest_only_catalog_lock(&dot_flox).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains(nef_lock_catalog::UPDATE_CATALOGS_COMMAND)
+        );
+    }
 
     /// Test that check_and_display_symlink shortens the symlink when in the
     /// current directory,
@@ -1036,7 +1068,7 @@ mod test {
         assert_eq!(
             nef_lock_catalog::read_lock(&lockfile_path)
                 .unwrap()
-                .locked_inputs
+                .locked_inputs()
                 .len(),
             1
         );

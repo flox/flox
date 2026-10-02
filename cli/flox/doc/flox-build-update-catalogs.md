@@ -27,6 +27,12 @@ make, resolved as a union in a single request, so that every build of a
 revision evaluates against one consistent set of inputs.
 Commit the file alongside the manifest.
 
+Base references under `catalogs.nixpkgs` use pinned nixpkgs and do not enter
+the lock. If the project has no Nix expression builds, this command replaces
+an existing lock (including a populated v2 lock) with an empty v2 lock and
+reports the number of entries discarded. With no existing lock it writes
+nothing.
+
 A committed lock remains unchanged: `flox build` and `flox publish`
 materialize the catalog tree for evaluation without rewriting the file.
 When the project's expressions gain a reference the lock does not cover,
