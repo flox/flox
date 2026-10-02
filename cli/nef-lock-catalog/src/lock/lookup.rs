@@ -187,7 +187,9 @@ mod tests {
         .expect("success fixture deserializes");
 
         let lock = lock_from_response(response).expect("success fixture locks");
-        let value = serde_json::to_value(&lock).unwrap();
+        let value: serde_json::Value =
+            serde_json::from_str(&crate::lock::transform::render_builder_lock(&lock).unwrap())
+                .unwrap();
 
         assert_eq!(value["version"], json!(2));
         assert_eq!(
@@ -268,7 +270,10 @@ mod tests {
         let lock = lock_from_response(response).expect("base-only group is usable");
         assert!(lock.direct_inputs.is_empty());
         assert!(lock.locked_inputs.is_empty());
-        assert_eq!(serde_json::to_value(&lock).unwrap()["catalogs"], json!({}));
+        assert_eq!(
+            crate::lock::transform::materialize_catalogs(&lock).unwrap(),
+            json!({})
+        );
     }
 
     #[test]
@@ -288,7 +293,9 @@ mod tests {
             BTreeSet::from(["myorg/hello".to_string()])
         );
         assert_eq!(lock.locked_inputs.len(), 1);
-        let value = serde_json::to_value(&lock).unwrap();
+        let value: serde_json::Value =
+            serde_json::from_str(&crate::lock::transform::render_builder_lock(&lock).unwrap())
+                .unwrap();
         assert!(value["catalogs"].get("nixpkgs").is_none());
     }
 

@@ -168,7 +168,7 @@ mod tests {
         assert_eq!(references, BTreeSet::new());
         assert_eq!(
             std::fs::read_to_string(&lockfile_path).unwrap(),
-            "{\n  \"version\": 2,\n  \"locked_inputs\": {},\n  \"direct_inputs\": [],\n  \"catalogs\": {}\n}\n"
+            "{\n  \"version\": 2,\n  \"locked_inputs\": {},\n  \"direct_inputs\": []\n}\n"
         );
     }
 }

@@ -464,9 +464,8 @@ impl Publish {
         };
 
         // The lock this publish's build consumes, created up front by the
-        // CLI: the committed .flox/catalog.lock exactly as found, or a fresh
-        // ephemeral lock the package builder only passes through to the NEF
-        // evals. Scanning is scoped to the published expression — the
+        // CLI: a temporary builder file materialized from the committed
+        // lock, or from fresh resolution for the NEF evals. Scanning is scoped to the published expression — the
         // scanner follows imports, so its references are exactly what its
         // eval looks up — except for a manifest build, whose `${pkg}`
         // references can pull in any of the project's expressions, so all of

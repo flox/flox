@@ -27,8 +27,8 @@ make, resolved as a union in a single request, so that every build of a
 revision evaluates against one consistent set of inputs.
 Commit the file alongside the manifest.
 
-A committed lock is used exactly as it is found: `flox build` and
-`flox publish` never rewrite it.
+A committed lock remains unchanged: `flox build` and `flox publish`
+materialize the catalog tree for evaluation without rewriting the file.
 When the project's expressions gain a reference the lock does not cover,
 re-run `flox build update-catalogs` and commit the result.
 References the scanner cannot fully resolve are pinned conservatively;

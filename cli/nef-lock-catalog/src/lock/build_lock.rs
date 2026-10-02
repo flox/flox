@@ -6,9 +6,8 @@ use flox_core::{Version, WriteError, write_atomically};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, instrument};
 
-use super::tree::PackageTreeNode;
+use crate::CatalogRef;
 use crate::project::UPDATE_CATALOGS_COMMAND;
-use crate::{CatalogId, CatalogRef};
 
 // Must match the configured base catalog's name on the catalog server and the
 // pinned instance exposed as `catalogs.nixpkgs` by the NEF builder.
@@ -17,13 +16,13 @@ pub(crate) const BASE_CATALOG_NAME: &str = "nixpkgs";
 /// Locked source information for a catalog: a package attribute hierarchy with
 /// a locked source per package at its leaves, as returned by the catalog
 /// `/build-inputs/lookup` endpoint.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type")]
 pub(crate) enum CatalogLock {
     #[serde(rename = "floxhub")]
     FloxHub {
         /// Tree structure of locked packages from FloxHub
-        packages: PackageTreeNode,
+        packages: super::tree::PackageTreeNode,
     },
 }
 
@@ -126,13 +125,12 @@ impl From<&LockedInput> for floxhub_client::LockedInputEntry {
 /// follows dependencies through the full map.
 ///
 /// Field order is part of the required empty-lock representation:
-/// `{"version":2,"locked_inputs":{},"direct_inputs":[],"catalogs":{}}`.
+/// `{"version":2,"locked_inputs":{},"direct_inputs":[]}`.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct BuildLock {
     pub version: Version<2>,
     pub locked_inputs: BTreeMap<String, LockedInput>,
     pub direct_inputs: BTreeSet<String>,
-    pub(crate) catalogs: BTreeMap<CatalogId, CatalogLock>,
 }
 
 /// References a lock was asked to cover but does not contain: the lock is
@@ -423,16 +421,14 @@ pub fn read_lock(path: impl AsRef<Path>) -> Result<BuildLock, LockfileError> {
     }
 }
 
-/// Serialize a `BuildLock` to the pretty-printed JSON format consumed by the
-/// NEF. Shared by [write_lock] and callers that stream the lock elsewhere
-/// (e.g. stdout).
+/// Serialize the persisted project lock, also used by stdout callers.
 pub fn render_lock(lock: &BuildLock) -> Result<String, LockfileError> {
     serde_json::to_string_pretty(lock).map_err(LockfileError::Serialize)
 }
 
 /// Write a `BuildLock` to the specified file.
 /// The file is written in a pretty-printed JSON format
-/// and consumed by the NEF.
+/// and consumed by the CLI. The NEF receives a separate materialized file.
 /// The write is atomic — rendered to a temp file in the target's directory
 /// and renamed into place — so a crash mid-write can never leave a
 /// truncated lock for a later build to trust. The temp file gets a fresh
@@ -726,8 +722,29 @@ mod tests {
                 "version": 2,
                 "locked_inputs": {},
                 "direct_inputs": [],
-                "catalogs": {},
             })
+        );
+    }
+
+    #[test]
+    fn old_unreleased_v2_catalogs_are_ignored_on_read() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("catalog.lock");
+        fs::write(
+            &path,
+            r#"{"version":2,"locked_inputs":{},"direct_inputs":[],"catalogs":{"stale":{}}}"#,
+        )
+        .unwrap();
+        let lock = read_lock(&path).unwrap();
+        assert_eq!(
+            serde_json::to_value(&lock).unwrap(),
+            serde_json::json!({
+                "version":2,"locked_inputs":{},"direct_inputs":[]
+            })
+        );
+        assert_eq!(
+            crate::lock::transform::materialize_catalogs(&lock).unwrap(),
+            serde_json::json!({})
         );
     }
 

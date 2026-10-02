@@ -329,9 +329,9 @@ impl Build {
             "has_manifest_build" = has_manifest_build
         );
 
-        // The catalog lock the NEF evals consume, created by the CLI: the
-        // committed .flox/catalog.lock exactly as found, or a fresh
-        // ephemeral lock living only for this invocation. Scanning is
+        // The catalog lock the NEF evals consume, created by the CLI: a
+        // temporary builder file materialized from the committed lock, or
+        // from fresh resolution when no committed lock exists. Scanning is
         // scoped to the expressions being built — the scanner follows
         // imports, so their references are exactly what the evals look up —
         // except when a manifest build is among the targets, whose `${pkg}`
@@ -1002,7 +1002,7 @@ mod test {
 
         assert_eq!(
             std::fs::read_to_string(&lockfile_path).unwrap(),
-            "{\n  \"version\": 2,\n  \"locked_inputs\": {},\n  \"direct_inputs\": [],\n  \"catalogs\": {}\n}\n"
+            "{\n  \"version\": 2,\n  \"locked_inputs\": {},\n  \"direct_inputs\": []\n}\n"
         );
     }
 
@@ -1047,7 +1047,7 @@ mod test {
 
         assert_eq!(
             std::fs::read_to_string(&lockfile_path).unwrap(),
-            "{\n  \"version\": 2,\n  \"locked_inputs\": {},\n  \"direct_inputs\": [],\n  \"catalogs\": {}\n}\n"
+            "{\n  \"version\": 2,\n  \"locked_inputs\": {},\n  \"direct_inputs\": []\n}\n"
         );
     }
 

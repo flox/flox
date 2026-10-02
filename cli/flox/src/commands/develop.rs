@@ -140,9 +140,9 @@ impl Develop {
         let built_environments = env.build(&flox)?;
 
         // The catalog lock the NEF eval consumes, created by the CLI
-        // exactly as `flox build` does: the committed .flox/catalog.lock as
-        // found, or a fresh ephemeral lock scoped to this package (the
-        // scanner follows its imports) living only as long as this command.
+        // exactly as `flox build` does: a temporary builder file materialized from the
+        // committed lock, or from fresh resolution scoped to this package
+        // (the scanner follows its imports).
         let rel_file_path = match target.kind() {
             PackageTargetKind::ExpressionBuild(expression) => expression.rel_file_path.clone(),
             // Guarded by `refuse_manifest_build` above.

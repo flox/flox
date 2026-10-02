@@ -6,7 +6,6 @@ use std::collections::BTreeMap;
 use anyhow::Result;
 use floxhub_client::BuildType;
 use serde::{Deserialize, Serialize};
-use tracing::warn;
 
 use super::flakeref::RawNixFlakerefAttrs;
 
@@ -70,24 +69,11 @@ impl PackageTreeBuilder {
                     // Ensure package set exists and handle conflict resolution
                     entries
                 },
-                PackageTreeNode::Package { .. } => {
-                    // If the entry is a package, replace it with a package set
-                    //
-                    // TODO: allow user driven handling of conflicts, e.g. via excludes
-                    warn!(
-                        "Conflict: replacing package with package set at path: {}",
-                        attr_path[..=index].join(".")
-                    );
-                    *current_node = PackageTreeNode::PackageSet {
-                        entries: BTreeMap::new(),
-                    };
-
-                    // Navigate to child package set
-                    let PackageTreeNode::PackageSet { entries } = current_node else {
-                        unreachable!()
-                    };
-                    entries
-                },
+                PackageTreeNode::Package { .. } => anyhow::bail!(
+                    "package '{}' collides with package '{}'",
+                    attr_path[..index].join("."),
+                    attr_path.join(".")
+                ),
             };
             current_node =
                 entries
@@ -95,6 +81,13 @@ impl PackageTreeBuilder {
                     .or_insert(PackageTreeNode::PackageSet {
                         entries: BTreeMap::new(),
                     });
+            if matches!(current_node, PackageTreeNode::Package { .. }) {
+                anyhow::bail!(
+                    "package '{}' collides with package '{}'",
+                    attr_path[..=index].join("."),
+                    attr_path.join(".")
+                );
+            }
         }
 
         // Insert final package using final component as key. The source is
@@ -104,33 +97,37 @@ impl PackageTreeBuilder {
             PackageTreeNode::PackageSet { entries } => {
                 // Check if there's already a package set at this location
                 if let Some(PackageTreeNode::PackageSet { .. }) = entries.get(final_attribute) {
-                    // TODO: allow user driven handling of conflicts, e.g. via excludes
-                    warn!(
-                        "Conflict: package set already exists at path: {}",
-                        attr_path.join(".")
+                    let child = entries[final_attribute]
+                        .first_package_path()
+                        .expect("a package set created by insertion has a package");
+                    anyhow::bail!(
+                        "package '{}' collides with package '{}.{}'",
+                        attr_path.join("."),
+                        attr_path.join("."),
+                        child.join(".")
                     );
-                    // Package set wins - don't add the package
-                    return Ok(());
                 }
 
                 entries.insert(final_attribute.clone(), package);
             },
-            PackageTreeNode::Package { .. } => {
-                // Replace package with package set, then
-                // fall through to insert the final package
-                //
-                // TODO: allow user driven handling of conflicts, e.g. via excludes
-                warn!(
-                    "Conflict: replacing package with package set at path: {}",
-                    attr_path.join(".")
-                );
-                *current_node = PackageTreeNode::PackageSet {
-                    entries: BTreeMap::from([(final_attribute.clone(), package)]),
-                };
-            },
+            PackageTreeNode::Package { .. } => unreachable!("root is always a package set"),
         }
 
         Ok(())
+    }
+}
+
+impl PackageTreeNode {
+    fn first_package_path(&self) -> Option<Vec<String>> {
+        match self {
+            Self::Package { .. } => Some(Vec::new()),
+            Self::PackageSet { entries } => entries.iter().find_map(|(name, node)| {
+                node.first_package_path().map(|mut path| {
+                    path.insert(0, name.clone());
+                    path
+                })
+            }),
+        }
     }
 }
 
@@ -229,7 +226,7 @@ mod tests {
     }
 
     #[test]
-    fn package_set_overrides_package_on_conflict() {
+    fn package_then_child_is_rejected() {
         // Add "conflict" as a leaf package, then add
         // "conflict.child" which forces "conflict" to become
         // a package set.
@@ -244,37 +241,21 @@ mod tests {
             )
             .unwrap();
 
-        // Then create package set that should replace it
-        builder
+        let err = builder
             .add_package_source(
                 vec!["conflict".to_string(), "child".to_string()],
                 BuildType::Manifest,
                 RawNixFlakerefAttrs::new_unchecked(source.clone()),
             )
-            .unwrap();
-
-        let tree = builder.into_root();
-
-        // Build expected tree using serde_json::json! macro
-        // Note: When package set replaces package, the original package is lost
-        let expected_tree: PackageTreeNode = serde_json::from_value(json!({
-            "type": "package_set",
-            "entries": {
-                "conflict": {
-                    "type": "package_set",
-                    "entries": {
-                        "child": make_package_json(&source)
-                    }
-                }
-            }
-        }))
-        .unwrap();
-
-        assert_eq!(tree, expected_tree);
+            .unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("'conflict' collides with package 'conflict.child'")
+        );
     }
 
     #[test]
-    fn package_ignored_on_conflict() {
+    fn child_then_package_is_rejected() {
         // Create package set first
         let mut builder = PackageTreeBuilder::new();
         let source = test_source();
@@ -287,33 +268,17 @@ mod tests {
             )
             .unwrap();
 
-        // Then create package that should be replaced
-        builder
+        let err = builder
             .add_package_source(
                 vec!["conflict".to_string()],
                 BuildType::Manifest,
                 RawNixFlakerefAttrs::new_unchecked(source.clone()),
             )
-            .unwrap();
-
-        let tree = builder.into_root();
-
-        // Build expected tree using serde_json::json! macro
-        let expected_tree: PackageTreeNode = serde_json::from_value(json!({
-            "type": "package_set",
-            "entries": {
-                // On conflict, the package is replaced by the packageset
-                "conflict": {
-                    "type": "package_set",
-                    "entries": {
-                        "child": make_package_json(&source)
-                    }
-                }
-            }
-        }))
-        .unwrap();
-
-        assert_eq!(tree, expected_tree);
+            .unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("'conflict' collides with package 'conflict.child'")
+        );
     }
 
     #[test]

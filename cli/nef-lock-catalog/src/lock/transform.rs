@@ -1,6 +1,6 @@
 //! Transform the flat locked-input map returned by the catalog
-//! `/build-inputs/lookup` endpoint into the hierarchical [BuildLock] consumed
-//! by the NEF.
+//! `/build-inputs/lookup` endpoint into a persisted [BuildLock], then
+//! materialize the derived hierarchy for the NEF when it is needed.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -20,20 +20,10 @@ pub fn build_lock_from_locked_inputs<'d>(
     locked: HashMap<String, LockedInputEntry>,
     direct_keys: impl IntoIterator<Item = &'d String>,
 ) -> Result<BuildLock> {
-    let mut builders: BTreeMap<CatalogId, PackageTreeBuilder> = BTreeMap::new();
     let mut locked_inputs: BTreeMap<String, LockedInput> = BTreeMap::new();
 
     for (key, entry) in locked {
-        let owned = LockedInput::from(entry);
-        builders
-            .entry(CatalogId(owned.catalog.clone()))
-            .or_insert_with(PackageTreeBuilder::new)
-            .add_package_source(
-                owned.attr_path.clone(),
-                owned.build_type,
-                (&owned.source).into(),
-            )?;
-        locked_inputs.insert(key, owned);
+        locked_inputs.insert(key, LockedInput::from(entry));
     }
 
     let direct_inputs: BTreeSet<String> = direct_keys
@@ -46,7 +36,40 @@ pub fn build_lock_from_locked_inputs<'d>(
         })
         .collect::<Result<BTreeSet<String>>>()?;
 
-    let catalogs = builders
+    Ok(BuildLock {
+        locked_inputs,
+        direct_inputs,
+        ..Default::default()
+    })
+}
+
+/// Derive the NEF package trees from the persisted, server-provided inputs.
+/// The same tree builder used by the original combined transform is retained.
+pub fn materialize_catalogs(lock: &BuildLock) -> Result<serde_json::Value> {
+    materialize_entries(lock.locked_inputs.iter())
+}
+
+fn materialize_entries<'a>(
+    entries: impl IntoIterator<Item = (&'a String, &'a LockedInput)>,
+) -> Result<serde_json::Value> {
+    let mut builders: BTreeMap<CatalogId, PackageTreeBuilder> = BTreeMap::new();
+    for (key, entry) in entries {
+        builders
+            .entry(CatalogId(entry.catalog.clone()))
+            .or_insert_with(PackageTreeBuilder::new)
+            .add_package_source(
+                entry.attr_path.clone(),
+                entry.build_type,
+                (&entry.source).into(),
+            )
+            .with_context(|| {
+                format!(
+                    "Could not materialize catalog input '{key}' in catalog '{}'",
+                    entry.catalog
+                )
+            })?;
+    }
+    let catalogs: BTreeMap<_, _> = builders
         .into_iter()
         .map(|(id, builder)| {
             (id, CatalogLock::FloxHub {
@@ -54,13 +77,14 @@ pub fn build_lock_from_locked_inputs<'d>(
             })
         })
         .collect();
+    Ok(serde_json::to_value(catalogs)?)
+}
 
-    Ok(BuildLock {
-        locked_inputs,
-        direct_inputs,
-        catalogs,
-        ..Default::default()
-    })
+/// Render the temporary builder-facing lock, including the derived catalogs.
+pub fn render_builder_lock(lock: &BuildLock) -> Result<String> {
+    let mut value = serde_json::to_value(lock)?;
+    value["catalogs"] = materialize_catalogs(lock)?;
+    Ok(format!("{}\n", serde_json::to_string_pretty(&value)?))
 }
 
 #[cfg(test)]
@@ -116,7 +140,8 @@ mod tests {
             .expect("transform succeeds");
 
         assert_eq!(
-            serde_json::to_value(&lock).unwrap(),
+            serde_json::from_str::<serde_json::Value>(&render_builder_lock(&lock).unwrap())
+                .unwrap(),
             json!({
                 "version": 2,
                 "locked_inputs": {
@@ -178,7 +203,8 @@ mod tests {
             build_lock_from_locked_inputs(locked, [&"myorg/python3Packages.boolex".to_string()])
                 .expect("transform succeeds");
 
-        let value = serde_json::to_value(&lock).unwrap();
+        let value: serde_json::Value =
+            serde_json::from_str(&render_builder_lock(&lock).unwrap()).unwrap();
         assert_eq!(
             value["catalogs"]["myorg"]["packages"],
             json!({
@@ -216,9 +242,12 @@ mod tests {
             ),
         ]);
 
-        let value = serde_json::to_value(
-            build_lock_from_locked_inputs(locked, [&"alpha/foo".to_string()])
-                .expect("transform succeeds"),
+        let value: serde_json::Value = serde_json::from_str(
+            &render_builder_lock(
+                &build_lock_from_locked_inputs(locked, [&"alpha/foo".to_string()])
+                    .expect("transform succeeds"),
+            )
+            .unwrap(),
         )
         .unwrap();
 
@@ -252,6 +281,11 @@ mod tests {
             lock.locked_inputs["myorg/hello"].source.extra["narHash"],
             json!("sha256-abc123")
         );
+        assert!(
+            materialize_catalogs(&lock).unwrap()["myorg"]["packages"]["entries"]["hello"]["source"]
+                .get("narHash")
+                .is_none()
+        );
     }
 
     #[test]
@@ -261,5 +295,72 @@ mod tests {
         let err = build_lock_from_locked_inputs(locked, [&"myorg/dangling".to_string()])
             .expect_err("a dangling direct key is refused");
         assert!(err.to_string().contains("myorg/dangling"));
+    }
+
+    #[test]
+    fn materialization_rejects_prefix_collisions_in_both_orders() {
+        let source = git_source("https://example.com/repo", "abc");
+        let locked = HashMap::from([
+            (
+                "myorg/a".to_string(),
+                entry("myorg", &["a"], BuildType::Nef, source.clone()),
+            ),
+            (
+                "myorg/a.b".to_string(),
+                entry("myorg", &["a", "b"], BuildType::Nef, source),
+            ),
+        ]);
+        let lock = build_lock_from_locked_inputs(locked, [&"myorg/a".to_string()]).unwrap();
+        for entries in [
+            lock.locked_inputs.iter().collect::<Vec<_>>(),
+            lock.locked_inputs.iter().rev().collect::<Vec<_>>(),
+        ] {
+            let err = materialize_entries(entries).unwrap_err();
+            let message = format!("{err:#}");
+            assert!(
+                message.contains("package 'a' collides with package 'a.b'"),
+                "{message}"
+            );
+        }
+    }
+
+    #[test]
+    fn multiple_catalogs_and_levels_match_the_original_tree_shape() {
+        let source = git_source("https://example.com/repo", "abc");
+        let locked = HashMap::from([
+            (
+                "alpha/a.b.c".to_string(),
+                entry("alpha", &["a", "b", "c"], BuildType::Nef, source.clone()),
+            ),
+            (
+                "alpha/a.d".to_string(),
+                entry("alpha", &["a", "d"], BuildType::Manifest, source.clone()),
+            ),
+            (
+                "beta/x".to_string(),
+                entry("beta", &["x"], BuildType::Nef, source.clone()),
+            ),
+        ]);
+        let lock = build_lock_from_locked_inputs(locked, [&"alpha/a.b.c".to_string()]).unwrap();
+        let package =
+            |build_type| json!({"type":"package", "build_type":build_type, "source":source});
+        assert_eq!(
+            materialize_catalogs(&lock).unwrap(),
+            json!({
+                "alpha": {"type":"floxhub", "packages":{"type":"package_set", "entries":{
+                    "a":{"type":"package_set", "entries":{
+                        "b":{"type":"package_set", "entries":{"c":package("nef")}},
+                        "d":package("manifest")
+                    }}
+                }}},
+                "beta": {"type":"floxhub", "packages":{"type":"package_set", "entries":{"x":package("nef")}}}
+            })
+        );
+        assert!(
+            serde_json::to_value(&lock)
+                .unwrap()
+                .get("catalogs")
+                .is_none()
+        );
     }
 }
