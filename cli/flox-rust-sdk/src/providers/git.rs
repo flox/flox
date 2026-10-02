@@ -167,6 +167,8 @@ pub enum GitCommandError {
     InvalidOutput(String),
     #[error("Remote URL was invalid")]
     InvalidUrl(#[source] url::ParseError),
+    #[error("remote branch '{remote}/{branch}' does not exist")]
+    MissingRemoteBranch { remote: String, branch: String },
 }
 
 impl GitCommandError {
@@ -337,7 +339,7 @@ pub struct GitCommandProvider {
 }
 
 impl GitCommandProvider {
-    /// Verify against a freshly fetched branch tip, including its full history.
+    /// Verify against a freshly fetched branch tip, deepening only if needed.
     /// A cached remote-tracking ref cannot establish what is currently published.
     pub fn rev_is_on_remote_branch(
         &self,
@@ -351,32 +353,64 @@ impl GitCommandProvider {
             )));
         }
 
-        let shallow = Self::run_command(
-            self.new_command()
-                .args(["rev-parse", "--is-shallow-repository"]),
-        )?;
         let mut fetch = self.new_command();
-        fetch.args(["fetch", "--no-tags"]);
-        if shallow.to_string_lossy().trim() == "true" {
-            fetch.arg("--unshallow");
-        }
-        fetch.args([remote_name, branch_ref]);
-        Self::run_command(&mut fetch)?;
-        let still_shallow = Self::run_command(
-            self.new_command()
-                .args(["rev-parse", "--is-shallow-repository"]),
-        )?;
-        if still_shallow.to_string_lossy().trim() == "true" {
-            return Err(GitCommandError::InvalidOutput(
-                "remote history is still shallow after fetching the branch".to_owned(),
-            ));
+        fetch.args(["fetch", "--no-tags", "--", remote_name, branch_ref]);
+        if let Err(fetch_err) = Self::run_command(&mut fetch) {
+            let mut probe = self.new_command();
+            probe.args([
+                "ls-remote",
+                "--exit-code",
+                "--heads",
+                "--",
+                remote_name,
+                branch_ref,
+            ]);
+            if matches!(
+                Self::run_command(&mut probe),
+                Err(GitCommandError::BadExit(2, _, _))
+            ) {
+                return Err(GitCommandError::MissingRemoteBranch {
+                    remote: remote_name.to_owned(),
+                    branch: branch_ref.trim_start_matches("refs/heads/").to_owned(),
+                });
+            }
+            return Err(fetch_err);
         }
 
         let mut ancestor = self.new_command();
         ancestor.args(["merge-base", "--is-ancestor", rev, "FETCH_HEAD"]);
         match Self::run_command(&mut ancestor) {
             Ok(_) => Ok(true),
-            Err(GitCommandError::BadExit(1, _, _)) => Ok(false),
+            // In a depth-1 clone the requested local ancestor may itself be
+            // absent, and merge-base then exits 128 rather than 1.
+            Err(GitCommandError::BadExit(code, stdout, stderr)) if code == 1 || code == 128 => {
+                let shallow = Self::run_command(
+                    self.new_command()
+                        .args(["rev-parse", "--is-shallow-repository"]),
+                )?;
+                if shallow.to_string_lossy().trim() != "true" {
+                    return if code == 1 {
+                        Ok(false)
+                    } else {
+                        Err(GitCommandError::BadExit(code, stdout, stderr))
+                    };
+                }
+                let mut deepen = self.new_command();
+                deepen.args([
+                    "fetch",
+                    "--no-tags",
+                    "--unshallow",
+                    "--",
+                    remote_name,
+                    branch_ref,
+                ]);
+                Self::run_command(&mut deepen)?;
+                match Self::run_command(&mut ancestor) {
+                    Ok(_) => Ok(true),
+                    Err(GitCommandError::BadExit(1, _, _)) => Ok(false),
+                    Err(err) => Err(err),
+                }
+            },
             Err(err) => Err(err),
         }
     }
@@ -834,12 +868,6 @@ pub enum GitCommandGetOriginError {
     NoUpstream,
     #[error("access denied: {0}")]
     AccessDenied(GitCommandError),
-    /// HEAD is detached; callers check this before looking for an upstream.
-    #[error("HEAD is not on a branch")]
-    DetachedHead,
-    /// A symbolic HEAD outside `refs/heads/` cannot identify a branch.
-    #[error("'{ref_}' does not name a branch")]
-    LocalRefNotABranch { ref_: String },
     /// A tracked tag cannot serve as the publish branch.
     #[error("upstream '{upstream}' is not a branch")]
     UpstreamNotABranch { upstream: String },
@@ -2250,6 +2278,61 @@ pub mod tests {
             .trim(),
             "false"
         );
+    }
+
+    #[test]
+    fn shallow_tip_is_accepted_without_unshallowing() {
+        let (repo, _repo_dir) = init_temp_repo(false);
+        let remotes = create_remotes(&repo, &["origin"]);
+        commit_file(&repo, "base");
+        let base = repo.status().unwrap().rev;
+        repo.create_branch("main", &base).unwrap();
+        repo.checkout("main", false).unwrap();
+        commit_file(&repo, "tip");
+        repo.push_ref("origin", "main", false).unwrap();
+
+        let clone_dir = tempfile::tempdir().unwrap();
+        let remote_url = repo_local_url(&remotes.get("origin").unwrap().0);
+        GitCommandProvider::run_command(test_git_options().new_command().args([
+            "clone",
+            "--depth",
+            "1",
+            "--branch",
+            "main",
+            &remote_url,
+            clone_dir.path().to_str().unwrap(),
+        ]))
+        .unwrap();
+        let shallow = GitCommandProvider::open(clone_dir.path()).unwrap();
+        let tip = shallow.status().unwrap().rev;
+        assert!(
+            shallow
+                .rev_is_on_remote_branch(&tip, "origin", "refs/heads/main")
+                .unwrap()
+        );
+        assert_eq!(
+            GitCommandProvider::run_command(
+                shallow
+                    .new_command()
+                    .args(["rev-parse", "--is-shallow-repository"])
+            )
+            .unwrap()
+            .to_string_lossy()
+            .trim(),
+            "true"
+        );
+    }
+
+    #[test]
+    fn missing_remote_branch_is_classified() {
+        let (repo, _repo_dir) = init_temp_repo(false);
+        let _remotes = create_remotes(&repo, &["origin"]);
+        commit_file(&repo, "base");
+        let rev = repo.status().unwrap().rev;
+        assert!(matches!(
+            repo.rev_is_on_remote_branch(&rev, "origin", "refs/heads/deleted"),
+            Err(GitCommandError::MissingRemoteBranch { .. })
+        ));
     }
 
     #[test]

@@ -1257,10 +1257,6 @@ fn gather_build_repo_meta(
                 Check your SSH agent (`ssh-add -l`) or credential configuration."
             }),
             GitCommandGetOriginError::Command(ref cmd_err) => build_repo_err(&cmd_err.to_string()),
-            GitCommandGetOriginError::DetachedHead
-            | GitCommandGetOriginError::LocalRefNotABranch { .. } => {
-                unreachable!("checked above before calling get_current_branch_remote_info")
-            },
         })?;
 
     let rev_on_remote = match git.rev_is_on_remote_branch(
@@ -1269,6 +1265,11 @@ fn gather_build_repo_meta(
         &remote_info.reference,
     ) {
         Ok(exists) => exists,
+        Err(GitCommandError::MissingRemoteBranch { remote, branch }) => {
+            return Err(build_repo_err(&format!(
+                "Remote branch '{remote}/{branch}' no longer exists. Restore that branch or configure an existing branch upstream before publishing."
+            )));
+        },
         Err(ref cmd_err) if cmd_err.is_access_denied() => {
             return Err(build_repo_err(&formatdoc! {"
                 Could not access remote '{remote_name}' while verifying branch containment: {cmd_err}
@@ -1288,7 +1289,7 @@ fn gather_build_repo_meta(
     if !rev_on_remote {
         return Err(build_repo_err(&formatdoc! {"
             Local revision is not contained in remote branch '{remote_name}/{remote_branch}'.
-            Push this branch with 'git push' before publishing.",
+            Push this revision with 'git push {remote_name} HEAD:{remote_branch}' before publishing.",
             remote_name = remote_info.name,
             remote_branch = remote_info.short_branch(),
         }));
@@ -1623,7 +1624,7 @@ pub mod tests {
     }
 
     #[tokio::test]
-    async fn publish_sends_empty_closure_for_a_base_only_package() {
+    async fn publish_sends_empty_closure_when_given_one() {
         let server = httpmock::MockServer::start_async().await;
         let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
         let mock = server.mock(|when, then| {
@@ -3503,9 +3504,35 @@ pub mod tests {
             "Expected 'origin/main' in message, got: {msg}"
         );
         assert!(
-            msg.contains("git push"),
-            "Expected 'git push' suggestion, got: {msg}"
+            msg.contains("git push origin HEAD:main"),
+            "Expected an explicit upstream branch in the push suggestion, got: {msg}"
         );
+    }
+
+    #[test]
+    fn gather_repo_meta_reports_deleted_remote_branch() {
+        let (git, _tempdir) = init_temp_repo(false);
+        let _remotes = create_remotes(&git, &["origin"]);
+        git.checkout("main", true).unwrap();
+        commit_file(&git, "base.txt");
+        git.push_ref("origin", "main", false).unwrap();
+        GitCommandProvider::run_command(git.new_command().args(["fetch", "origin", "main"]))
+            .unwrap();
+        GitCommandProvider::run_command(git.new_command().args([
+            "branch",
+            "--set-upstream-to=origin/main",
+            "main",
+        ]))
+        .unwrap();
+        GitCommandProvider::run_command(git.new_command().args([
+            "push",
+            "origin",
+            ":refs/heads/main",
+        ]))
+        .unwrap();
+        let error = gather_build_repo_meta(&git).unwrap_err().to_string();
+        assert!(error.contains("no longer exists"), "{error}");
+        assert!(!error.contains("full history"), "{error}");
     }
 
     #[test]
