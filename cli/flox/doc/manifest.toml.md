@@ -783,6 +783,10 @@ manifest, but things can be overridden or added by higher priority manifests.
 `[services]`
 : Service descriptors are entirely overwritten by higher priority manifests
 
+`[pkg-groups]`
+: The settings of a pkg-group are overwritten entirely by a higher priority
+  manifest, and apply to the pkg-group's packages from every manifest.
+
 `[include]`
 : The `include` section is omitted from merged manifests, so no merging of the
   `include` section ever happens.
