@@ -73,7 +73,7 @@ const PUBLISH_COMPLETION_TIMEOUT_MILLIS: u64 = 30 * 60 * 1_000; // 30 min
 
 fn emit_publish_warnings(outcome: &PublishOutcome, mut emit: impl FnMut(&str)) {
     for warning in &outcome.warnings {
-        emit(&warning.message);
+        emit(&format!("{}: {}", warning.input, warning.message));
     }
 }
 
@@ -416,11 +416,8 @@ impl Publish {
         let auth = NixAuth::from_flox(&flox)?;
         let publish_provider = PublishProvider::new(env_metadata, package_metadata, auth);
 
-        // Check that we can publish before building.
+        // Prepare the local lock before creating any server package record.
         let catalog = &flox.floxhub_client;
-        let package_created = publish_provider
-            .create_package_and_possibly_user_catalog(catalog, &catalog_name)
-            .await?;
 
         let has_expression_build = publish_provider
             .package_metadata
@@ -465,7 +462,8 @@ impl Publish {
 
         // The lock this publish's build consumes, created up front by the
         // CLI: a temporary builder file materialized from the committed
-        // lock, or from fresh resolution for the NEF evals. Scanning is scoped to the published expression — the
+        // lock, or from fresh resolution for the NEF evals. Scanning is scoped
+        // to the published expression — the
         // scanner follows imports, so its references are exactly what its
         // eval looks up — except for a manifest build, whose `${pkg}`
         // references can pull in any of the project's expressions, so all of
@@ -504,6 +502,9 @@ impl Publish {
             Some(lock) => project_for_publish(lock, &references)?,
             None => PackageClosure::default(),
         };
+        let package_created = publish_provider
+            .create_package_and_possibly_user_catalog(catalog, &catalog_name)
+            .await?;
 
         // Dedup: ask the catalog server if this exact build has already been
         // published before paying for the upload — and, when the closure
@@ -663,7 +664,40 @@ mod tests {
         };
         let mut displayed = Vec::new();
         emit_publish_warnings(&outcome, |message| displayed.push(message.to_owned()));
-        assert_eq!(displayed, ["dependency moved to a newer source lineage"]);
+        assert_eq!(displayed, [
+            "dependency: dependency moved to a newer source lineage"
+        ]);
+    }
+
+    #[tokio::test]
+    async fn manifest_only_publish_refuses_v1_and_projects_v2() {
+        use floxhub_client::client::test_helpers::new_noop;
+
+        let project = tempfile::tempdir().unwrap();
+        let dot_flox = project.path().join(".flox");
+        std::fs::create_dir(&dot_flox).unwrap();
+        let lock_path = catalog_lockfile_path(&dot_flox);
+        std::fs::write(&lock_path, r#"{"version":1}"#).unwrap();
+        let error = BuildLockGuard::new_existing_or_ephemeral(
+            &new_noop(),
+            &dot_flox,
+            Vec::<PathBuf>::new(),
+        )
+        .await
+        .unwrap_err();
+        assert!(error.to_string().contains(UPDATE_CATALOGS_COMMAND));
+
+        nef_lock_catalog::write_lock(&nef_lock_catalog::BuildLock::default(), &lock_path).unwrap();
+        let guard = BuildLockGuard::new_existing_or_ephemeral(
+            &new_noop(),
+            &dot_flox,
+            Vec::<PathBuf>::new(),
+        )
+        .await
+        .unwrap();
+        let closure = project_for_publish(&guard, &BTreeSet::new()).unwrap();
+        assert!(closure.direct_inputs.is_empty());
+        assert!(closure.locked_inputs.is_empty());
     }
 
     /// A stale committed lock fails a publish naming both the uncovered
