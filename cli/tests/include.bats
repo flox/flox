@@ -179,10 +179,17 @@ EOF
 - 'included1'
 EOF
 
+  # Other commands use the latest changes to the include that wasn't named,
+  # without saving them to the lockfile.
   run "$FLOX_BIN" list -c -d composer
   assert_success
+  assert_output --partial - <<EOF
+ℹ Using changes to included environments that aren't in the lockfile yet:
+- 'included2'
+Run 'flox include upgrade -d $(cd composer && pwd -P)' to save them to the lockfile.
+EOF
   assert_output --partial 'included1 = "v2"'
-  assert_output --partial 'included2 = "v1"'
+  assert_output --partial 'included2 = "v2"'
 }
 
 @test "include upgrade reports which included environments have changes" {
@@ -223,6 +230,193 @@ EOF
   assert_success
   assert_output --partial "! packages have been removed from lockfile for 'x86_64-darwin'"
   assert_output --partial "To reinstall, add 'x86_64-darwin' to 'options.systems' with 'flox edit'"
+}
+
+# ---------------------------------------------------------------------------- #
+# Following included path environments
+# ---------------------------------------------------------------------------- #
+
+# The message that the composer is using changes to 'included1' that aren't
+# saved to its lockfile
+unsaved_included1() {
+  cat <<EOF
+ℹ Using changes to included environments that aren't in the lockfile yet:
+- 'included1'
+Run 'flox include upgrade -d $(cd composer && pwd -P)' to save them to the lockfile.
+EOF
+}
+
+@test "activate follows changes to an included path environment without writing the lockfile" {
+  setup_composer_and_two_includes
+  edit_included1
+  lockfile_before="$(cat composer/.flox/env/manifest.lock)"
+
+  run --separate-stderr "$FLOX_BIN" activate -d composer -- bash -c 'echo "$included1"'
+  assert_success
+  assert_output "v2"
+  assert_equal "$stderr" "$(unsaved_included1)"
+
+  # The changes stay unsaved, so they're reported again.
+  run --separate-stderr "$FLOX_BIN" activate -d composer -- bash -c 'echo "$included1"'
+  assert_success
+  assert_output "v2"
+  assert_equal "$stderr" "$(unsaved_included1)"
+
+  assert_equal "$(cat composer/.flox/env/manifest.lock)" "$lockfile_before"
+
+  wait_for_activations "$PROJECT_DIR/composer" || return 1
+}
+
+@test "include upgrade saves the changes to an included path environment that are in use" {
+  setup_composer_and_two_includes
+  edit_included1
+
+  run "$FLOX_BIN" list -c -d composer
+  assert_success
+  assert_output --partial "$(unsaved_included1)"
+
+  run "$FLOX_BIN" include upgrade -d composer
+  assert_success
+  assert_output --partial - <<EOF
+✔ Upgraded 'composer' with latest changes to:
+- 'included1'
+EOF
+
+  run "$FLOX_BIN" list -c -d composer
+  assert_success
+  assert_output --partial 'included1 = "v2"'
+  refute_output --partial "aren't in the lockfile yet"
+}
+
+@test "list follows locked changes to nested included path environments without writing to them" {
+  "$FLOX_BIN" init -d c
+  "$FLOX_BIN" init -d b
+  "$FLOX_BIN" init -d a
+  cat > c/.flox/env/manifest.toml << EOF
+version = 1
+[vars]
+c = "v1"
+EOF
+  cat > b/.flox/env/manifest.toml << EOF
+version = 1
+[include]
+environments = [{ dir = "../c" }]
+EOF
+  cat > a/.flox/env/manifest.toml << EOF
+version = 1
+[include]
+environments = [{ dir = "../b" }]
+EOF
+  # Lock like 'flox edit' does, but without building
+  "$FLOX_BIN" list -d c
+  "$FLOX_BIN" list -d b
+
+  run "$FLOX_BIN" list -c -d a
+  assert_success
+  assert_output --partial 'c = "v1"'
+
+  lockfiles_before="$(cat a/.flox/env/manifest.lock b/.flox/env/manifest.lock)"
+  sed -i -e 's/v1/v2/' c/.flox/env/manifest.toml
+  "$FLOX_BIN" list -d c
+
+  run "$FLOX_BIN" list -c -d a
+  assert_success
+  assert_output --partial - <<EOF
+ℹ Using changes to included environments that aren't in the lockfile yet:
+- 'b'
+EOF
+  assert_output --partial 'c = "v2"'
+
+  assert_equal "$(cat a/.flox/env/manifest.lock b/.flox/env/manifest.lock)" "$lockfiles_before"
+}
+
+@test "list does not follow changes that an included path environment hasn't locked" {
+  setup_composer_and_two_includes
+  cat > included1/.flox/env/manifest.toml << EOF
+version = 1
+[vars]
+included1 = "v2"
+EOF
+
+  run "$FLOX_BIN" list -c -d composer
+  assert_success
+  assert_output --partial - <<EOF
+! Could not get the latest changes to included environment 'included1'.
+Using the version of 'included1' saved in the lockfile.
+EOF
+  assert_output --partial "has changes that aren't locked yet."
+  assert_output --partial "Run 'flox edit -d"
+  assert_output --partial 'included1 = "v1"'
+}
+
+@test "list keeps the version in use of an included path environment it cannot read" {
+  setup_composer_and_two_includes
+  edit_included1
+  "$FLOX_BIN" list -d composer
+  mv included1 included1.moved
+
+  run "$FLOX_BIN" list -c -d composer
+  assert_success
+  assert_output --partial - <<EOF
+! Could not get the latest changes to included environment 'included1'.
+Using the version of 'included1' that was in use before.
+EOF
+  assert_output --partial 'included1 = "v2"'
+  # Saving the others would lose the version of included1 in use
+  assert_output --partial "to save them to the lockfile once all of them can be read."
+}
+
+@test "activate uses the lockfile when changes to an included path environment don't build" {
+  "$FLOX_BIN" init -d included
+  "$FLOX_BIN" edit -d included -f - << EOF
+version = 1
+[vars]
+Y = "v1"
+EOF
+  "$FLOX_BIN" init -d composer
+  "$FLOX_BIN" edit -d composer -f - << EOF
+version = 1
+[vars]
+X = "\$Y"
+[include]
+environments = [{ dir = "../included" }]
+EOF
+  # Builds on its own, but the variables form a cycle with the composer's
+  "$FLOX_BIN" edit -d included -f - << EOF
+version = 1
+[vars]
+Y = "\$X"
+EOF
+
+  run --separate-stderr "$FLOX_BIN" activate -d composer -- bash -c 'echo "$X $Y"'
+  assert_success
+  assert_output "v1 v1"
+  assert_regex "$stderr" "Could not build with the latest changes to included environments:"
+  assert_regex "$stderr" "Found a reference cycle in the '\[vars\]' section"
+
+  wait_for_activations "$PROJECT_DIR/composer" || return 1
+}
+
+@test "edit errors when an environment includes itself" {
+  "$FLOX_BIN" init -d composer
+  RUST_BACKTRACE=0 run "$FLOX_BIN" edit -d composer -f - << EOF
+version = 1
+[include]
+environments = [{ dir = "." }]
+EOF
+  assert_failure
+  # The path is canonicalized, so it doesn't necessarily start with $PROJECT_DIR.
+  assert_output --regexp "environment '[^']*/composer' includes itself"
+}
+
+@test "list does not follow changes to included remote environments" {
+  setup_composer_with_remote_include
+  edit_remote
+
+  run "$FLOX_BIN" list -c -d composer
+  assert_success
+  assert_output --partial 'remote = "v1"'
+  refute_output --partial "aren't in the lockfile yet"
 }
 
 # ---------------------------------------------------------------------------- #

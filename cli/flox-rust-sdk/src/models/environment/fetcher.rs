@@ -4,19 +4,30 @@ use std::str::FromStr;
 use flox_core::data::environment_ref::RemoteEnvironmentRef;
 use flox_manifest::lockfile::{LockedInclude, Lockfile};
 use flox_manifest::parsed::common::IncludeDescriptor;
+use flox_manifest::{Manifest, TypedOnly};
 
-use super::{ConcreteEnvironment, EnvironmentError, open_path};
+use super::{
+    ConcreteEnvironment,
+    DotFlox,
+    EnvironmentError,
+    EnvironmentPointer,
+    UninitializedEnvironment,
+};
+use crate::data::CanonicalPath;
 use crate::flox::Flox;
 use crate::models::environment::generations::GenerationsExt;
 use crate::models::environment::managed_environment::ManagedEnvironmentError;
 use crate::models::environment::remote_environment::RemoteEnvironment;
-use crate::models::environment::{Environment, ManagedPointer};
+use crate::models::environment::{Environment, ManagedPointer, UnreadableIncludes};
 use crate::providers::lock_manifest::RecoverableMergeError;
 
 /// Context required to fetch an environment include
 #[derive(Clone, Debug)]
 pub struct IncludeFetcher {
     pub base_directory: Option<PathBuf>,
+    /// The `.flox` directories of the environments whose includes are being
+    /// fetched, outermost first, used to detect include cycles
+    composers: Vec<CanonicalPath>,
 }
 
 /// The included environment as fetched,
@@ -24,29 +35,122 @@ pub struct IncludeFetcher {
 #[derive(Clone, Debug, PartialEq)]
 pub struct FetchedInclude {
     pub locked_include: LockedInclude,
+    /// The included environment's lockfile.
+    ///
+    /// It may predate the fetched manifest, e.g. for a path environment
+    /// merged with the latest changes to its own includes.
+    /// Seeding only reuses the packages it locks for descriptors that the
+    /// merged manifest doesn't change.
     pub lockfile: Lockfile,
 }
 
 impl IncludeFetcher {
+    pub fn new(base_directory: Option<PathBuf>) -> Self {
+        Self {
+            base_directory,
+            composers: Vec::new(),
+        }
+    }
+
+    /// A fetcher for the includes of the environment at `dot_flox`,
+    /// whose relative include directories are resolved against
+    /// `base_directory`
+    pub fn for_composer(base_directory: PathBuf, dot_flox: CanonicalPath) -> Self {
+        Self {
+            base_directory: Some(base_directory),
+            composers: vec![dot_flox],
+        }
+    }
+
+    /// A fetcher for the includes of an included path environment,
+    /// which is merged with them in memory as part of fetching it
+    fn for_included(&self, base_directory: PathBuf, dot_flox: CanonicalPath) -> Self {
+        let mut composers = self.composers.clone();
+        composers.push(dot_flox);
+        Self {
+            base_directory: Some(base_directory),
+            composers,
+        }
+    }
+
+    /// Fetch an included environment.
+    ///
+    /// An included path environment whose own included path environments
+    /// can't be read uses its lockfile's copies of them.
     pub fn fetch(
         &self,
         flox: &Flox,
         include_environment: &IncludeDescriptor,
     ) -> Result<FetchedInclude, EnvironmentError> {
-        let (lockfile, name) = match include_environment {
-            IncludeDescriptor::Local { dir, name } => self.fetch_local(flox, dir, name),
+        self.fetch_with(flox, include_environment, UnreadableIncludes::UseLocked)
+    }
+
+    /// Fetch the latest version of an included environment.
+    ///
+    /// Unlike [Self::fetch], this fails if the latest locked changes to a path
+    /// environment included below it can't be read.
+    pub(crate) fn fetch_latest(
+        &self,
+        flox: &Flox,
+        include_environment: &IncludeDescriptor,
+    ) -> Result<FetchedInclude, EnvironmentError> {
+        self.fetch_with(flox, include_environment, UnreadableIncludes::Fail)
+    }
+
+    /// Fetch an included environment if its directory holds a path
+    /// environment, whose latest locked changes are always used.
+    ///
+    /// Returns [None] for any other kind of included environment,
+    /// which is only fetched again by 'flox include upgrade'.
+    /// Fails if the latest changes to any path environment included below it
+    /// can't be read, so that the including environment keeps its own copy.
+    pub fn fetch_if_path_environment(
+        &self,
+        flox: &Flox,
+        include_environment: &IncludeDescriptor,
+    ) -> Result<Option<LockedInclude>, EnvironmentError> {
+        let IncludeDescriptor::Local { dir, .. } = include_environment else {
+            return Ok(None);
+        };
+        let path = self
+            .expand_include_dir(dir)
+            .map_err(EnvironmentError::Recoverable)?;
+        // Reading the pointer avoids opening a managed environment,
+        // which may need git or network access.
+        if !matches!(
+            DotFlox::open_in(&path)?.pointer,
+            EnvironmentPointer::Path(_)
+        ) {
+            return Ok(None);
+        }
+        self.fetch_with(flox, include_environment, UnreadableIncludes::Fail)
+            .map(|fetched| Some(fetched.locked_include))
+    }
+
+    fn fetch_with(
+        &self,
+        flox: &Flox,
+        include_environment: &IncludeDescriptor,
+        unreadable_includes: UnreadableIncludes,
+    ) -> Result<FetchedInclude, EnvironmentError> {
+        let (manifest, lockfile, name) = match include_environment {
+            IncludeDescriptor::Local { dir, name } => {
+                self.fetch_local(flox, dir, name, unreadable_includes)
+            },
             IncludeDescriptor::Remote {
                 remote,
                 name,
                 generation,
-            } => self.fetch_remote(flox, remote, name, *generation),
+            } => self
+                .fetch_remote(flox, remote, name, *generation)
+                // One read for both, so the manifest matches the packages
+                // even if a remote environment's live generation moves.
+                .map(|(lockfile, name)| (lockfile.manifest.clone(), lockfile, name)),
         }?;
 
-        // One read for both, so the manifest matches the packages
-        // even if a remote environment's live generation moves.
         Ok(FetchedInclude {
             locked_include: LockedInclude {
-                manifest: lockfile.manifest.clone(),
+                manifest,
                 name,
                 descriptor: include_environment.clone(),
             },
@@ -54,13 +158,19 @@ impl IncludeFetcher {
         })
     }
 
-    /// Fetch a local (path or managed) environment, only if it's already locked.
+    /// Fetch a local (path or managed) environment, only if it's locked.
+    ///
+    /// A path environment provides the manifest in its lockfile,
+    /// merged with the latest locked changes to its own included path
+    /// environments.
+    /// A managed environment has to be in sync with its current generation.
     fn fetch_local(
         &self,
         flox: &Flox,
         dir: impl AsRef<Path>,
         name: &Option<String>,
-    ) -> Result<(Lockfile, String), EnvironmentError> {
+        unreadable_includes: UnreadableIncludes,
+    ) -> Result<(Manifest<TypedOnly>, Lockfile, String), EnvironmentError> {
         if self.base_directory.is_none() {
             return Err(EnvironmentError::Recoverable(
                 RecoverableMergeError::RemoteCannotIncludeLocal,
@@ -70,21 +180,47 @@ impl IncludeFetcher {
         let path = self
             .expand_include_dir(dir)
             .map_err(EnvironmentError::Recoverable)?;
-        let environment = open_path(flox, &path, None)?;
+        let dot_flox = DotFlox::open_in(&path)?;
+        if let Some(start) = self
+            .composers
+            .iter()
+            .position(|composer| **composer == dot_flox.path)
+        {
+            let cycle = self.composers[start..]
+                .iter()
+                .map(|composer| composer.to_path_buf())
+                .chain([dot_flox.path])
+                .collect();
+            return Err(EnvironmentError::Recoverable(
+                RecoverableMergeError::IncludeCycle(cycle),
+            ));
+        }
+
+        let environment =
+            UninitializedEnvironment::DotFlox(dot_flox).into_concrete_environment(flox, None)?;
         let name = name
             .clone()
             .unwrap_or_else(|| environment.name().to_string());
 
-        let lockfile = match environment {
+        let (manifest, lockfile) = match environment {
             ConcreteEnvironment::Path(environment) => {
-                let core_environment = environment.into_core_environment()?;
-                if let Some(lockfile) = core_environment.lockfile_if_up_to_date()? {
-                    lockfile
-                } else {
+                let include_fetcher =
+                    self.for_included(environment.parent_path()?, environment.dot_flox_path());
+                let core_environment =
+                    environment.into_core_environment_with_include_fetcher(include_fetcher);
+                // Only changes that the included environment has locked are
+                // used, since locking validates them.
+                let Some(lockfile) = core_environment.lockfile_if_up_to_date()? else {
                     return Err(EnvironmentError::Recoverable(
                         RecoverableMergeError::PathOutOfSync(path),
                     ));
-                }
+                };
+                let manifest = core_environment.manifest_following_path_includes(
+                    flox,
+                    lockfile.clone(),
+                    unreadable_includes,
+                )?;
+                (manifest, lockfile)
             },
             ConcreteEnvironment::Managed(environment) => {
                 let Some(lockfile) = environment.existing_lockfile(flox)? else {
@@ -92,20 +228,19 @@ impl IncludeFetcher {
                         RecoverableMergeError::ManagedOutOfSync(path),
                     ));
                 };
-                if !environment.has_local_changes(flox)? {
-                    lockfile
-                } else {
+                if environment.has_local_changes(flox)? {
                     return Err(EnvironmentError::Recoverable(
                         RecoverableMergeError::ManagedOutOfSync(path),
                     ));
                 }
+                (lockfile.manifest.clone(), lockfile)
             },
             ConcreteEnvironment::Remote(_) => {
                 unreachable!("opening a path cannot result in a remote environment");
             },
         };
 
-        Ok((lockfile, name))
+        Ok((manifest, lockfile, name))
     }
 
     /// Fetch a remote environment.
@@ -169,9 +304,7 @@ pub mod test_helpers {
 
     /// Returns an IncludeFetcher that fails to fetch anything
     pub fn mock_include_fetcher() -> IncludeFetcher {
-        IncludeFetcher {
-            base_directory: None,
-        }
+        IncludeFetcher::new(None)
     }
 }
 
@@ -203,9 +336,7 @@ mod test {
         let mut environment = new_path_environment_in(&flox, &manifest_contents, &environment_path);
         let lockfile = environment.lockfile(&flox).unwrap().into();
 
-        let include_fetcher = IncludeFetcher {
-            base_directory: Some(tempdir.path().to_path_buf()),
-        };
+        let include_fetcher = IncludeFetcher::new(Some(tempdir.path().to_path_buf()));
 
         let include_descriptor = IncludeDescriptor::Local {
             dir: environment_path.file_name().unwrap().into(),
@@ -236,9 +367,7 @@ mod test {
         let mut environment = new_path_environment_in(&flox, &manifest_contents, &environment_path);
         let lockfile = environment.lockfile(&flox).unwrap().into();
 
-        let include_fetcher = IncludeFetcher {
-            base_directory: Some(tempdir.path().to_path_buf()),
-        };
+        let include_fetcher = IncludeFetcher::new(Some(tempdir.path().to_path_buf()));
 
         let include_descriptor = IncludeDescriptor::Local {
             dir: environment_path,
@@ -272,9 +401,7 @@ mod test {
         fs::create_dir(&environment_path).unwrap();
         let mut environment = new_path_environment_in(&flox, &manifest_contents, &environment_path);
 
-        let include_fetcher = IncludeFetcher {
-            base_directory: Some(tempdir.path().to_path_buf()),
-        };
+        let include_fetcher = IncludeFetcher::new(Some(tempdir.path().to_path_buf()));
 
         let include_descriptor = IncludeDescriptor::Local {
             dir: environment_path.file_name().unwrap().into(),
@@ -321,6 +448,87 @@ mod test {
         assert_eq!(err.to_string(), expected_error);
     }
 
+    /// Fetching an environment that is already being composed is a cycle
+    #[test]
+    fn fetch_path_errors_on_include_cycle() {
+        let (flox, tempdir) = flox_instance();
+
+        let a_path = tempdir.path().join("a");
+        let b_path = tempdir.path().join("b");
+        fs::create_dir(&a_path).unwrap();
+        fs::create_dir(&b_path).unwrap();
+        // b can only include a while a doesn't include b yet
+        let mut a = new_path_environment_in(&flox, &with_latest_schema(""), &a_path);
+        a.lockfile(&flox).unwrap();
+        let mut b = new_path_environment_in(
+            &flox,
+            &with_latest_schema("[include]\nenvironments = [{ dir = \"../a\" }]"),
+            &b_path,
+        );
+        b.lockfile(&flox).unwrap();
+        fs::write(
+            a.manifest_path(&flox).unwrap(),
+            with_latest_schema("[include]\nenvironments = [{ dir = \"../b\" }]"),
+        )
+        .unwrap();
+
+        let include_fetcher = IncludeFetcher::for_composer(a_path.clone(), a.dot_flox_path());
+
+        let self_include = IncludeDescriptor::Local {
+            dir: ".".into(),
+            name: None,
+        };
+        let err = include_fetcher.fetch(&flox, &self_include).unwrap_err();
+        let EnvironmentError::Recoverable(RecoverableMergeError::IncludeCycle(cycle)) = err else {
+            panic!("expected an include cycle, got: {err:?}");
+        };
+        assert_eq!(cycle, vec![
+            a.dot_flox_path().to_path_buf(),
+            a.dot_flox_path().to_path_buf()
+        ]);
+
+        let include_b = IncludeDescriptor::Local {
+            dir: "../b".into(),
+            name: None,
+        };
+        let err = include_fetcher.fetch(&flox, &include_b).unwrap_err();
+        let EnvironmentError::Recoverable(RecoverableMergeError::IncludeCycle(cycle)) = err else {
+            panic!("expected an include cycle, got: {err:?}");
+        };
+        assert_eq!(cycle, vec![
+            a.dot_flox_path().to_path_buf(),
+            b.dot_flox_path().to_path_buf(),
+            a.dot_flox_path().to_path_buf()
+        ]);
+    }
+
+    /// A managed environment in an included directory isn't followed, so
+    /// checking it for changes doesn't open it
+    #[test]
+    fn fetch_if_path_environment_skips_managed_directory() {
+        let owner = "owner".parse().unwrap();
+        let (flox, tempdir) = flox_instance_with_optional_floxhub(Some(&owner));
+
+        let environment_path = tempdir.path().join("environment");
+        fs::create_dir(&environment_path).unwrap();
+        let environment =
+            mock_managed_environment_in(&flox, "version = 1\n", owner, &environment_path, None);
+        // Local changes would make fetching the managed environment fail
+        fs::write(
+            environment.manifest_path(&flox).unwrap(),
+            "version = 1\n[vars]\nfoo = \"bar\"\n",
+        )
+        .unwrap();
+
+        let fetched = IncludeFetcher::new(Some(tempdir.path().to_path_buf()))
+            .fetch_if_path_environment(&flox, &IncludeDescriptor::Local {
+                dir: environment_path.file_name().unwrap().into(),
+                name: None,
+            })
+            .unwrap();
+        assert_eq!(fetched, None);
+    }
+
     /// fetch() errors if attempting to fetch an out of sync managed environment
     #[test]
     fn fetch_managed_fails_if_out_of_sync() {
@@ -336,9 +544,7 @@ mod test {
         let environment =
             mock_managed_environment_in(&flox, manifest_contents, owner, &environment_path, None);
 
-        let include_fetcher = IncludeFetcher {
-            base_directory: Some(tempdir.path().to_path_buf()),
-        };
+        let include_fetcher = IncludeFetcher::new(Some(tempdir.path().to_path_buf()));
 
         let include_descriptor = IncludeDescriptor::Local {
             dir: environment_path.file_name().unwrap().into(),
@@ -403,9 +609,7 @@ mod test {
         let lockfile = remote_env.existing_lockfile(&flox).unwrap().unwrap();
 
         // Fetch and lock the remote environment.
-        let include_fetcher = IncludeFetcher {
-            base_directory: Some(tempdir.path().to_path_buf()),
-        };
+        let include_fetcher = IncludeFetcher::new(Some(tempdir.path().to_path_buf()));
         let include_descriptor = IncludeDescriptor::Remote {
             remote: "owner/name".parse().unwrap(),
             name: None,
@@ -458,9 +662,7 @@ mod test {
         let initial_generation_lockfile = remote_env.existing_lockfile(&flox).unwrap().unwrap();
 
         // Fetch and lock the remote environment at a given generation.
-        let include_fetcher = IncludeFetcher {
-            base_directory: Some(tempdir.path().to_path_buf()),
-        };
+        let include_fetcher = IncludeFetcher::new(Some(tempdir.path().to_path_buf()));
         let include_descriptor = IncludeDescriptor::Remote {
             remote: "owner/name".parse().unwrap(),
             name: None,

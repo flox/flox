@@ -15,20 +15,32 @@
 
 use std::ffi::OsStr;
 use std::fs::{self};
+use std::iter;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use flox_core::activate::mode::ActivateMode;
 use flox_core::data::environment_ref::EnvironmentName;
+use flox_core::{blake3_hex, write_atomically};
 use flox_manifest::interfaces::{AsWritableManifest, WriteManifest};
-use flox_manifest::lockfile::{LOCKFILE_FILENAME, Lockfile};
-use flox_manifest::parsed::common::KnownSchemaVersion;
+use flox_manifest::lockfile::{LOCKFILE_FILENAME, LockedInclude, Lockfile};
+use flox_manifest::parsed::common::{IncludeDescriptor, KnownSchemaVersion};
 use flox_manifest::raw::{CatalogPackage, DEFAULT_SYSTEMS_STR, PackageToInstall};
 use flox_manifest::{MANIFEST_FILENAME, Manifest, Migrated, Validated, Writable};
 use indoc::formatdoc;
 use itertools::Itertools;
+use serde::{Deserialize, Serialize};
 use tracing::debug;
 
-use super::core_environment::{CoreEnvironment, UpgradeResult};
+use super::core_environment::{
+    CoreEnvironment,
+    CoreEnvironmentError,
+    FollowMode,
+    FollowedIncludes,
+    NotAppliedIncludes,
+    UnreadableInclude,
+    UpgradeResult,
+};
 use super::fetcher::IncludeFetcher;
 use super::uninstall::UninstallSpec;
 use super::{
@@ -54,9 +66,95 @@ use crate::data::{CanonicalPath, System};
 use crate::flox::Flox;
 use crate::models::env_registry::{deregister, ensure_registered};
 use crate::models::environment::{ENV_DIR_NAME, create_dot_flox_gitignore};
-use crate::providers::buildenv::BuildEnvOutputs;
+use crate::providers::buildenv::{BuildEnvError, BuildEnvOutputs};
 use crate::providers::lock_manifest::LockResult;
 use crate::providers::manifest_init::ManifestInitializer;
+
+/// The start of the names of the files in `.flox/cache` that keep a copy of the
+/// lockfile with the latest changes to included path environments, one per
+/// system, since whether the copy builds depends on the system
+const FOLLOWED_LOCKFILE_PREFIX: &str = "followed-includes.";
+
+/// A copy of an environment's lockfile with the latest changes to its included
+/// path environments.
+///
+/// It's kept in the gitignored `.flox/cache`, so following included
+/// environments never changes the environment's own lockfile.
+/// That only changes with explicit commands, such as 'flox include upgrade'.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+struct FollowedLockfile {
+    /// Hash of the lockfile that this is a copy of
+    base: String,
+    lockfile: Lockfile,
+    build: FollowedBuild,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+enum FollowedBuild {
+    Pending,
+    Succeeded,
+    /// Building failed with this error, and would fail the same way again,
+    /// so the copy isn't used until the included environments change again
+    Failed(String),
+}
+
+impl FollowedBuild {
+    fn failed(&self) -> bool {
+        matches!(self, FollowedBuild::Failed(_))
+    }
+}
+
+/// The lockfile that following included path environments results in
+#[derive(Clone, Debug)]
+struct Following {
+    lock_result: LockResult,
+    followed: FollowedIncludes,
+    /// The copy of the lockfile in use, if any
+    copy: Option<FollowedLockfile>,
+}
+
+/// The included environments locked in `lockfile`, if it has any
+fn locked_includes(lockfile: &Lockfile) -> Option<&Vec<LockedInclude>> {
+    lockfile.compose.as_ref().map(|compose| &compose.include)
+}
+
+/// Names of the included environments that `copy` has different versions of
+/// than `lockfile`
+fn changed_include_names(lockfile: &Lockfile, copy: &Lockfile) -> Vec<String> {
+    let locked = locked_includes(lockfile)
+        .map(Vec::as_slice)
+        .unwrap_or_default();
+    locked_includes(copy)
+        .into_iter()
+        .flatten()
+        .filter(|include| !locked.contains(include))
+        .map(|include| include.name.clone())
+        .collect()
+}
+
+/// Whether building would fail the same way again, unlike a failure to
+/// download a package, for example
+fn fails_every_time(err: &CoreEnvironmentError) -> bool {
+    matches!(
+        err,
+        CoreEnvironmentError::Manifest(_)
+            | CoreEnvironmentError::BuildEnv(
+                BuildEnvError::Build(_)
+                    | BuildEnvError::Manifest(_)
+                    | BuildEnvError::VarsCycle { .. }
+                    | BuildEnvError::LockfileIncompatible { .. }
+                    | BuildEnvError::LockfileMissingCurrentSystem { .. }
+            )
+    )
+}
+
+/// An error and its sources, on one line
+fn error_chain(err: &dyn std::error::Error) -> String {
+    iter::successors(Some(err), |err| err.source())
+        .map(ToString::to_string)
+        .join(": ")
+}
 
 /// Struct representing a local environment
 ///
@@ -145,9 +243,10 @@ impl PathEnvironment {
     }
 
     fn include_fetcher(&self) -> Result<IncludeFetcher, EnvironmentError> {
-        Ok(IncludeFetcher {
-            base_directory: Some(self.parent_path()?),
-        })
+        Ok(IncludeFetcher::for_composer(
+            self.parent_path()?,
+            self.path.clone(),
+        ))
     }
 
     /// Get a view of the environment that can be used to perform operations
@@ -159,6 +258,15 @@ impl PathEnvironment {
         self.as_core_environment()
     }
 
+    /// Get a view of an environment that is included by another environment,
+    /// whose includes are fetched with `include_fetcher`.
+    pub(super) fn into_core_environment_with_include_fetcher(
+        self,
+        include_fetcher: IncludeFetcher,
+    ) -> CoreEnvironment {
+        CoreEnvironment::new(self.path.join(ENV_DIR_NAME), include_fetcher)
+    }
+
     fn as_core_environment(&self) -> Result<CoreEnvironment, EnvironmentError> {
         Ok(CoreEnvironment::new(
             self.path.join(ENV_DIR_NAME),
@@ -168,6 +276,249 @@ impl PathEnvironment {
 
     fn as_core_environment_mut(&mut self) -> Result<CoreEnvironment, EnvironmentError> {
         self.as_core_environment()
+    }
+
+    /// Lock the environment, and use a copy of its lockfile with the latest
+    /// changes to its included path environments if any changed.
+    ///
+    /// Only changes that the included environments have locked are used.
+    /// Changes that can't be read or locked keep the versions in use before,
+    /// and changes that don't build together with this environment fall back
+    /// to the environment's lockfile, as [FollowedIncludes] reports.
+    fn follow_path_includes(
+        &mut self,
+        flox: &Flox,
+        mode: FollowMode,
+    ) -> Result<Following, EnvironmentError> {
+        let mut env_view = self.as_core_environment_mut()?;
+        let lock_result = env_view.ensure_locked(flox)?;
+        let committed = match &lock_result {
+            LockResult::Changed(lockfile) | LockResult::Unchanged(lockfile) => lockfile,
+        };
+        let locked_without_copy = |followed| Following {
+            lock_result: lock_result.clone(),
+            followed,
+            copy: None,
+        };
+        let has_local_includes = locked_includes(committed).is_some_and(|includes| {
+            includes
+                .iter()
+                .any(|locked| matches!(locked.descriptor, IncludeDescriptor::Local { .. }))
+        });
+        if !has_local_includes {
+            self.remove_followed_lockfile(&flox.system);
+            return Ok(locked_without_copy(FollowedIncludes::default()));
+        }
+
+        let base = blake3_hex(&serde_json::to_vec(committed).expect("lockfile is valid json"));
+        let cached = self
+            .read_followed_lockfile(&flox.system)
+            .filter(|cached| cached.base == base);
+        // Changes are checked against the versions in use
+        let in_use = cached.as_ref().filter(|cached| !cached.build.failed());
+        let check =
+            env_view.check_path_includes(flox, in_use.map_or(committed, |copy| &copy.lockfile));
+        let mut followed = FollowedIncludes {
+            unreadable: check
+                .unreadable
+                .into_iter()
+                .map(|(name, err)| UnreadableInclude {
+                    name,
+                    reason: Arc::new(err),
+                })
+                .collect(),
+            ..Default::default()
+        };
+
+        let mut is_new = false;
+        let copy = if check.changed.is_empty() {
+            in_use.cloned()
+        } else if let Some(cached) = cached
+            .as_ref()
+            .filter(|cached| locked_includes(&cached.lockfile) == Some(&check.includes))
+        {
+            Some(cached.clone())
+        } else {
+            let seed = in_use.map_or(committed, |copy| &copy.lockfile);
+            match env_view.lock_with_latest_includes(flox, seed, check.changed.clone()) {
+                Ok(lockfile) => {
+                    is_new = true;
+                    Some(FollowedLockfile {
+                        base,
+                        lockfile,
+                        build: FollowedBuild::Pending,
+                    })
+                },
+                Err(err) => {
+                    followed.not_locked = Some(NotAppliedIncludes {
+                        names: check.changed,
+                        reason: Arc::new(err),
+                    });
+                    in_use.cloned()
+                },
+            }
+        };
+
+        let Some(mut copy) =
+            copy.filter(|copy| locked_includes(&copy.lockfile) != locked_includes(committed))
+        else {
+            self.remove_followed_lockfile(&flox.system);
+            return Ok(locked_without_copy(followed));
+        };
+        if is_new {
+            self.write_followed_lockfile(&flox.system, &copy);
+        }
+        let unsaved = changed_include_names(committed, &copy.lockfile);
+
+        if mode == FollowMode::LockAndBuild
+            && copy.build == FollowedBuild::Pending
+            && let Err(err) = self.build_followed_lockfile(flox, &mut copy)
+        {
+            followed.not_built = Some(NotAppliedIncludes {
+                names: unsaved,
+                reason: Arc::new(err),
+            });
+            return Ok(locked_without_copy(followed));
+        }
+        if let FollowedBuild::Failed(message) = &copy.build {
+            followed.not_built = Some(NotAppliedIncludes {
+                names: unsaved,
+                reason: Arc::new(CoreEnvironmentError::FollowedBuildFailed(message.clone()).into()),
+            });
+            return Ok(locked_without_copy(followed));
+        }
+
+        followed.unsaved = unsaved;
+        let lock_result = if is_new {
+            LockResult::Changed(copy.lockfile.clone())
+        } else {
+            LockResult::Unchanged(copy.lockfile.clone())
+        };
+        Ok(Following {
+            lock_result,
+            followed,
+            copy: Some(copy),
+        })
+    }
+
+    /// Build a copy of the lockfile with the latest changes to included path
+    /// environments into the rendered environment links,
+    /// and record whether that worked.
+    fn build_followed_lockfile(
+        &mut self,
+        flox: &Flox,
+        copy: &mut FollowedLockfile,
+    ) -> Result<BuildEnvOutputs, EnvironmentError> {
+        let mut env_view = self.as_core_environment_mut()?;
+        let out_link_prefix = self.rendered_env_links.out_link_prefix();
+        let result = env_view.build_lockfile(flox, &copy.lockfile, Some(out_link_prefix));
+        let build = match &result {
+            Ok(_) => FollowedBuild::Succeeded,
+            Err(err) if fails_every_time(err) => FollowedBuild::Failed(error_chain(err)),
+            Err(_) => FollowedBuild::Pending,
+        };
+        if copy.build != build {
+            copy.build = build;
+            self.write_followed_lockfile(&flox.system, copy);
+        }
+        let outputs = result?;
+        self.rendered_env_links.replace_legacy_links();
+        Ok(outputs)
+    }
+
+    /// Names of the included environments that the copy of the lockfile in
+    /// use has changes to, which the lockfile doesn't have yet.
+    ///
+    /// Unlike [Self::follow_path_includes], this doesn't lock anything,
+    /// so it reports the copy from the last command that used it.
+    pub fn unsaved_followed_includes(&self, flox: &Flox) -> Result<Vec<String>, EnvironmentError> {
+        let Some(committed) = self.existing_lockfile(flox)? else {
+            return Ok(Vec::new());
+        };
+        let base = blake3_hex(&serde_json::to_vec(&committed).expect("lockfile is valid json"));
+        Ok(self
+            .read_followed_lockfile(&flox.system)
+            .filter(|copy| copy.base == base && !copy.build.failed())
+            .map(|copy| changed_include_names(&committed, &copy.lockfile))
+            .unwrap_or_default())
+    }
+
+    /// Build the latest changes to followed included environments into the
+    /// rendered environment links again, after a command that changed the
+    /// lockfile built the lockfile into them, so that activations keep using
+    /// the changes.
+    ///
+    /// Failing only leaves the lockfile in the links until the next command
+    /// that uses the environment.
+    fn link_followed_changes(&mut self, flox: &Flox) {
+        if let Err(err) = self.follow_path_includes(flox, FollowMode::LockAndBuild) {
+            debug!(%err, "could not use the latest changes to included environments");
+        }
+    }
+
+    /// Build the environment's lockfile, without the latest changes to
+    /// included path environments that it doesn't have yet.
+    ///
+    /// Publishing builds this, so that it builds what's committed.
+    pub fn build_locked(&mut self, flox: &Flox) -> Result<BuildEnvOutputs, EnvironmentError> {
+        let mut env_view = self.as_core_environment_mut()?;
+        let out_link_prefix = self.rendered_env_links.out_link_prefix();
+        env_view.ensure_locked(flox)?;
+        let store_paths = env_view.build(flox, Some(out_link_prefix))?;
+        self.rendered_env_links.replace_legacy_links();
+        Ok(store_paths)
+    }
+
+    fn followed_lockfile_path(&self, system: &System) -> PathBuf {
+        self.path
+            .join(CACHE_DIR_NAME)
+            .join(format!("{FOLLOWED_LOCKFILE_PREFIX}{system}.json"))
+    }
+
+    fn read_followed_lockfile(&self, system: &System) -> Option<FollowedLockfile> {
+        let contents = fs::read_to_string(self.followed_lockfile_path(system)).ok()?;
+        serde_json::from_str(&contents)
+            .inspect_err(|err| debug!(%err, "ignoring unreadable copy of the lockfile"))
+            .ok()
+    }
+
+    /// Failing to keep the copy only means that it's made again next time.
+    fn write_followed_lockfile(&self, system: &System, copy: &FollowedLockfile) {
+        let contents = serde_json::to_string(copy).expect("lockfile is valid json");
+        // Creates the cache directory
+        if let Err(err) = self.cache_path() {
+            debug!(%err, "could not keep copy of the lockfile");
+            return;
+        }
+        if let Err(err) = write_atomically(self.followed_lockfile_path(system), contents) {
+            debug!(%err, "could not keep copy of the lockfile");
+        }
+    }
+
+    fn remove_followed_lockfile(&self, system: &System) {
+        let path = self.followed_lockfile_path(system);
+        if path.exists()
+            && let Err(err) = fs::remove_file(&path)
+        {
+            debug!(%err, "could not remove copy of the lockfile");
+        }
+    }
+
+    /// Remove the copies of the lockfile for every system
+    fn remove_followed_lockfiles(&self) {
+        let Ok(entries) = fs::read_dir(self.path.join(CACHE_DIR_NAME)) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            if entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with(FOLLOWED_LOCKFILE_PREFIX)
+                && let Err(err) = fs::remove_file(entry.path())
+            {
+                debug!(%err, "could not remove copy of the lockfile");
+            }
+        }
     }
 
     pub fn rename(&mut self, new_name: EnvironmentName) -> Result<(), EnvironmentError> {
@@ -194,10 +545,29 @@ impl PathEnvironment {
 }
 
 impl Environment for PathEnvironment {
-    /// This will lock the environment if it is not already locked.
+    /// This will lock the environment if it is not already locked,
+    /// and use the latest changes to included path environments.
     fn lockfile(&mut self, flox: &Flox) -> Result<LockResult, EnvironmentError> {
-        let mut env_view = self.as_core_environment_mut()?;
-        env_view.ensure_locked(flox)
+        let Following {
+            lock_result,
+            followed,
+            ..
+        } = self.follow_path_includes(flox, FollowMode::Lock)?;
+        debug!(?followed, "followed included environments");
+        Ok(lock_result)
+    }
+
+    fn lockfile_following_includes(
+        &mut self,
+        flox: &Flox,
+        mode: FollowMode,
+    ) -> Result<(LockResult, FollowedIncludes), EnvironmentError> {
+        let Following {
+            lock_result,
+            followed,
+            ..
+        } = self.follow_path_includes(flox, mode)?;
+        Ok((lock_result, followed))
     }
 
     /// Returns the lockfile if it already exists.
@@ -238,6 +608,7 @@ impl Environment for PathEnvironment {
         let result = env_view.install(packages, flox, Some(out_link_prefix))?;
         if result.built_environments.is_some() {
             self.rendered_env_links.replace_legacy_links();
+            self.link_followed_changes(flox);
         }
         Ok(result)
     }
@@ -257,6 +628,7 @@ impl Environment for PathEnvironment {
         let result = env_view.uninstall(specs, flox, Some(out_link_prefix))?;
         if result.built_environment_store_paths.is_some() {
             self.rendered_env_links.replace_legacy_links();
+            self.link_followed_changes(flox);
         }
         Ok(result)
     }
@@ -268,6 +640,7 @@ impl Environment for PathEnvironment {
         let result = env_view.edit(flox, contents, Some(out_link_prefix))?;
         if matches!(&result, EditResult::Changed { .. }) {
             self.rendered_env_links.replace_legacy_links();
+            self.link_followed_changes(flox);
         }
         Ok(result)
     }
@@ -295,6 +668,7 @@ impl Environment for PathEnvironment {
         let result = env_view.upgrade(flox, groups_or_iids, true, Some(out_link_prefix))?;
         if result.store_path.is_some() {
             self.rendered_env_links.replace_legacy_links();
+            self.link_followed_changes(flox);
         }
         Ok(result)
     }
@@ -310,10 +684,35 @@ impl Environment for PathEnvironment {
             "upgrading included environments"
         );
         let mut env_view = self.as_core_environment_mut()?;
+        let committed: Lockfile = env_view.ensure_locked(flox)?.into();
+        // Save the packages of the copy in use rather than locking them again,
+        // so that the lockfile gets what was used,
+        // unless that would save changes to includes that weren't named.
+        let base = blake3_hex(&serde_json::to_vec(&committed).expect("lockfile is valid json"));
+        let copy = self
+            .read_followed_lockfile(&flox.system)
+            .filter(|copy| copy.base == base && !copy.build.failed())
+            .filter(|copy| {
+                to_upgrade.is_empty()
+                    || changed_include_names(&committed, &copy.lockfile)
+                        .iter()
+                        .all(|name| to_upgrade.contains(name))
+            });
         let out_link_prefix = self.rendered_env_links.out_link_prefix();
-        let result = env_view.include_upgrade(flox, to_upgrade, Some(out_link_prefix))?;
+        let result = env_view.include_upgrade(
+            flox,
+            to_upgrade,
+            copy.as_ref().map(|copy| &copy.lockfile),
+            Some(out_link_prefix),
+        )?;
         if result.store_path.is_some() {
             self.rendered_env_links.replace_legacy_links();
+        }
+        // Copies are of the lockfile before the upgrade, so any changes that
+        // are still unsaved are copied again the next time they're used.
+        self.remove_followed_lockfiles();
+        if result.store_path.is_some() {
+            self.link_followed_changes(flox);
         }
         Ok(result)
     }
@@ -342,7 +741,11 @@ impl Environment for PathEnvironment {
     ) -> Result<RenderedEnvironmentLinks, EnvironmentError> {
         let out_paths = self.rendered_env_links.clone();
 
-        if self.needs_rebuild()? {
+        let lockfile = self
+            .follow_path_includes(flox, FollowMode::Lock)?
+            .lock_result
+            .into();
+        if self.needs_rebuild(&lockfile) {
             self.build(flox)?;
         }
 
@@ -350,16 +753,20 @@ impl Environment for PathEnvironment {
     }
 
     /// Build the environment
-    /// This will lock the environment if it is not already locked.
-    /// Uses `ensure_locked` to skip a catalog round-trip and lockfile
-    /// rewrite when the lockfile is already current.
+    /// This will lock the environment if it is not already locked,
+    /// and build it with the latest changes to included path environments if
+    /// it builds with them, see [Self::follow_path_includes].
     fn build(&mut self, flox: &Flox) -> Result<BuildEnvOutputs, EnvironmentError> {
-        let mut env_view = self.as_core_environment_mut()?;
-        let out_link_prefix = self.rendered_env_links.out_link_prefix();
-        env_view.ensure_locked(flox)?;
-        let store_paths = env_view.build(flox, Some(out_link_prefix))?;
-        self.rendered_env_links.replace_legacy_links();
-        Ok(store_paths)
+        if let Some(mut copy) = self.follow_path_includes(flox, FollowMode::Lock)?.copy {
+            match self.build_followed_lockfile(flox, &mut copy) {
+                Ok(store_paths) => return Ok(store_paths),
+                Err(err) => debug!(
+                    %err,
+                    "building with the latest changes to included environments failed, building the lockfile instead"
+                ),
+            }
+        }
+        self.build_locked(flox)
     }
 
     /// Returns .flox/cache
@@ -595,33 +1002,23 @@ impl PathEnvironment {
     }
 
     /// Determine if the environment needs to be rebuilt,
-    /// based on the lockfile contents in the environment
-    /// and the rendered environment link.
+    /// based on the lockfile in use and the rendered environment link.
     ///
     /// If no lockfile exists in the rendered environment,
-    /// or differs from the definition in the environment,
+    /// or it differs from the lockfile in use,
     /// the environment will be rebuilt.
-    fn needs_rebuild(&self) -> Result<bool, EnvironmentError> {
-        let env_view = self.as_core_environment()?;
-        let Some(lockfile) = env_view.existing_lockfile()? else {
-            return Ok(true);
-        };
-
+    fn needs_rebuild(&self, lockfile: &Lockfile) -> bool {
         let rendered_env_lockfile_path = self.rendered_env_links.dev.join(LOCKFILE_FILENAME);
 
         let Ok(rendered_env_lockfile_path) = CanonicalPath::new(rendered_env_lockfile_path) else {
-            return Ok(true);
+            return true;
         };
 
         let Ok(rendered_lockfile) = Lockfile::read_from_file(&rendered_env_lockfile_path) else {
-            return Ok(true);
+            return true;
         };
 
-        if lockfile != rendered_lockfile {
-            return Ok(true);
-        }
-
-        Ok(false)
+        *lockfile != rendered_lockfile
     }
 
     /// The environment is locked,
@@ -744,6 +1141,7 @@ pub mod test_helpers {
 #[cfg(test)]
 pub mod tests {
 
+    use std::collections::BTreeMap;
     use std::fs::{self, OpenOptions};
     use std::io::Write;
 
@@ -879,7 +1277,8 @@ pub mod tests {
         )
         .unwrap();
 
-        assert!(env.needs_rebuild().unwrap());
+        let lockfile = env.existing_lockfile(&flox).unwrap().unwrap();
+        assert!(env.needs_rebuild(&lockfile));
 
         // build the environment -> out link is created -> no rebuild necessary
         let mut env_view =
@@ -887,7 +1286,7 @@ pub mod tests {
         let out_link_prefix = env.rendered_env_links.out_link_prefix();
         env_view.build(&flox, Some(out_link_prefix)).unwrap();
 
-        assert!(!env.needs_rebuild().unwrap());
+        assert!(!env.needs_rebuild(&lockfile));
 
         // modify the lockfile  -> rebuild necessary
         let mut lockfile = env.existing_lockfile(&flox).unwrap().unwrap();
@@ -896,7 +1295,7 @@ pub mod tests {
         lockfile.manifest = manifest.into();
         let lockfile_contents = serialize_json_with_newline(&lockfile).unwrap();
         fs::write(env.lockfile_path(&flox).unwrap(), lockfile_contents).unwrap();
-        assert!(env.needs_rebuild().unwrap());
+        assert!(env.needs_rebuild(&lockfile));
     }
 
     #[test]
@@ -1083,22 +1482,24 @@ pub mod tests {
         let (flox, _temp_dir) = flox_instance();
 
         let mut environment = new_path_environment(&flox, "version = 1");
+        let lockfile: Lockfile = environment.lockfile(&flox).unwrap().into();
 
-        assert!(environment.needs_rebuild().unwrap());
+        assert!(environment.needs_rebuild(&lockfile));
 
         environment.rendered_env_links(&flox).unwrap();
 
-        assert!(!environment.needs_rebuild().unwrap());
+        assert!(!environment.needs_rebuild(&lockfile));
 
-        let mut lockfile = OpenOptions::new()
+        let mut lockfile_file = OpenOptions::new()
             .read(true)
             .append(true)
             .open(environment.lockfile_path(&flox).unwrap())
             .unwrap();
 
-        writeln!(lockfile, "\n\n\n",).unwrap();
+        writeln!(lockfile_file, "\n\n\n",).unwrap();
 
-        assert!(!environment.needs_rebuild().unwrap());
+        let lockfile = environment.existing_lockfile(&flox).unwrap().unwrap();
+        assert!(!environment.needs_rebuild(&lockfile));
     }
 
     // -------------------------------------------------------------------------
@@ -1184,6 +1585,754 @@ pub mod tests {
         assert_eq!(mtime_before, mtime_after, "lockfile mtime changed");
     }
 
+    /// Create `<tempdir>/<name>` with `contents` and lock it
+    fn locked_path_environment(
+        flox: &Flox,
+        tempdir: &TempDir,
+        name: &str,
+        contents: &str,
+    ) -> PathEnvironment {
+        let mut environment = new_path_environment_in(flox, contents, tempdir.path().join(name));
+        environment.lockfile(flox).unwrap();
+        environment
+    }
+
+    /// Replace the manifest of an environment and lock it, like 'flox edit'
+    /// without building
+    fn edit_and_lock(environment: &mut PathEnvironment, flox: &Flox, contents: &str) {
+        fs::write(environment.manifest_path(flox).unwrap(), contents).unwrap();
+        environment
+            .as_core_environment_mut()
+            .unwrap()
+            .ensure_locked(flox)
+            .unwrap();
+    }
+
+    /// The vars of the merged manifest in a lockfile
+    fn locked_vars(lockfile: &Lockfile) -> BTreeMap<String, String> {
+        lockfile
+            .migrated_manifest()
+            .unwrap()
+            .as_latest_schema()
+            .vars
+            .inner()
+            .clone()
+    }
+
+    fn vars_map(vars: &[(&str, &str)]) -> BTreeMap<String, String> {
+        vars.iter()
+            .map(|(key, value)| (key.to_string(), value.to_string()))
+            .collect()
+    }
+
+    /// The names in [FollowedIncludes], as
+    /// (unsaved, unreadable, not locked, not built),
+    /// since the reasons can't be compared
+    #[allow(clippy::type_complexity)]
+    fn followed_names(followed: &FollowedIncludes) -> (Vec<&str>, Vec<&str>, Vec<&str>, Vec<&str>) {
+        fn names(not_applied: &Option<NotAppliedIncludes>) -> Vec<&str> {
+            not_applied
+                .iter()
+                .flat_map(|not_applied| not_applied.names.iter().map(String::as_str))
+                .collect()
+        }
+        (
+            followed.unsaved.iter().map(String::as_str).collect(),
+            followed
+                .unreadable
+                .iter()
+                .map(|unreadable| unreadable.name.as_str())
+                .collect(),
+            names(&followed.not_locked),
+            names(&followed.not_built),
+        )
+    }
+
+    /// Follow included environments and return the lockfile in use,
+    /// asserting that the environment's own lockfile isn't written
+    fn follow(
+        environment: &mut PathEnvironment,
+        flox: &Flox,
+        mode: FollowMode,
+    ) -> (Lockfile, FollowedIncludes) {
+        let lockfile_path = environment.lockfile_path(flox).unwrap();
+        let bytes_before = fs::read(&lockfile_path).unwrap();
+        let (lock_result, followed) = environment.lockfile_following_includes(flox, mode).unwrap();
+        assert_eq!(
+            bytes_before,
+            fs::read(&lockfile_path).unwrap(),
+            "following included environments wrote the lockfile"
+        );
+        (lock_result.into(), followed)
+    }
+
+    /// Locked changes to an included path environment are used without
+    /// 'flox include upgrade', and without writing the lockfile.
+    #[test]
+    fn lockfile_follows_locked_changes_to_path_include() {
+        let (flox, tempdir) = flox_instance();
+        let mut included = locked_path_environment(
+            &flox,
+            &tempdir,
+            "included",
+            &with_latest_schema("[vars]\nincluded = \"v1\""),
+        );
+        // A v1 composer, like most composers in the wild
+        let mut composer = locked_path_environment(
+            &flox,
+            &tempdir,
+            "composer",
+            &with_schema(
+                KnownSchemaVersion::V1,
+                "[include]\nenvironments = [{ dir = \"../included\" }]",
+            ),
+        );
+
+        edit_and_lock(
+            &mut included,
+            &flox,
+            &with_latest_schema("[vars]\nincluded = \"v2\""),
+        );
+
+        let (lockfile, followed) = follow(&mut composer, &flox, FollowMode::Lock);
+        assert_eq!(
+            followed_names(&followed),
+            (vec!["included"], vec![], vec![], vec![])
+        );
+        assert_eq!(locked_vars(&lockfile), vars_map(&[("included", "v2")]));
+        // Locking alone doesn't build the copy
+        let copy_build = |composer: &PathEnvironment| {
+            composer
+                .read_followed_lockfile(&flox.system)
+                .map(|copy| copy.build)
+        };
+        assert_eq!(copy_build(&composer), Some(FollowedBuild::Pending));
+        follow(&mut composer, &flox, FollowMode::LockAndBuild);
+        assert_eq!(copy_build(&composer), Some(FollowedBuild::Succeeded));
+
+        // The copy is reused, and the changes are still unsaved
+        let (lock_result, followed) = composer
+            .lockfile_following_includes(&flox, FollowMode::Lock)
+            .unwrap();
+        assert!(matches!(lock_result, LockResult::Unchanged(_)));
+        assert_eq!(
+            followed_names(&followed),
+            (vec!["included"], vec![], vec![], vec![])
+        );
+    }
+
+    /// Changes that an included environment hasn't locked aren't used.
+    #[test]
+    fn lockfile_does_not_follow_unlocked_changes_to_path_include() {
+        let (flox, tempdir) = flox_instance();
+        let included = locked_path_environment(
+            &flox,
+            &tempdir,
+            "included",
+            &with_latest_schema("[vars]\nincluded = \"v1\""),
+        );
+        let mut composer = locked_path_environment(
+            &flox,
+            &tempdir,
+            "composer",
+            &with_latest_schema("[include]\nenvironments = [{ dir = \"../included\" }]"),
+        );
+
+        fs::write(
+            included.manifest_path(&flox).unwrap(),
+            with_latest_schema("[vars]\nincluded = \"v2\""),
+        )
+        .unwrap();
+
+        let (lockfile, followed) = follow(&mut composer, &flox, FollowMode::Lock);
+        assert_eq!(
+            followed_names(&followed),
+            (vec![], vec!["included"], vec![], vec![])
+        );
+        assert!(matches!(
+            followed.unreadable[0].reason.as_ref(),
+            EnvironmentError::Recoverable(RecoverableMergeError::PathOutOfSync(_))
+        ));
+        assert_eq!(locked_vars(&lockfile), vars_map(&[("included", "v1")]));
+    }
+
+    /// An included environment that can't be read keeps the version in use,
+    /// rather than going back to the version in the lockfile.
+    #[test]
+    fn lockfile_keeps_version_in_use_of_path_include_that_cannot_be_read() {
+        let (flox, tempdir) = flox_instance();
+        let mut included = locked_path_environment(
+            &flox,
+            &tempdir,
+            "included",
+            &with_latest_schema("[vars]\nincluded = \"v1\""),
+        );
+        let mut composer = locked_path_environment(
+            &flox,
+            &tempdir,
+            "composer",
+            &with_latest_schema("[include]\nenvironments = [{ dir = \"../included\" }]"),
+        );
+        edit_and_lock(
+            &mut included,
+            &flox,
+            &with_latest_schema("[vars]\nincluded = \"v2\""),
+        );
+        follow(&mut composer, &flox, FollowMode::Lock);
+
+        fs::remove_dir_all(tempdir.path().join("included")).unwrap();
+
+        let (lockfile, followed) = follow(&mut composer, &flox, FollowMode::Lock);
+        assert_eq!(
+            followed_names(&followed),
+            (vec!["included"], vec!["included"], vec![], vec![])
+        );
+        assert!(matches!(
+            followed.unreadable[0].reason.as_ref(),
+            EnvironmentError::DotFloxNotFound(_)
+        ));
+        assert_eq!(locked_vars(&lockfile), vars_map(&[("included", "v2")]));
+    }
+
+    /// A -> B -> C: a change that C locked reaches A through B,
+    /// without B locking it.
+    #[test]
+    fn lockfile_follows_locked_changes_to_nested_path_include() {
+        let (flox, tempdir) = flox_instance();
+        let mut c = locked_path_environment(
+            &flox,
+            &tempdir,
+            "c",
+            &with_latest_schema("[vars]\nc = \"v1\""),
+        );
+        let b = locked_path_environment(
+            &flox,
+            &tempdir,
+            "b",
+            &with_latest_schema(
+                "[vars]\nb = \"v1\"\n[include]\nenvironments = [{ dir = \"../c\" }]",
+            ),
+        );
+        let mut a = locked_path_environment(
+            &flox,
+            &tempdir,
+            "a",
+            &with_latest_schema("[include]\nenvironments = [{ dir = \"../b\" }]"),
+        );
+        let b_lockfile_before = fs::read(b.lockfile_path(&flox).unwrap()).unwrap();
+
+        edit_and_lock(&mut c, &flox, &with_latest_schema("[vars]\nc = \"v2\""));
+
+        let (lockfile, followed) = follow(&mut a, &flox, FollowMode::Lock);
+        assert_eq!(
+            followed_names(&followed),
+            (vec!["b"], vec![], vec![], vec![])
+        );
+        assert_eq!(
+            locked_vars(&lockfile),
+            vars_map(&[("b", "v1"), ("c", "v2")])
+        );
+        assert_eq!(
+            b_lockfile_before,
+            fs::read(b.lockfile_path(&flox).unwrap()).unwrap()
+        );
+    }
+
+    /// The lockfile that the rendered environment links point to
+    fn rendered_lockfile(environment: &PathEnvironment) -> Lockfile {
+        let path = environment.rendered_env_links.dev.join(LOCKFILE_FILENAME);
+        Lockfile::read_from_file(&CanonicalPath::new(path).unwrap()).unwrap()
+    }
+
+    /// A command that changes the lockfile keeps the latest changes to
+    /// followed includes in the rendered environment, which it rebuilt.
+    #[test]
+    fn edit_keeps_followed_changes_in_rendered_environment() {
+        let (flox, tempdir) = flox_instance();
+        let mut included = locked_path_environment(
+            &flox,
+            &tempdir,
+            "included",
+            &with_latest_schema("[vars]\nincluded = \"v1\""),
+        );
+        let include = "[include]\nenvironments = [{ dir = \"../included\" }]";
+        let mut composer =
+            locked_path_environment(&flox, &tempdir, "composer", &with_latest_schema(include));
+        edit_and_lock(
+            &mut included,
+            &flox,
+            &with_latest_schema("[vars]\nincluded = \"v2\""),
+        );
+        follow(&mut composer, &flox, FollowMode::LockAndBuild);
+
+        composer
+            .edit(
+                &flox,
+                with_latest_schema(format!("[vars]\ncomposer = \"v1\"\n{include}")),
+            )
+            .unwrap();
+        assert_eq!(
+            locked_vars(&rendered_lockfile(&composer)),
+            vars_map(&[("composer", "v1"), ("included", "v2")])
+        );
+    }
+
+    /// An include cycle in an existing lockfile, which earlier versions could
+    /// lock, keeps the version in use rather than failing or growing.
+    #[test]
+    fn lockfile_keeps_path_include_that_became_a_cycle() {
+        let (flox, tempdir) = flox_instance();
+        locked_path_environment(
+            &flox,
+            &tempdir,
+            "included",
+            &with_latest_schema("[vars]\nincluded = \"v1\""),
+        );
+        let mut composer = locked_path_environment(
+            &flox,
+            &tempdir,
+            "composer",
+            &with_latest_schema("[include]\nenvironments = [{ dir = \"../included\" }]"),
+        );
+
+        // The include now resolves to the composer itself
+        fs::remove_dir_all(tempdir.path().join("included")).unwrap();
+        std::os::unix::fs::symlink(
+            tempdir.path().join("composer"),
+            tempdir.path().join("included"),
+        )
+        .unwrap();
+
+        let (lockfile, followed) = follow(&mut composer, &flox, FollowMode::Lock);
+        assert_eq!(
+            followed_names(&followed),
+            (vec![], vec!["included"], vec![], vec![])
+        );
+        assert!(matches!(
+            followed.unreadable[0].reason.as_ref(),
+            EnvironmentError::Recoverable(RecoverableMergeError::IncludeCycle(_))
+        ));
+        assert_eq!(locked_vars(&lockfile), vars_map(&[("included", "v1")]));
+    }
+
+    /// Adding an include that closes a cycle is an error, even though the
+    /// environment it includes is locked with the other half of the cycle.
+    #[test]
+    fn lockfile_errors_on_new_include_cycle() {
+        let (flox, tempdir) = flox_instance();
+        let mut b = locked_path_environment(
+            &flox,
+            &tempdir,
+            "b",
+            &with_latest_schema("[vars]\nb = \"v1\""),
+        );
+        let a = locked_path_environment(
+            &flox,
+            &tempdir,
+            "a",
+            &with_latest_schema("[include]\nenvironments = [{ dir = \"../b\" }]"),
+        );
+
+        fs::write(
+            b.manifest_path(&flox).unwrap(),
+            with_latest_schema("[include]\nenvironments = [{ dir = \"../a\" }]"),
+        )
+        .unwrap();
+
+        let err = b.lockfile(&flox).unwrap_err();
+        let EnvironmentError::Recoverable(RecoverableMergeError::Fetch { err, .. }) = err else {
+            panic!("expected fetching a to fail, got: {err:?}");
+        };
+        let EnvironmentError::Recoverable(RecoverableMergeError::IncludeCycle(cycle)) = *err else {
+            panic!("expected an include cycle, got: {err:?}");
+        };
+        assert_eq!(cycle, vec![
+            b.dot_flox_path().to_path_buf(),
+            a.dot_flox_path().to_path_buf(),
+            b.dot_flox_path().to_path_buf(),
+        ]);
+    }
+
+    /// Changes that can't be locked together keep the versions in use,
+    /// here because a renamed included environment takes another's name.
+    #[test]
+    fn lockfile_keeps_versions_in_use_when_changes_cannot_be_locked() {
+        let (flox, tempdir) = flox_instance();
+        let mut included1 = locked_path_environment(
+            &flox,
+            &tempdir,
+            "included1",
+            &with_latest_schema("[vars]\nincluded1 = \"v1\""),
+        );
+        locked_path_environment(
+            &flox,
+            &tempdir,
+            "included2",
+            &with_latest_schema("[vars]\nincluded2 = \"v1\""),
+        );
+        let mut composer = locked_path_environment(
+            &flox,
+            &tempdir,
+            "composer",
+            &with_latest_schema(indoc! {r#"
+                [include]
+                environments = [{ dir = "../included1" }, { dir = "../included2" }]
+            "#}),
+        );
+
+        included1.rename("included2".parse().unwrap()).unwrap();
+
+        let (lockfile, followed) = follow(&mut composer, &flox, FollowMode::Lock);
+        assert_eq!(
+            followed_names(&followed),
+            (vec![], vec![], vec!["included1"], vec![])
+        );
+        assert_eq!(
+            locked_vars(&lockfile),
+            vars_map(&[("included1", "v1"), ("included2", "v1")])
+        );
+    }
+
+    /// Changes that lock but don't build, here a cycle between the vars of the
+    /// composer and an included environment, fall back to the lockfile,
+    /// which is remembered until they change.
+    #[test]
+    fn lockfile_falls_back_to_lockfile_when_changes_do_not_build() {
+        let (flox, tempdir) = flox_instance();
+        let mut included = locked_path_environment(
+            &flox,
+            &tempdir,
+            "included",
+            &with_latest_schema("[vars]\ny = \"v1\""),
+        );
+        let mut composer = locked_path_environment(
+            &flox,
+            &tempdir,
+            "composer",
+            &with_latest_schema(indoc! {r#"
+                [vars]
+                x = "$y"
+                [include]
+                environments = [{ dir = "../included" }]
+            "#}),
+        );
+
+        edit_and_lock(
+            &mut included,
+            &flox,
+            &with_latest_schema("[vars]\ny = \"$x\""),
+        );
+
+        for mode in [FollowMode::LockAndBuild, FollowMode::Lock] {
+            let (lockfile, followed) = follow(&mut composer, &flox, mode);
+            assert!(matches!(
+                composer
+                    .read_followed_lockfile(&flox.system)
+                    .map(|copy| copy.build),
+                Some(FollowedBuild::Failed(_))
+            ));
+            assert_eq!(
+                followed_names(&followed),
+                (vec![], vec![], vec![], vec!["included"])
+            );
+            assert_eq!(
+                locked_vars(&lockfile),
+                vars_map(&[("x", "$y"), ("y", "v1")])
+            );
+        }
+    }
+
+    /// Changes that need a newer schema than the composer's are used without
+    /// touching the composer's manifest, since only the copy has them.
+    #[test]
+    fn lockfile_follows_changes_that_require_newer_schema() {
+        let (flox, tempdir) = flox_instance();
+        let mut included = locked_path_environment(
+            &flox,
+            &tempdir,
+            "included",
+            &with_schema(KnownSchemaVersion::V1_10_0, "[vars]\nincluded = \"v1\""),
+        );
+        let mut composer = locked_path_environment(
+            &flox,
+            &tempdir,
+            "composer",
+            &with_schema(
+                KnownSchemaVersion::V1_10_0,
+                "[include]\nenvironments = [{ dir = \"../included\" }]",
+            ),
+        );
+        let manifest_path = composer.manifest_path(&flox).unwrap();
+        let manifest_before = fs::read(&manifest_path).unwrap();
+
+        edit_and_lock(
+            &mut included,
+            &flox,
+            &with_latest_schema(indoc! {r#"
+                [vars]
+                included = "v2"
+                [options.activate]
+                upgrade-notifications = false
+            "#}),
+        );
+
+        let (lockfile, followed) = follow(&mut composer, &flox, FollowMode::Lock);
+        assert_eq!(
+            followed_names(&followed),
+            (vec!["included"], vec![], vec![], vec![])
+        );
+        assert_eq!(locked_vars(&lockfile), vars_map(&[("included", "v2")]));
+        assert_eq!(manifest_before, fs::read(&manifest_path).unwrap());
+    }
+
+    /// 'flox include upgrade' fails rather than saving older versions of
+    /// nested includes than the ones in use, and keeps the copy in use.
+    #[test]
+    fn include_upgrade_fails_when_nested_include_cannot_be_read() {
+        let (flox, tempdir) = flox_instance();
+        let mut c = locked_path_environment(
+            &flox,
+            &tempdir,
+            "c",
+            &with_latest_schema("[vars]\nc = \"v1\""),
+        );
+        locked_path_environment(
+            &flox,
+            &tempdir,
+            "b",
+            &with_latest_schema("[include]\nenvironments = [{ dir = \"../c\" }]"),
+        );
+        let mut a = locked_path_environment(
+            &flox,
+            &tempdir,
+            "a",
+            &with_latest_schema("[include]\nenvironments = [{ dir = \"../b\" }]"),
+        );
+        edit_and_lock(&mut c, &flox, &with_latest_schema("[vars]\nc = \"v2\""));
+        follow(&mut a, &flox, FollowMode::Lock);
+
+        fs::write(
+            c.manifest_path(&flox).unwrap(),
+            with_latest_schema("[vars]\nc = \"v3\""),
+        )
+        .unwrap();
+
+        a.include_upgrade(&flox, vec![]).unwrap_err();
+        let (lockfile, followed) = follow(&mut a, &flox, FollowMode::Lock);
+        assert_eq!(
+            followed_names(&followed),
+            (vec!["b"], vec!["b"], vec![], vec![])
+        );
+        assert_eq!(locked_vars(&lockfile), vars_map(&[("c", "v2")]));
+    }
+
+    /// A -> B -> C: when C can't be read anymore, A keeps B with the version
+    /// of C in use, rather than the older one in B's lockfile.
+    #[test]
+    fn lockfile_keeps_version_in_use_when_nested_include_cannot_be_read() {
+        let (flox, tempdir) = flox_instance();
+        let mut c = locked_path_environment(
+            &flox,
+            &tempdir,
+            "c",
+            &with_latest_schema("[vars]\nc = \"v1\""),
+        );
+        locked_path_environment(
+            &flox,
+            &tempdir,
+            "b",
+            &with_latest_schema("[include]\nenvironments = [{ dir = \"../c\" }]"),
+        );
+        let mut a = locked_path_environment(
+            &flox,
+            &tempdir,
+            "a",
+            &with_latest_schema("[include]\nenvironments = [{ dir = \"../b\" }]"),
+        );
+        edit_and_lock(&mut c, &flox, &with_latest_schema("[vars]\nc = \"v2\""));
+        follow(&mut a, &flox, FollowMode::Lock);
+
+        fs::remove_dir_all(tempdir.path().join("c")).unwrap();
+
+        let (lockfile, followed) = follow(&mut a, &flox, FollowMode::Lock);
+        assert_eq!(
+            followed_names(&followed),
+            (vec!["b"], vec!["b"], vec![], vec![])
+        );
+        assert_eq!(locked_vars(&lockfile), vars_map(&[("c", "v2")]));
+    }
+
+    /// New changes are added to the changes already in use.
+    #[test]
+    fn lockfile_adds_new_changes_to_changes_in_use() {
+        let (flox, tempdir) = flox_instance();
+        let mut included1 = locked_path_environment(
+            &flox,
+            &tempdir,
+            "included1",
+            &with_latest_schema("[vars]\nincluded1 = \"v1\""),
+        );
+        let mut included2 = locked_path_environment(
+            &flox,
+            &tempdir,
+            "included2",
+            &with_latest_schema("[vars]\nincluded2 = \"v1\""),
+        );
+        let mut composer = locked_path_environment(
+            &flox,
+            &tempdir,
+            "composer",
+            &with_latest_schema(indoc! {r#"
+                [include]
+                environments = [{ dir = "../included1" }, { dir = "../included2" }]
+            "#}),
+        );
+
+        edit_and_lock(
+            &mut included1,
+            &flox,
+            &with_latest_schema("[vars]\nincluded1 = \"v2\""),
+        );
+        follow(&mut composer, &flox, FollowMode::Lock);
+        edit_and_lock(
+            &mut included2,
+            &flox,
+            &with_latest_schema("[vars]\nincluded2 = \"v2\""),
+        );
+
+        let (lockfile, followed) = follow(&mut composer, &flox, FollowMode::Lock);
+        assert_eq!(
+            followed_names(&followed),
+            (vec!["included1", "included2"], vec![], vec![], vec![])
+        );
+        assert_eq!(
+            locked_vars(&lockfile),
+            vars_map(&[("included1", "v2"), ("included2", "v2")])
+        );
+    }
+
+    /// When the lockfile changes, the changes in use are copied again on top
+    /// of it.
+    #[test]
+    fn lockfile_copies_changes_in_use_again_after_lockfile_changes() {
+        let (flox, tempdir) = flox_instance();
+        let mut included = locked_path_environment(
+            &flox,
+            &tempdir,
+            "included",
+            &with_latest_schema("[vars]\nincluded = \"v1\""),
+        );
+        let mut composer = locked_path_environment(
+            &flox,
+            &tempdir,
+            "composer",
+            &with_latest_schema("[include]\nenvironments = [{ dir = \"../included\" }]"),
+        );
+        edit_and_lock(
+            &mut included,
+            &flox,
+            &with_latest_schema("[vars]\nincluded = \"v2\""),
+        );
+        follow(&mut composer, &flox, FollowMode::Lock);
+
+        edit_and_lock(
+            &mut composer,
+            &flox,
+            &with_latest_schema(indoc! {r#"
+                [vars]
+                composer = "v2"
+                [include]
+                environments = [{ dir = "../included" }]
+            "#}),
+        );
+
+        let (lockfile, followed) = follow(&mut composer, &flox, FollowMode::Lock);
+        assert_eq!(
+            followed_names(&followed),
+            (vec!["included"], vec![], vec![], vec![])
+        );
+        assert_eq!(
+            locked_vars(&lockfile),
+            vars_map(&[("composer", "v2"), ("included", "v2")])
+        );
+    }
+
+    /// Building uses the changes in use, while publishing builds the
+    /// lockfile.
+    #[test]
+    fn build_uses_changes_in_use_and_build_locked_does_not() {
+        let (flox, tempdir) = flox_instance();
+        let mut included = locked_path_environment(
+            &flox,
+            &tempdir,
+            "included",
+            &with_latest_schema("[vars]\nincluded = \"v1\""),
+        );
+        let mut composer = locked_path_environment(
+            &flox,
+            &tempdir,
+            "composer",
+            &with_latest_schema("[include]\nenvironments = [{ dir = \"../included\" }]"),
+        );
+        edit_and_lock(
+            &mut included,
+            &flox,
+            &with_latest_schema("[vars]\nincluded = \"v2\""),
+        );
+        let (in_use, _) = follow(&mut composer, &flox, FollowMode::Lock);
+        let rendered_lockfile = |composer: &PathEnvironment| {
+            Lockfile::read_from_file(
+                &CanonicalPath::new(composer.rendered_env_links.dev.join(LOCKFILE_FILENAME))
+                    .unwrap(),
+            )
+            .unwrap()
+        };
+
+        composer.build(&flox).unwrap();
+        assert_eq!(rendered_lockfile(&composer), in_use);
+
+        composer.build_locked(&flox).unwrap();
+        assert_eq!(
+            Some(rendered_lockfile(&composer)),
+            composer.existing_lockfile(&flox).unwrap()
+        );
+    }
+
+    /// 'flox include upgrade' saves the changes that were in use to the
+    /// lockfile.
+    #[test]
+    fn include_upgrade_saves_followed_changes() {
+        let (flox, tempdir) = flox_instance();
+        let mut included = locked_path_environment(
+            &flox,
+            &tempdir,
+            "included",
+            &with_latest_schema("[vars]\nincluded = \"v1\""),
+        );
+        let mut composer = locked_path_environment(
+            &flox,
+            &tempdir,
+            "composer",
+            &with_latest_schema("[include]\nenvironments = [{ dir = \"../included\" }]"),
+        );
+        edit_and_lock(
+            &mut included,
+            &flox,
+            &with_latest_schema("[vars]\nincluded = \"v2\""),
+        );
+        let (followed_lockfile, _) = follow(&mut composer, &flox, FollowMode::Lock);
+
+        composer.include_upgrade(&flox, vec![]).unwrap();
+        assert!(!composer.followed_lockfile_path(&flox.system).exists());
+
+        // The lockfile gets exactly what was in use, not a new lock of it
+        let saved = composer.existing_lockfile(&flox).unwrap().unwrap();
+        assert_eq!(saved, followed_lockfile);
+        let (lockfile, followed) = follow(&mut composer, &flox, FollowMode::Lock);
+        assert_eq!(followed_names(&followed), (vec![], vec![], vec![], vec![]));
+        assert_eq!(lockfile, saved);
+    }
+
     /// v1 schema environment (no packages).
     /// After locking once, calling build() must not alter manifest.lock.
     /// Exercises the v1 → ensure_locked path in lockfile_if_up_to_date.
@@ -1239,8 +2388,9 @@ pub mod tests {
 
         // Before the first build, the rendered-env link does not exist, so
         // needs_rebuild() returns true — the env needs to be built once.
+        let lockfile = env.existing_lockfile(&flox).unwrap().unwrap();
         assert!(
-            env.needs_rebuild().unwrap(),
+            env.needs_rebuild(&lockfile),
             "needs_rebuild() should return true before first build"
         );
 
@@ -1252,7 +2402,7 @@ pub mod tests {
         // After the build, needs_rebuild() must return false: the
         // rendered-env stamp's lockfile matches the env's lockfile.
         assert!(
-            !env.needs_rebuild().unwrap(),
+            !env.needs_rebuild(&lockfile),
             "needs_rebuild() returned true after building from a prior-release \
              lockfile: the rendered-env stamp's lockfile diverged from the \
              env's lockfile across releases",

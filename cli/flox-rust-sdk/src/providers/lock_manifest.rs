@@ -149,8 +149,34 @@ pub enum RecoverableMergeError {
     #[error("remote environments cannot include local environments")]
     RemoteCannotIncludeLocal,
 
+    /// The `.flox` directories of the environments in the cycle,
+    /// starting and ending with the same environment
+    #[error("{}", format_include_cycle(.0))]
+    IncludeCycle(Vec<PathBuf>),
+
     #[error("internal error: failed to migrate manifest: {0}")]
     Migration(#[source] ManifestError),
+}
+
+/// Describe a cycle of `.flox` directories by the project directories users
+/// pass to `-d`
+fn format_include_cycle(cycle: &[PathBuf]) -> String {
+    let project_dirs = cycle
+        .iter()
+        .map(|dot_flox| dot_flox.parent().unwrap_or(dot_flox).display().to_string())
+        .collect::<Vec<_>>();
+    match project_dirs.as_slice() {
+        [environment, _] => formatdoc! {"
+            environment '{environment}' includes itself
+
+            Remove the include with 'flox edit -d {environment}'."},
+        [.., includer, _] => formatdoc! {"
+            environments include each other: {}
+
+            Remove one of these includes, for example with 'flox edit -d {includer}'.",
+        project_dirs.join(" -> ")},
+        _ => unreachable!("a cycle has at least two entries"),
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -442,7 +468,7 @@ impl LockManifest {
     /// are fetched.
     #[allow(clippy::type_complexity)]
     #[instrument(skip_all, fields(progress = "Composing environments"))]
-    fn merge_manifest(
+    pub(crate) fn merge_manifest(
         flox: &Flox,
         manifest: &ManifestLatest,
         seed_lockfile: Option<&Lockfile>,
@@ -471,6 +497,26 @@ impl LockManifest {
             .as_ref()
             .map(|to_upgrade| to_upgrade.is_empty())
             .unwrap_or(false);
+        // Upgrading only saves the latest changes if all of them can be read,
+        // rather than older copies of nested includes that can't be.
+        let upgrading = to_upgrade.is_some();
+        // Records the lockfile of each fetched include in `include_lockfiles`
+        let mut fetch = |include_environment: &IncludeDescriptor| {
+            let FetchedInclude {
+                locked_include,
+                lockfile,
+            } = if upgrading {
+                include_fetcher.fetch_latest(flox, include_environment)
+            } else {
+                include_fetcher.fetch(flox, include_environment)
+            }
+            .map_err(|e| RecoverableMergeError::Fetch {
+                include: include_environment.clone(),
+                err: Box::new(e),
+            })?;
+            include_lockfiles.insert(locked_include.name.clone(), lockfile);
+            Ok(locked_include)
+        };
         for include_environment in &manifest.include.environments {
             debug!(
                 name = include_environment.to_string(),
@@ -529,12 +575,7 @@ impl LockManifest {
                             name = include_environment.to_string(),
                             "upgrading included environment"
                         );
-                        Self::fetch_include(
-                            flox,
-                            include_fetcher,
-                            include_environment,
-                            &mut include_lockfiles,
-                        )?
+                        fetch(include_environment)?
                     } else {
                         debug!(
                             name = include_environment.to_string(),
@@ -550,12 +591,7 @@ impl LockManifest {
                         "fetching included environment"
                     );
 
-                    let locked_include = Self::fetch_include(
-                        flox,
-                        include_fetcher,
-                        include_environment,
-                        &mut include_lockfiles,
-                    )?;
+                    let locked_include = fetch(include_environment)?;
                     // If this include needed to be upgraded, remove from
                     // to_upgrade to keep track that it was
                     if let Some(to_upgrade) = &mut to_upgrade {
@@ -607,27 +643,6 @@ impl LockManifest {
         };
 
         Ok((merged, Some(compose), include_lockfiles))
-    }
-
-    /// Fetch an included environment and record its lockfile in
-    /// `include_lockfiles` under the include's name.
-    fn fetch_include(
-        flox: &Flox,
-        include_fetcher: &IncludeFetcher,
-        include_environment: &IncludeDescriptor,
-        include_lockfiles: &mut BTreeMap<String, Lockfile>,
-    ) -> Result<LockedInclude, RecoverableMergeError> {
-        let FetchedInclude {
-            locked_include,
-            lockfile,
-        } = include_fetcher
-            .fetch(flox, include_environment)
-            .map_err(|e| RecoverableMergeError::Fetch {
-                include: include_environment.clone(),
-                err: Box::new(e),
-            })?;
-        include_lockfiles.insert(locked_include.name.clone(), lockfile);
-        Ok(locked_include)
     }
 
     /// Helper method that removes the first IncludeToUpgrade that matches a given
@@ -3154,9 +3169,7 @@ mod tests {
             &flox,
             &manifest.as_migrated_typed_only(),
             Some(&locked),
-            &IncludeFetcher {
-                base_directory: None,
-            },
+            &IncludeFetcher::new(None),
         )
         .await
         .unwrap();
@@ -3186,9 +3199,7 @@ mod tests {
                 };
 
             // Lock
-            let lockfile = LockManifest::lock_manifest(&flox, &manifest.as_migrated_typed_only(), None, &IncludeFetcher {
-                base_directory: Some(tempdir.path().to_path_buf()),
-            })
+            let lockfile = LockManifest::lock_manifest(&flox, &manifest.as_migrated_typed_only(), None, &IncludeFetcher::new(Some(tempdir.path().to_path_buf())))
             .block_on()
             .unwrap();
 
@@ -3616,9 +3627,7 @@ mod tests {
             &flox,
             &manifest,
             None,
-            &IncludeFetcher {
-                base_directory: Some(tempdir.path().to_path_buf()),
-            },
+            &IncludeFetcher::new(Some(tempdir.path().to_path_buf())),
             ManifestMerger::Shallow(ShallowMerger),
             None,
         )
@@ -3685,9 +3694,7 @@ mod tests {
             &flox,
             &manifest,
             None,
-            &IncludeFetcher {
-                base_directory: Some(tempdir.path().to_path_buf()),
-            },
+            &IncludeFetcher::new(Some(tempdir.path().to_path_buf())),
             ManifestMerger::Shallow(ShallowMerger),
             None,
         )
@@ -3746,9 +3753,7 @@ mod tests {
         middle_precedence.lockfile(&flox).unwrap();
 
         // Lock
-        let include_fetcher = IncludeFetcher {
-            base_directory: Some(tempdir.path().to_path_buf()),
-        };
+        let include_fetcher = IncludeFetcher::new(Some(tempdir.path().to_path_buf()));
 
         let lockfile = LockManifest::lock_manifest(
             &flox,
@@ -3858,9 +3863,7 @@ mod tests {
         dep1.lockfile(&flox).unwrap();
 
         // Lock
-        let include_fetcher = IncludeFetcher {
-            base_directory: Some(tempdir.path().to_path_buf()),
-        };
+        let include_fetcher = IncludeFetcher::new(Some(tempdir.path().to_path_buf()));
 
         let lockfile = LockManifest::lock_manifest(
             &flox,
@@ -3976,9 +3979,7 @@ mod tests {
         dep1.lockfile(&flox).unwrap();
 
         // Lock
-        let include_fetcher = IncludeFetcher {
-            base_directory: Some(tempdir.path().to_path_buf()),
-        };
+        let include_fetcher = IncludeFetcher::new(Some(tempdir.path().to_path_buf()));
 
         let lockfile = LockManifest::lock_manifest(
             &flox,
@@ -4055,9 +4056,7 @@ mod tests {
         dep2.lockfile(&flox).unwrap();
 
         // LockManifest
-        let include_fetcher = IncludeFetcher {
-            base_directory: Some(tempdir.path().to_path_buf()),
-        };
+        let include_fetcher = IncludeFetcher::new(Some(tempdir.path().to_path_buf()));
 
         let err = LockManifest::merge_manifest(
             &flox,
@@ -4714,9 +4713,7 @@ mod tests {
             &flox,
             &manifest.as_migrated_typed_only(),
             None,
-            &IncludeFetcher {
-                base_directory: Some(tempdir.path().to_path_buf()),
-            },
+            &IncludeFetcher::new(Some(tempdir.path().to_path_buf())),
         )
         .await
         .unwrap();

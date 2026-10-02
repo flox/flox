@@ -14,14 +14,14 @@ use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::lockfile::Lockfile;
 use flox_manifest::parsed::common::ContainerizeConfig;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::Environment;
+use flox_rust_sdk::models::environment::{Environment, FollowMode};
 use flox_rust_sdk::providers::container_builder::{ContainerBuilder, MkContainerNix};
 use flox_rust_sdk::utils::{ReaderExt, WireTap};
 use indoc::indoc;
 use macos_containerize_proxy::ContainerizeProxy;
 use tracing::{debug, info, instrument};
 
-use super::{EnvironmentSelect, environment_select};
+use super::{EnvironmentSelect, environment_select, lockfile_reporting_followed_includes};
 use crate::commands::SHELL_COMPLETION_FILE;
 use crate::environment_subcommand_metric;
 use crate::utils::events::env_detail_from_concrete;
@@ -100,9 +100,12 @@ impl Containerize {
             progress = format!("Creating container image and writing to {output}")
         );
 
+        // Settle whether the latest changes to included environments build
+        // before reading the lockfile, so that it matches what's built.
+        let lockfile: Lockfile =
+            lockfile_reporting_followed_includes(&mut env, &flox, FollowMode::LockAndBuild)?.into();
         let built_environment = env.build(&flox)?;
         let env_name = env.name();
-        let lockfile: Lockfile = env.lockfile(&flox)?.into();
         let manifest = lockfile.migrated_manifest()?;
         let manifest = manifest.as_latest_schema();
         let source = if std::env::consts::OS == "linux" {

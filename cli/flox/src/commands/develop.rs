@@ -9,7 +9,12 @@ use flox_events::LifecycleFields;
 use flox_manifest::lockfile::Lockfile;
 use flox_manifest::{Manifest, MigratedTypedOnly};
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment, GCROOTS_DIR_NAME};
+use flox_rust_sdk::models::environment::{
+    ConcreteEnvironment,
+    Environment,
+    FollowMode,
+    GCROOTS_DIR_NAME,
+};
 use flox_rust_sdk::providers::build::{
     COMMON_NIXPKGS_URL,
     FloxBuildMk,
@@ -38,6 +43,7 @@ use super::{
     DirEnvironmentSelect,
     SHELL_COMPLETION_COMMAND,
     dir_environment_select,
+    lockfile_reporting_followed_includes,
     needs_project_files_error,
 };
 use crate::subcommand_metric;
@@ -113,7 +119,8 @@ impl Develop {
 
         let base_dir = env.parent_path()?;
         let cache_path = env.cache_path()?;
-        let lockfile: Lockfile = env.lockfile(&flox)?.into();
+        let lockfile: Lockfile =
+            lockfile_reporting_followed_includes(&mut env, &flox, FollowMode::LockAndBuild)?.into();
         let lockfile_manifest = lockfile.migrated_manifest()?;
 
         let expression_parent_dir = env.dot_flox_path();
@@ -137,6 +144,9 @@ impl Develop {
         // Both refusal paths above are cheap; `env.build()` below realises
         // the environment's own build inputs and is the slow step, so nothing
         // between the refusals and here should need it.
+        // Locking above is the exception: the first time it sees new changes
+        // to included environments, it builds them, so that they're only
+        // reported as in use if they build.
         let built_environments = env.build(&flox)?;
 
         // The catalog lock the NEF eval consumes, created by the CLI

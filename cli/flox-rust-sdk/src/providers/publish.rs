@@ -50,6 +50,7 @@ use crate::data::CanonicalPath;
 use crate::flox::Flox;
 use crate::models::environment::{
     CACHE_DIR_NAME,
+    ConcreteEnvironment,
     DOT_FLOX,
     Environment,
     EnvironmentError,
@@ -1107,7 +1108,12 @@ fn build_source(
 
     let mut env = open_path(flox, &project_path, None)
         .map_err(|e| PublishError::UnsupportedEnvironmentState(e.to_string()))?;
-    let built_environments = env.build(flox)?;
+    // Publish what's committed, rather than the latest changes to included
+    // environments that the lockfile doesn't have yet.
+    let built_environments = match &mut env {
+        ConcreteEnvironment::Path(env) => env.build_locked(flox)?,
+        env => env.build(flox)?,
+    };
     let base_dir = env.parent_path()?;
 
     Ok((expression_ref, base_dir, built_environments))

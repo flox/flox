@@ -49,13 +49,18 @@ use crate::providers::nix_auth::AuthError;
 use crate::utils::{copy_file_without_permissions, serialize_json_with_newline};
 
 mod core_environment;
+pub(crate) use core_environment::UnreadableIncludes;
 #[cfg(any(test, feature = "tests"))]
 pub use core_environment::test_helpers;
 pub use core_environment::{
     CoreEnvironment,
     CoreEnvironmentError,
     EditResult,
+    FollowMode,
+    FollowedIncludes,
+    NotAppliedIncludes,
     SingleSystemUpgradeDiff,
+    UnreadableInclude,
     UpgradeResult,
 };
 
@@ -154,6 +159,19 @@ pub trait Environment: Send {
     /// Some implementations error if the lock does not already exist, while
     /// others call lock.
     fn lockfile(&mut self, flox: &Flox) -> Result<LockResult, EnvironmentError>;
+
+    /// Return the lockfile like [Environment::lockfile], reporting what it did
+    /// with the latest changes to included path environments.
+    ///
+    /// Only path environments follow their included path environments;
+    /// the others report nothing.
+    fn lockfile_following_includes(
+        &mut self,
+        flox: &Flox,
+        _mode: FollowMode,
+    ) -> Result<(LockResult, FollowedIncludes), EnvironmentError> {
+        Ok((self.lockfile(flox)?, FollowedIncludes::default()))
+    }
 
     /// Reads the manifest from disk without performing the migration.
     ///

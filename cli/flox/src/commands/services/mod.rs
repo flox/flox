@@ -15,8 +15,8 @@ use flox_manifest::parsed::Inner;
 use flox_manifest::parsed::latest::Services;
 use flox_manifest::{Manifest, MigratedTypedOnly};
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::Environment;
 use flox_rust_sdk::models::environment::generations::GenerationId;
+use flox_rust_sdk::models::environment::{Environment, FollowMode};
 use flox_rust_sdk::providers::services::process_compose::{ProcessState, ProcessStates};
 use tracing::{debug, instrument};
 
@@ -168,7 +168,12 @@ impl ServicesEnvironment {
         mut environment: ConcreteEnvironment,
     ) -> Result<Self> {
         let socket = environment.services_socket_path(flox)?;
-        let lockfile: Lockfile = environment.lockfile(flox)?.into();
+        // Settle whether the latest changes to included environments build,
+        // so that the services match the environment that's activated.
+        let lockfile: Lockfile = environment
+            .lockfile_following_includes(flox, FollowMode::LockAndBuild)?
+            .0
+            .into();
         let manifest = lockfile.migrated_manifest()?;
 
         Ok(Self {
@@ -376,7 +381,10 @@ pub async fn start_services_with_new_process_compose(
     names: &[String],
     generation: Option<GenerationId>,
 ) -> Result<Vec<String>> {
-    let lockfile: Lockfile = concrete_environment.lockfile(&flox)?.into();
+    let lockfile: Lockfile = concrete_environment
+        .lockfile_following_includes(&flox, FollowMode::LockAndBuild)?
+        .0
+        .into();
     let system = flox.system.clone();
 
     let manifest = lockfile.migrated_manifest()?;

@@ -11,6 +11,7 @@ use flox_rust_sdk::models::environment::generations::GenerationsExt;
 use flox_rust_sdk::models::environment::{
     ConcreteEnvironment,
     Environment,
+    FollowMode,
     SingleSystemUpgradeDiff,
 };
 use flox_rust_sdk::providers::buildenv::get_installed_outputs;
@@ -19,7 +20,7 @@ use indoc::formatdoc;
 use itertools::Itertools;
 use tracing::{debug, instrument};
 
-use super::{EnvironmentSelect, environment_select};
+use super::{EnvironmentSelect, environment_select, lockfile_reporting_followed_includes};
 use crate::commands::render_composition_manifest;
 use crate::environment_subcommand_metric;
 use crate::utils::events::env_detail_from_concrete;
@@ -106,7 +107,7 @@ impl List {
                 env.manifest_without_migrating(&flox)?
                     .as_writable()
                     .to_string(),
-                env.lockfile(&flox)?.into(),
+                lockfile_reporting_followed_includes(env, &flox, FollowMode::Lock)?.into(),
             ),
         };
 
@@ -139,7 +140,7 @@ impl List {
                     if self.upstream {
                         None
                     } else {
-                        List::get_cached_upgrades_for_current_system(&flox, &mut env)?
+                        List::get_cached_upgrades_for_current_system(&flox, &env)?
                     },
                 )?;
             },
@@ -150,7 +151,7 @@ impl List {
                     if self.upstream {
                         None
                     } else {
-                        List::get_cached_upgrades_for_current_system(&flox, &mut env)?
+                        List::get_cached_upgrades_for_current_system(&flox, &env)?
                     },
                 )?;
             },
@@ -222,10 +223,7 @@ impl List {
                 PackageToList::Flake(_, p) => &p.install_id,
                 PackageToList::StorePath(p) => &p.install_id,
             };
-            let upgrade_available = if upgrades
-                .as_ref()
-                .is_some_and(|diff| diff.contains_key(install_id))
-            {
+            let upgrade_available = if has_upgrade(upgrades.as_ref(), install_id, p) {
                 " - upgrade available"
             } else {
                 ""
@@ -283,10 +281,7 @@ impl List {
                 PackageToList::Flake(_, p) => &p.install_id,
                 PackageToList::StorePath(p) => &p.install_id,
             };
-            let upgrade_available = if upgrades
-                .as_ref()
-                .is_some_and(|diff| diff.contains_key(install_id))
-            {
+            let upgrade_available = if has_upgrade(upgrades.as_ref(), install_id, package) {
                 " (upgrade available)"
             } else {
                 ""
@@ -388,7 +383,7 @@ impl List {
 
     fn get_cached_upgrades_for_current_system(
         flox: &Flox,
-        environment: &mut ConcreteEnvironment,
+        environment: &ConcreteEnvironment,
     ) -> Result<Option<SingleSystemUpgradeDiff>> {
         let upgrade_guard = UpgradeInformationGuard::read_in(environment.cache_path()?)?;
         let Some(info) = upgrade_guard.info() else {
@@ -396,9 +391,9 @@ impl List {
             return Ok(None);
         };
 
-        let current_lockfile = environment.lockfile(flox)?.into();
-
-        if Some(current_lockfile) != info.upgrade_result.old_lockfile {
+        // The check upgrades the environment's lockfile, which may not have
+        // the latest changes to included environments in use.
+        if info.upgrade_result.old_lockfile != environment.existing_lockfile(flox)? {
             // todo: delete the info file?
             debug!("Not using upgrade information; lockfile has changed since last check");
             return Ok(None);
@@ -406,6 +401,26 @@ impl List {
 
         Ok(Some(info.upgrade_result.diff_for_system(&flox.system)))
     }
+}
+
+/// Whether the upgrade check found an upgrade for the listed version of a
+/// package.
+///
+/// The check upgrades the environment's lockfile, so it doesn't apply to
+/// other versions in use with changes to included environments.
+fn has_upgrade(
+    upgrades: Option<&SingleSystemUpgradeDiff>,
+    install_id: &str,
+    package: &PackageToList,
+) -> bool {
+    let derivation = match package {
+        PackageToList::Catalog(_, locked) => Some(locked.derivation.as_str()),
+        PackageToList::Flake(_, locked) => Some(locked.locked_installable.derivation.as_str()),
+        PackageToList::StorePath(_) => None,
+    };
+    upgrades
+        .and_then(|diff| diff.get(install_id))
+        .is_some_and(|(old, _)| old.derivation() == derivation)
 }
 
 fn format_outputs_lines(package: &PackageToList) -> String {
@@ -452,12 +467,12 @@ where
 mod tests {
     use std::fs;
 
-    use flox_manifest::lockfile::LockedPackage;
     use flox_manifest::lockfile::test_helpers::{
         LOCKED_NIX_EVAL_JOBS,
         fake_catalog_package_lock,
         nix_eval_jobs_descriptor,
     };
+    use flox_manifest::lockfile::{LockedPackage, LockedPackageCatalog};
     use flox_manifest::parsed::common::DEFAULT_PRIORITY;
     use flox_manifest::test_helpers::with_latest_schema;
     use flox_rust_sdk::flox::test_helpers::flox_instance;
@@ -601,6 +616,39 @@ mod tests {
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
             pip_install_id: python3Packages.pip (20.3.4 - upgrade available)
+            python_install_id: python3Packages.python (3.9.5)
+        "});
+    }
+
+    /// An upgrade of a version that isn't the one listed, e.g. while a copy
+    /// with changes to included environments is in use, isn't indicated
+    #[test]
+    fn print_extended_omits_upgrade_indicator_for_other_versions() {
+        let mut out = Vec::new();
+
+        let packages = test_packages();
+        let PackageToList::Catalog(_, ref pip_lock) = packages[0] else {
+            unreachable!()
+        };
+        let pip_lock_in_lockfile = LockedPackageCatalog {
+            derivation: format!("{}-in-lockfile", pip_lock.derivation),
+            ..pip_lock.clone()
+        };
+        let mut pip_lock_upgraded = pip_lock.clone();
+        pip_lock_upgraded.version = format!("{}-upgraded", pip_lock.version);
+
+        let upgrades = SingleSystemUpgradeDiff::from_iter(vec![(
+            "pip_install_id".to_string(),
+            (
+                LockedPackage::Catalog(pip_lock_in_lockfile),
+                LockedPackage::Catalog(pip_lock_upgraded),
+            ),
+        )]);
+
+        List::print_extended(&mut out, &packages, Some(upgrades)).unwrap();
+        let out = String::from_utf8(out).unwrap();
+        assert_eq!(out, indoc! {"
+            pip_install_id: python3Packages.pip (20.3.4)
             python_install_id: python3Packages.python (3.9.5)
         "});
     }

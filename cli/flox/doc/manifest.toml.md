@@ -748,9 +748,31 @@ The fields in these include descriptors are as follows:
   when you are including multiple environments that have the same name, or when
   you want to provide a more convenient name for the included environment.
 
-Changes to the included environments aren't automatically reflected in the
-composing environment. You control when updates are pulled in by using
-[`flox include upgrade`](./flox-include-upgrade.md).
+The lockfile of the composing environment stores a copy of each included
+environment.
+
+A path environment follows the path environments it includes with `dir`:
+commands that use it, such as `flox activate`, `flox list` and `flox build`,
+use the latest changes that those environments have locked,
+including changes to the path environments that they include in turn.
+These changes are kept in a copy of the lockfile in `.flox/cache`.
+The lockfile itself is only updated when you run
+[`flox include upgrade`](./flox-include-upgrade.md),
+so that you decide when the changes are committed,
+and `flox publish` builds the lockfile without them.
+
+Changes that an included environment hasn't locked yet aren't used.
+For example, edits made to its `manifest.toml` in a text editor are used once a
+command such as `flox edit` or `flox activate` locks that environment.
+If the latest changes can't be read or locked, the versions in use before are
+kept, and if the environment doesn't build with them, the versions in the
+lockfile are used.
+`flox activate`, `flox list`, `flox build` and `flox develop` print a warning
+when this happens.
+
+All other included environments, such as those specified with `remote`,
+and all environments included by a FloxHub environment, are only updated when
+you run [`flox include upgrade`](./flox-include-upgrade.md).
 
 ### Merge semantics
 

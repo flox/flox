@@ -14,7 +14,7 @@ use flox_events::{CliBuildPayload, EventKind, EventsHub, Outcome};
 use flox_manifest::lockfile::Lockfile;
 use flox_manifest::{Manifest, MigratedTypedOnly};
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
+use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment, FollowMode};
 use flox_rust_sdk::providers::build::{
     COMMON_NIXPKGS_URL,
     FloxBuildMk,
@@ -38,7 +38,12 @@ use thiserror::Error;
 use tracing::{debug, instrument, trace};
 use url::Url;
 
-use super::{DirEnvironmentSelect, dir_environment_select, needs_project_files_error};
+use super::{
+    DirEnvironmentSelect,
+    dir_environment_select,
+    lockfile_reporting_followed_includes,
+    needs_project_files_error,
+};
 use crate::utils::catalog_lock::BuildLockGuard;
 use crate::utils::events::duration_to_ms;
 use crate::utils::message;
@@ -238,8 +243,11 @@ impl Build {
 
         let base_dir = env.parent_path()?;
         let expression_ref = NixFlakeref::from_path(env.dot_flox_path())?; // TODO: decouple from env
+        // Settle whether the latest changes to included environments build
+        // before reading the lockfile, so that it matches what's built.
+        let lockfile: Lockfile =
+            lockfile_reporting_followed_includes(&mut env, &flox, FollowMode::LockAndBuild)?.into();
         let flox_env_build_outputs = env.build(&flox)?;
-        let lockfile: Lockfile = env.lockfile(&flox)?.into();
 
         let lockfile_manifest = lockfile.migrated_manifest()?;
         let packages_to_clean = packages_to_build(&lockfile_manifest, &expression_ref, &packages)?;
@@ -286,9 +294,11 @@ impl Build {
         };
 
         let base_dir = env.parent_path()?;
+        // Settle whether the latest changes to included environments build
+        // before reading the lockfile, so that it matches what's built.
+        let lockfile: Lockfile =
+            lockfile_reporting_followed_includes(&mut env, &flox, FollowMode::LockAndBuild)?.into();
         let built_environments = env.build(&flox)?;
-
-        let lockfile: Lockfile = env.lockfile(&flox)?.into();
 
         // Used for non building expressions and manifest builds
         prefetch_flake_ref(&COMMON_NIXPKGS_URL)?;
