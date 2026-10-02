@@ -76,7 +76,7 @@ fn materialize_entries<'a>(
             .or_insert_with(PackageTreeBuilder::new)
             .add_package_source(
                 entry.attr_path.clone(),
-                entry.build_type,
+                entry.build_type.into(),
                 (&entry.source).into(),
             )
             .with_context(|| {

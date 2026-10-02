@@ -72,10 +72,35 @@ impl From<&GitSource> for floxhub_client::LockedGitSource {
 
 /// Persist a catalog input independently of the generated API client.
 /// Regenerating the client must not change the on-disk lock format.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BuildType {
+    Manifest,
+    Nef,
+}
+
+impl From<floxhub_client::BuildType> for BuildType {
+    fn from(value: floxhub_client::BuildType) -> Self {
+        match value {
+            floxhub_client::BuildType::Manifest => Self::Manifest,
+            floxhub_client::BuildType::Nef => Self::Nef,
+        }
+    }
+}
+
+impl From<BuildType> for floxhub_client::BuildType {
+    fn from(value: BuildType) -> Self {
+        match value {
+            BuildType::Manifest => Self::Manifest,
+            BuildType::Nef => Self::Nef,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LockedInput {
     pub attr_path: Vec<String>,
-    pub build_type: floxhub_client::BuildType,
+    pub build_type: BuildType,
     pub catalog: String,
     /// `None` means the server left dependencies unstated, not that this is
     /// a leaf. Preserve it and refuse only a projection that reaches it.
@@ -94,7 +119,7 @@ impl From<floxhub_client::LockedInputEntry> for LockedInput {
     fn from(entry: floxhub_client::LockedInputEntry) -> Self {
         Self {
             attr_path: entry.attr_path,
-            build_type: entry.build_type,
+            build_type: entry.build_type.into(),
             catalog: entry.catalog,
             inputs: entry.inputs,
             locked_inputs_hash: entry.locked_inputs_hash,
@@ -109,7 +134,7 @@ impl From<&LockedInput> for floxhub_client::LockedInputEntry {
     fn from(value: &LockedInput) -> Self {
         Self {
             attr_path: value.attr_path.clone(),
-            build_type: value.build_type,
+            build_type: value.build_type.into(),
             catalog: value.catalog.clone(),
             inputs: value.inputs.clone(),
             locked_inputs_hash: value.locked_inputs_hash.clone(),
@@ -128,9 +153,19 @@ impl From<&LockedInput> for floxhub_client::LockedInputEntry {
 /// `{"version":2,"locked_inputs":{},"direct_inputs":[]}`.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct BuildLock {
-    pub version: Version<2>,
-    pub locked_inputs: BTreeMap<String, LockedInput>,
-    pub direct_inputs: BTreeSet<String>,
+    pub(crate) version: Version<2>,
+    pub(crate) locked_inputs: BTreeMap<String, LockedInput>,
+    pub(crate) direct_inputs: BTreeSet<String>,
+}
+
+impl BuildLock {
+    pub fn locked_inputs(&self) -> &BTreeMap<String, LockedInput> {
+        &self.locked_inputs
+    }
+
+    pub fn direct_inputs(&self) -> &BTreeSet<String> {
+        &self.direct_inputs
+    }
 }
 
 /// References a lock was asked to cover but does not contain: the lock is
@@ -186,9 +221,18 @@ pub enum LockfileError {
         path = path.display(),
     )]
     UnsupportedVersion { path: PathBuf, found: u64 },
-    /// Valid JSON lacking both a format version and the recognizable v1 shape.
-    #[error("the catalog lock at '{path}' has no 'version' field.")]
+    /// Valid JSON without a format version.
+    #[error(
+        "the catalog lock at '{path}' has no 'version' field. Run '{UPDATE_CATALOGS_COMMAND}' to relock."
+    )]
     MissingVersion { path: PathBuf },
+    #[error(
+        "the catalog lock at '{path}' has an invalid version value: {found}. Run '{UPDATE_CATALOGS_COMMAND}' to relock."
+    )]
+    InvalidVersion {
+        path: PathBuf,
+        found: serde_json::Value,
+    },
 }
 
 /// Only the top-level `version` controls lock format dispatch. Entry versions
@@ -400,20 +444,27 @@ pub fn read_lock(path: impl AsRef<Path>) -> Result<BuildLock, LockfileError> {
             path: path.to_path_buf(),
             source,
         })?;
-    match value
-        .get(LOCK_FORMAT_VERSION_KEY)
-        .and_then(serde_json::Value::as_u64)
-    {
-        Some(2) => serde_json::from_value(value).map_err(|source| LockfileError::Parse {
+    match value.get(LOCK_FORMAT_VERSION_KEY) {
+        Some(found) if found.as_u64() == Some(2) => {
+            serde_json::from_value(value).map_err(|source| LockfileError::Parse {
+                path: path.to_path_buf(),
+                source,
+            })
+        },
+        Some(found) if found.as_u64() == Some(1) => Err(LockfileError::LegacyVersion {
             path: path.to_path_buf(),
-            source,
         }),
-        Some(1) => Err(LockfileError::LegacyVersion {
+        Some(found) if found.as_u64() == Some(0) => Err(LockfileError::InvalidVersion {
             path: path.to_path_buf(),
+            found: found.clone(),
         }),
-        Some(found) => Err(LockfileError::UnsupportedVersion {
+        Some(found) if found.as_u64().is_some() => Err(LockfileError::UnsupportedVersion {
             path: path.to_path_buf(),
-            found,
+            found: found.as_u64().unwrap(),
+        }),
+        Some(found) => Err(LockfileError::InvalidVersion {
+            path: path.to_path_buf(),
+            found: found.clone(),
         }),
         None => Err(LockfileError::MissingVersion {
             path: path.to_path_buf(),
@@ -745,6 +796,84 @@ mod tests {
         assert_eq!(
             crate::lock::transform::materialize_catalogs(&lock).unwrap(),
             serde_json::json!({})
+        );
+    }
+
+    #[test]
+    fn read_lock_distinguishes_every_read_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("catalog.lock");
+        assert!(matches!(read_lock(&path), Err(LockfileError::Read { .. })));
+        for (body, variant) in [
+            ("{", "parse"),
+            (r#"{"version":2}"#, "parse"),
+            (r#"{"version":1}"#, "legacy"),
+            (r#"{"version":3}"#, "unsupported"),
+            (r#"{}"#, "missing"),
+            (r#"{"version":0}"#, "invalid"),
+            (r#"{"version":"2"}"#, "invalid"),
+            (r#"{"version":null}"#, "invalid"),
+            (r#"{"version":-1}"#, "invalid"),
+            (r#"{"version":[]}"#, "invalid"),
+        ] {
+            fs::write(&path, body).unwrap();
+            let error = read_lock(&path).unwrap_err();
+            let actual = match &error {
+                LockfileError::Parse { .. } => "parse",
+                LockfileError::LegacyVersion { .. } => "legacy",
+                LockfileError::UnsupportedVersion { .. } => "unsupported",
+                LockfileError::MissingVersion { .. } => "missing",
+                LockfileError::InvalidVersion { .. } => "invalid",
+                other => panic!("unexpected error: {other:?}"),
+            };
+            assert_eq!(actual, variant, "{body}");
+            if matches!(actual, "missing" | "invalid" | "legacy") {
+                assert!(error.to_string().contains(UPDATE_CATALOGS_COMMAND));
+            }
+        }
+    }
+
+    #[test]
+    fn build_type_preserves_the_exact_disk_bytes() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("catalog.lock");
+        let lock = lock_with(&["myorg/hello"]);
+        write_lock(&lock, &path).unwrap();
+        let original = fs::read(&path).unwrap();
+        let golden = r#"{
+  "version": 2,
+  "locked_inputs": {
+    "myorg/hello": {
+      "attr_path": [
+        "hello"
+      ],
+      "build_type": "nef",
+      "catalog": "myorg",
+      "inputs": [],
+      "locked_inputs_hash": "sha256-test",
+      "version": null,
+      "build": null,
+      "source": {
+        "dir": ".",
+        "ref": "refs/heads/main",
+        "rev": "abc",
+        "type": "git",
+        "url": "https://example.com/repo"
+      }
+    }
+  },
+  "direct_inputs": [
+    "myorg/hello"
+  ]
+}
+"#;
+        assert_eq!(original, golden.as_bytes());
+        write_lock(&read_lock(&path).unwrap(), &path).unwrap();
+        assert_eq!(fs::read(&path).unwrap(), original);
+        assert!(
+            String::from_utf8(original)
+                .unwrap()
+                .contains("\"build_type\": \"nef\"")
         );
     }
 
