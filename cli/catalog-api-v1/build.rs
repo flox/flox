@@ -19,6 +19,12 @@ fn main() {
             && (*k == "/api/v1/catalog/info/base-catalog" || !k.starts_with("/api/v1/catalog/info"))
             && !k.starts_with("/api/v1/catalog/status")
     });
+    // Lookup clients opt into v2. Progenitor's generated `anyOf` wrapper
+    // parses v2 as v1 because the v1 group permits unknown fields, losing
+    // `not_lockable`. Keep the vendored OAS union and narrow only generation.
+    spec_json["paths"]["/api/v1/catalog/build-inputs/lookup"]["post"]["responses"]["200"]["content"]
+        ["application/json"]["schema"] =
+        serde_json::json!({"$ref": "#/components/schemas/BuildInputsLookupResponseV2"});
     let spec = serde_json::from_value(spec_json).expect("Failed to parse openapi spec");
 
     let client = generate_client(&spec);
@@ -40,6 +46,24 @@ fn generator() -> progenitor::Generator {
     settings.with_replacement(
         "CatalogStoreConfig",
         "crate::types::CatalogStoreConfig",
+        vec![].into_iter(),
+    );
+    settings.with_replacement(
+        "LockedGitSource",
+        "crate::types::LockedGitSource",
+        vec![].into_iter(),
+    );
+    settings.with_replacement(
+        "LockedInputEntry",
+        "crate::types::LockedInputEntry",
+        vec![].into_iter(),
+    );
+    // The server's schema defaults a missing v2 `version` to 2. Keep the
+    // vendored schema intact while letting the handwritten lookup gate see
+    // whether the response actually carried the field.
+    settings.with_replacement(
+        "BuildInputsLookupResponseV2",
+        "crate::types::BuildInputsLookupResponseV2",
         vec![].into_iter(),
     );
     settings.with_inner_type(parse_quote! { crate::hooks::RequestHooks });

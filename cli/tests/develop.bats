@@ -364,6 +364,19 @@ develop_env_script_path() {
   assert_equal "$status" 7
 }
 
+@test "develop: removes its temporary catalog lock before exec" {
+  project_setup
+  git_init_project
+  nef_package_setup greet
+  export _FLOX_USE_CATALOG_MOCK="$UNIT_TEST_GENERATED/get_base_catalog_nixpkgs_url.yaml"
+  local temp_dir="$BATS_TEST_TMPDIR/catalog-temp"
+  mkdir -p "$temp_dir"
+
+  run env TMPDIR="$temp_dir" "$FLOX_BIN" develop -d "$PROJECT_DIR" -c 'true'
+  assert_success
+  assert_equal "$(find "$temp_dir" -maxdepth 1 -name 'flox-catalog.lock.*' | wc -l)" 0
+}
+
 # ---------------------------------------------------------------------------- #
 # GC root: a live shell's build inputs are incidentally immune to GC on Linux
 # because Nix's collector treats runtime roots found by scanning

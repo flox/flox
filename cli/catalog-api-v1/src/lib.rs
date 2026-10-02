@@ -13,6 +13,8 @@ pub mod types {
     pub use crate::client::types::*;
     pub use crate::error::MessageType;
 
+    use std::collections::{BTreeMap, HashMap};
+
     use serde::{Deserialize, Serialize};
     /// Progenitor doesn't know how to use a discriminator as a tag, so add this
     /// enum manually.
@@ -30,6 +32,47 @@ pub mod types {
         NixCopy(CatalogStoreConfigNixCopy),
         /// Not yet supported
         Publisher(CatalogStoreConfigPublisher),
+    }
+
+    /// Preserve unknown git attributes at initial API deserialization.
+    /// The schema permits them, but Progenitor's generated struct would drop
+    /// them before the lock could retain them.
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct LockedGitSource {
+        pub dir: ::std::string::String,
+        #[serde(rename = "ref")]
+        pub ref_: ::std::string::String,
+        pub rev: ::std::string::String,
+        #[serde(rename = "type")]
+        pub type_: ::std::string::String,
+        pub url: ::std::string::String,
+        #[serde(flatten)]
+        pub extra: BTreeMap<String, serde_json::Value>,
+    }
+
+    /// Preserve nullable informational fields on the wire and in the lock.
+    /// The generated type omits `None` fields; lock v2 serializes explicit nulls.
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct LockedInputEntry {
+        pub attr_path: Vec<String>,
+        #[serde(default)]
+        pub build: Option<String>,
+        pub build_type: BuildType,
+        pub catalog: String,
+        pub inputs: Option<Vec<String>>,
+        pub locked_inputs_hash: String,
+        pub source: LockedGitSource,
+        #[serde(default)]
+        pub version: Option<String>,
+    }
+
+    /// Preserve absence of the response envelope version so the lookup
+    /// client can reject it instead of accepting the server schema's default.
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct BuildInputsLookupResponseV2 {
+        pub groups: HashMap<String, GroupResultV2>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub version: Option<i64>,
     }
 }
 

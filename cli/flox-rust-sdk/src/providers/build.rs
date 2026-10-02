@@ -13,6 +13,8 @@ use flox_manifest::{Manifest, MigratedTypedOnly};
 use floxhub_client::{BaseCatalogUrl, PackageSystem};
 use indoc::formatdoc;
 use itertools::Itertools;
+#[cfg(any(test, feature = "tests"))]
+use nef_lock_catalog::BuildLock;
 use nef_lock_catalog::NixFlakeref;
 use serde::Deserialize;
 use tempfile::NamedTempFile;
@@ -66,8 +68,8 @@ pub trait ManifestBuilder {
     /// call.
     ///
     /// `catalog_lockfile` is the catalog lock the build's NEF evals consume,
-    /// created by the CLI (the committed .flox/catalog.lock, or a fresh
-    /// ephemeral lock) and passed through as `CATALOG_LOCKFILE`. Required
+    /// created by the CLI (a temporary file with materialized catalogs) and
+    /// passed through as `CATALOG_LOCKFILE`. Required
     /// whenever the project has Nix expression builds.
     ///
     /// `expression_build_nixpkgs` is required under the same condition: [None]
@@ -1123,9 +1125,9 @@ pub mod test_helpers {
         // callers that need nothing more.
         let empty_lock_path = flox.temp_dir.join("empty-catalog.lock");
         let catalog_lockfile = catalog_lockfile.unwrap_or_else(|| {
-            std::fs::write(
+            fs::write(
                 &empty_lock_path,
-                "{\"version\": 1, \"direct_catalog_inputs\": {}, \"catalogs\": {}}\n",
+                nef_lock_catalog::render_builder_lock(&BuildLock::default()).unwrap(),
             )
             .unwrap();
             &empty_lock_path
@@ -1189,9 +1191,9 @@ pub mod test_helpers {
         // NEF evals require a CLI-provided catalog lock; these fixtures make
         // no catalog references, so an empty lock suffices.
         let empty_lock_path = flox.temp_dir.join("empty-catalog.lock");
-        std::fs::write(
+        fs::write(
             &empty_lock_path,
-            "{\"version\": 1, \"direct_catalog_inputs\": {}, \"catalogs\": {}}\n",
+            nef_lock_catalog::render_builder_lock(&BuildLock::default()).unwrap(),
         )
         .unwrap();
 
@@ -1629,7 +1631,7 @@ mod tests {
         let empty_lock_path = flox.temp_dir.join("empty-catalog.lock");
         fs::write(
             &empty_lock_path,
-            "{\"version\": 1, \"direct_catalog_inputs\": {}, \"catalogs\": {}}\n",
+            nef_lock_catalog::render_builder_lock(&BuildLock::default()).unwrap(),
         )
         .unwrap();
 
@@ -1746,7 +1748,7 @@ mod tests {
         let empty_lock_path = flox.temp_dir.join("empty-catalog.lock");
         fs::write(
             &empty_lock_path,
-            "{\"version\": 1, \"direct_catalog_inputs\": {}, \"catalogs\": {}}\n",
+            nef_lock_catalog::render_builder_lock(&BuildLock::default()).unwrap(),
         )
         .unwrap();
 
@@ -4432,7 +4434,7 @@ mod nef_tests {
 
     use floxhub_client::LockedInputEntry;
     use indoc::{formatdoc, indoc};
-    use nef_lock_catalog::{build_lock_from_locked_inputs, write_lock};
+    use nef_lock_catalog::build_lock_from_locked_inputs;
     use pretty_assertions::assert_eq;
 
     use super::*;
@@ -4447,19 +4449,18 @@ mod nef_tests {
     use crate::providers::git::tests::test_git_options;
     use crate::providers::git::{GitCommandProvider, GitProvider};
 
-    /// Write a catalog lock pinning `catalogs.myorg.hello` to `source_dir`
-    /// at its current revision: the lock the CLI hands the package builder
-    /// as CATALOG_LOCKFILE, assembled from one locked catalog entry the way
-    /// a real resolution assembles it — so the fixture cannot drift from the
-    /// lock format — with no catalog involved. The entry is keyed in the
+    /// Write the builder-facing catalog JSON pinning `catalogs.myorg.hello`
+    /// to `source_dir` at its current revision. The fixture uses the same
+    /// materialization as the CLI, with no catalog request. The entry is keyed in the
     /// server's canonical `<catalog>/<attr-path>` form, which the expression
     /// references in dot-rendered form.
-    fn write_catalog_lock(path: &Path, repo: &GitCommandProvider, source_dir: &Path) {
+    fn write_builder_catalog_lock(path: &Path, repo: &GitCommandProvider, source_dir: &Path) {
         let status = repo.status().unwrap();
         let entry: LockedInputEntry = serde_json::from_value(serde_json::json!({
             "attr_path": ["hello"],
             "build_type": "nef",
             "catalog": "myorg",
+            "inputs": [],
             "locked_inputs_hash": "sha256-test-fixture",
             "source": {
                 "dir": ".",
@@ -4476,7 +4477,7 @@ mod nef_tests {
         let key = "myorg/hello".to_string();
         let lock =
             build_lock_from_locked_inputs(HashMap::from([(key.clone(), entry)]), [&key]).unwrap();
-        write_lock(&lock, path).unwrap();
+        fs::write(path, nef_lock_catalog::render_builder_lock(&lock).unwrap()).unwrap();
     }
 
     /// The build consumes the catalog lock it is handed: the NEF eval reads
@@ -4518,7 +4519,7 @@ mod nef_tests {
         repo.commit("add nef catalog fixtures").unwrap();
 
         let lockfile = tempdir.path().join("catalog.lock");
-        write_catalog_lock(&lockfile, &repo, &expressions_dir);
+        write_builder_catalog_lock(&lockfile, &repo, &expressions_dir);
         let lock_bytes = fs::read(&lockfile).unwrap();
 
         assert_build_status_with_nix_expr(
@@ -4613,13 +4614,8 @@ mod nef_tests {
         );
     }
 
-    /// `eval()` and `build()` must resolve the same fixture to the exact same
-    /// derivation. This is the regression the eval goal exists to prevent: a
-    /// `flox develop` shell built from an eval that named a *different*
-    /// derivation than `build` would actually build is a develop shell for
-    /// the wrong environment. Mirrors
-    /// `nef_lock_matches_build_catalog_inputs_and_skips_build`'s parity
-    /// check, but on `drvPath` rather than `direct_catalog_inputs`.
+    /// Eval and build must resolve the same derivation so develop enters the
+    /// environment that build produces.
     #[test]
     fn eval_and_build_resolve_the_same_derivation() {
         let pname = "foo".to_string();
@@ -4688,7 +4684,7 @@ mod nef_tests {
         let empty_lock_path = flox.temp_dir.join("empty-catalog.lock");
         fs::write(
             &empty_lock_path,
-            "{\"version\": 1, \"direct_catalog_inputs\": {}, \"catalogs\": {}}\n",
+            nef_lock_catalog::render_builder_lock(&BuildLock::default()).unwrap(),
         )
         .unwrap();
 

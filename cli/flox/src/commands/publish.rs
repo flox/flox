@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -19,6 +19,7 @@ use flox_rust_sdk::providers::build::{
 use flox_rust_sdk::providers::nix_auth::NixAuth;
 use flox_rust_sdk::providers::publish::{
     PublishError,
+    PublishOutcome,
     PublishProvider,
     Publisher,
     build_repo_err,
@@ -31,12 +32,17 @@ use floxhub_client::{
     CheckBuildQuery,
     CheckBuildResponse,
     FloxhubClientError,
-    LockedInputEntry,
     PackageSystem,
     SourceLineageChange,
 };
 use indoc::formatdoc;
-use nef_lock_catalog::{CatalogRef, NixFlakeref, scan_package};
+use nef_lock_catalog::{
+    CatalogRef,
+    NixFlakeref,
+    PackageClosure,
+    catalog_lockfile_path,
+    scan_package,
+};
 use tracing::{debug, info_span, instrument, warn};
 
 use super::{DirEnvironmentSelect, dir_environment_select};
@@ -64,6 +70,12 @@ use crate::{environment_subcommand_metric, subcommand_metric};
 
 const PUBLISH_COMPLETION_POLL_INTERVAL_MILLIS: u64 = 2_000; // 1s
 const PUBLISH_COMPLETION_TIMEOUT_MILLIS: u64 = 30 * 60 * 1_000; // 30 min
+
+fn emit_publish_warnings(outcome: &PublishOutcome, mut emit: impl FnMut(&str)) {
+    for warning in &outcome.warnings {
+        emit(&format!("{}: {}", warning.input, warning.message));
+    }
+}
 
 async fn confirm_lineage_change(change: &SourceLineageChange) -> Result<bool, PublishError> {
     if !Dialog::can_prompt() {
@@ -190,16 +202,16 @@ async fn dedup_short_circuit(client: &impl CatalogClientTrait, query: CheckBuild
     }
 }
 
-/// The locked-input subset a publish submits, projected from the lock its
+/// This package's roots and transitive closure, projected from the lock its
 /// build consumes, with a stale committed lock translated into an
 /// actionable error. Only the committed lock can be stale: an ephemeral
 /// lock is resolved from the same expressions the references were scanned
 /// from.
-fn subset_for_publish(
+fn project_for_publish(
     lock: &BuildLockGuard,
     references: &BTreeSet<CatalogRef>,
-) -> Result<BTreeMap<String, LockedInputEntry>> {
-    lock.build_lock().subset_direct(references).map_err(|err| {
+) -> Result<PackageClosure> {
+    lock.build_lock().project_package(references).map_err(|err| {
         if lock.is_existing() {
             anyhow!(formatdoc! {"
                 {err}
@@ -404,11 +416,8 @@ impl Publish {
         let auth = NixAuth::from_flox(&flox)?;
         let publish_provider = PublishProvider::new(env_metadata, package_metadata, auth);
 
-        // Check that we can publish before building.
+        // Prepare the local lock before creating any server package record.
         let catalog = &flox.floxhub_client;
-        let package_created = publish_provider
-            .create_package_and_possibly_user_catalog(catalog, &catalog_name)
-            .await?;
 
         let has_expression_build = publish_provider
             .package_metadata
@@ -452,9 +461,9 @@ impl Publish {
         };
 
         // The lock this publish's build consumes, created up front by the
-        // CLI: the committed .flox/catalog.lock exactly as found, or a fresh
-        // ephemeral lock the package builder only passes through to the NEF
-        // evals. Scanning is scoped to the published expression — the
+        // CLI: a temporary builder file materialized from the committed
+        // lock, or from fresh resolution for the NEF evals. Scanning is scoped
+        // to the published expression — the
         // scanner follows imports, so its references are exactly what its
         // eval looks up — except for a manifest build, whose `${pkg}`
         // references can pull in any of the project's expressions, so all of
@@ -471,7 +480,10 @@ impl Publish {
                 )
             },
         };
-        let catalog_lock = match lock_rel_paths.is_empty() {
+        // A committed v1 lock needs an explicit relock even without expressions.
+        let catalog_lock = match lock_rel_paths.is_empty()
+            && !catalog_lockfile_path(path_env.dot_flox_path()).exists()
+        {
             true => None,
             false => Some(
                 BuildLockGuard::new_existing_or_ephemeral(
@@ -483,13 +495,16 @@ impl Publish {
             ),
         };
 
-        // The locked-input subset this publish submits, projected from the
-        // lock the build consumes. Knowable before any build runs, so a true
+        // This package's roots and closure, projected from the lock the
+        // build consumes. Knowable before any build runs, so a true
         // duplicate skips the build entirely.
-        let locked_inputs = match &catalog_lock {
-            Some(lock) => subset_for_publish(lock, &references)?,
-            None => BTreeMap::new(),
+        let closure = match &catalog_lock {
+            Some(lock) => project_for_publish(lock, &references)?,
+            None => PackageClosure::default(),
         };
+        let package_created = publish_provider
+            .create_package_and_possibly_user_catalog(catalog, &catalog_name)
+            .await?;
 
         // Dedup: ask the catalog server if this exact build has already been
         // published before paying for the upload — and, when the closure
@@ -526,7 +541,11 @@ impl Publish {
         if let Some(system) = dedup_system
             && !publish_config.allow_lineage_change
         {
-            let locked_inputs_query: HashMap<_, _> = locked_inputs.clone().into_iter().collect();
+            // Check the target's own identity; dependency metadata cannot stand in.
+            let dot_flox_dir = publish_provider
+                .env_metadata
+                .rel_expression_build_base_dir
+                .to_string_lossy();
             let query = CheckBuildQuery {
                 catalog_name: &catalog_name,
                 package_name: publish_provider.package_metadata.package.name().as_ref(),
@@ -534,8 +553,11 @@ impl Publish {
                 source_rev: &publish_provider.env_metadata.build_repo_meta.rev,
                 nixpkgs_rev,
                 system,
-                locked_inputs: &locked_inputs_query,
+                locked_inputs: &closure.locked_inputs,
                 factory_build_token: factory_build_token.as_deref(),
+                direct_inputs: &closure.direct_inputs,
+                source_ref: &publish_provider.env_metadata.build_repo_meta.ref_,
+                dot_flox_dir: &dot_flox_dir,
             };
             if dedup_short_circuit(&flox.floxhub_client, query).await {
                 return Ok(());
@@ -563,13 +585,13 @@ impl Publish {
             &publish_provider.package_metadata.package
         );
         let catalog = &flox.floxhub_client;
-        let needs_publisher_wait = match publish_provider
+        let outcome = match publish_provider
             .publish(
                 catalog,
                 &catalog_name,
                 package_created,
                 &build_metadata,
-                &locked_inputs,
+                &closure,
                 key_file,
                 publish_config.metadata_only,
                 factory_build_token.as_deref(),
@@ -578,16 +600,19 @@ impl Publish {
             )
             .await
         {
-            Ok(needs_wait) => needs_wait,
+            Ok(outcome) => outcome,
             // A declined confirmation is a deliberate cancel, not a failure.
             Err(e @ PublishError::LineageChangeDeclined) => return Err(e.into()),
             Err(e) => bail!("Failed to publish package: {}", display_chain(&e)),
         };
 
+        // A later poll failure must not hide warnings from the accepted POST.
+        emit_publish_warnings(&outcome, |warning| message::warning(warning));
+
         // Only poll when the external publisher service is responsible for
         // ingesting artifacts (Publisher mode). NixCopy and MetadataOnly
         // submit NAR info directly, so there is nothing to wait for.
-        if needs_publisher_wait {
+        if outcome.needs_publisher_wait {
             let span = info_span!(
                 "publish",
                 progress = "Waiting for confirmation of successful publish..."
@@ -621,10 +646,59 @@ impl Publish {
 mod tests {
     use flox_manifest::test_helpers::with_latest_schema;
     use flox_rust_sdk::providers::build::test_helpers::prepare_empty_expressions_ref;
+    use floxhub_client::PublishWarning;
     use indoc::indoc;
 
     use super::*;
     use crate::utils::catalog_lock::test_helpers::build_lock_guard_from_parts;
+
+    #[test]
+    fn accepted_publish_displays_advisory_input_warning() {
+        let outcome = PublishOutcome {
+            needs_publisher_wait: false,
+            warnings: vec![PublishWarning {
+                code: "input_lineage_changed".to_owned(),
+                input: "dependency".to_owned(),
+                message: "dependency moved to a newer source lineage".to_owned(),
+            }],
+        };
+        let mut displayed = Vec::new();
+        emit_publish_warnings(&outcome, |message| displayed.push(message.to_owned()));
+        assert_eq!(displayed, [
+            "dependency: dependency moved to a newer source lineage"
+        ]);
+    }
+
+    #[tokio::test]
+    async fn manifest_only_publish_refuses_v1_and_projects_v2() {
+        use floxhub_client::client::test_helpers::new_noop;
+
+        let project = tempfile::tempdir().unwrap();
+        let dot_flox = project.path().join(".flox");
+        std::fs::create_dir(&dot_flox).unwrap();
+        let lock_path = catalog_lockfile_path(&dot_flox);
+        std::fs::write(&lock_path, r#"{"version":1}"#).unwrap();
+        let error = BuildLockGuard::new_existing_or_ephemeral(
+            &new_noop(),
+            &dot_flox,
+            Vec::<PathBuf>::new(),
+        )
+        .await
+        .unwrap_err();
+        assert!(error.to_string().contains(UPDATE_CATALOGS_COMMAND));
+
+        nef_lock_catalog::write_lock(&nef_lock_catalog::BuildLock::default(), &lock_path).unwrap();
+        let guard = BuildLockGuard::new_existing_or_ephemeral(
+            &new_noop(),
+            &dot_flox,
+            Vec::<PathBuf>::new(),
+        )
+        .await
+        .unwrap();
+        let closure = project_for_publish(&guard, &BTreeSet::new()).unwrap();
+        assert!(closure.direct_inputs.is_empty());
+        assert!(closure.locked_inputs.is_empty());
+    }
 
     /// A stale committed lock fails a publish naming both the uncovered
     /// reference and the recovery command.
@@ -643,7 +717,7 @@ mod tests {
             nef_lock_catalog::BuildLock::default(),
             true,
         );
-        let err = subset_for_publish(&lock, &references)
+        let err = project_for_publish(&lock, &references)
             .expect_err("an empty committed lock cannot cover the reference");
         let message = format!("{err:#}");
         assert!(
