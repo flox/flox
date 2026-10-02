@@ -2379,8 +2379,7 @@
           "version": {
             "type": "integer",
             "const": 2,
-            "title": "Version",
-            "default": 2
+            "title": "Version"
           },
           "groups": {
             "additionalProperties": {
@@ -2392,7 +2391,8 @@
         },
         "type": "object",
         "required": [
-          "groups"
+          "groups",
+          "version"
         ],
         "title": "BuildInputsLookupResponseV2",
         "description": "Opt-in response for lookup clients that understand base references."

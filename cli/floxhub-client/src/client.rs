@@ -204,8 +204,8 @@ pub struct CheckBuildQuery<'a> {
     /// The target's full upstream ref, e.g.
     /// `refs/heads/main`; publish records this as `UserBuildPublish.ref_`.
     pub source_ref: &'a str,
-    /// Repository-relative directory holding the `.flox` project, e.g.
-    /// `.flox` or a nested project's subdirectory; publish records this as
+    /// Repository-relative path to `.flox`, e.g. `.flox` or `nested/.flox`;
+    /// publish records this as
     /// `UserBuildPublish.dot_flox_dir`.
     pub dot_flox_dir: &'a str,
 }
@@ -1093,6 +1093,25 @@ pub mod tests {
             response.groups["default"].not_lockable["nixpkgs.hello"].kind,
             "base_catalog"
         );
+    }
+
+    #[tokio::test]
+    async fn lookup_rejects_response_without_version() {
+        let server = MockServer::start_async().await;
+        let mock = server.mock(|when, then| {
+            when.method("POST")
+                .path("/api/v1/catalog/build-inputs/lookup");
+            then.status(200)
+                .json_body(json!({"groups": {"default": {"lock": {}}}}));
+        });
+        let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
+        let request: BuildInputsLookupRequest = serde_json::from_value(json!({
+            "groups": [{"key": "default", "references": ["nixpkgs.hello"]}],
+            "response_version": 2
+        }))
+        .unwrap();
+        assert!(client.build_inputs_lookup(request).await.is_err());
+        mock.assert();
     }
 
     #[tokio::test]

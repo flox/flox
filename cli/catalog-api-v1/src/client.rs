@@ -219,7 +219,8 @@ built repeatedly.*/
     ///  "description": "Opt-in response for lookup clients that understand base references.",
     ///  "type": "object",
     ///  "required": [
-    ///    "groups"
+    ///    "groups",
+    ///    "version"
     ///  ],
     ///  "properties": {
     ///    "groups": {
@@ -231,7 +232,6 @@ built repeatedly.*/
     ///    },
     ///    "version": {
     ///      "title": "Version",
-    ///      "default": 2,
     ///      "type": "integer"
     ///    }
     ///  }
@@ -241,7 +241,6 @@ built repeatedly.*/
     #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct BuildInputsLookupResponseV2 {
         pub groups: ::std::collections::HashMap<::std::string::String, GroupResultV2>,
-        #[serde(default = "defaults::default_u64::<i64, 2>")]
         pub version: i64,
     }
     impl ::std::convert::From<&BuildInputsLookupResponseV2>
