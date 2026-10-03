@@ -16,6 +16,7 @@ use commands::{
     Version,
     is_detached_side_effect_command,
     is_telemetry_flush_command,
+    is_telemetry_reset_command,
 };
 use flox_config::Config;
 use flox_core::sentry::init_sentry;
@@ -280,17 +281,19 @@ fn main() -> ExitCode {
     // - neither buffer is due and flushing was not explicitly forced;
     // - this invocation is itself a detached side-effect command (prevents
     //   a fork-bomb and stops `send-telemetry` from re-spawning itself);
+    // - this invocation reset the device ID (see `is_telemetry_reset_command`);
     // - `_FLOX_TESTING_DISABLE_BG_SIDE_EFFECTS=1` (CI escape hatch);
     // - telemetry is deferred until the notice is shown (nothing to send).
     //
     // Child logs to a single rolling file — see `LogFile::Rolling`.
     if !config.flox.disable_metrics
         && !is_detached_side_effect_command(v2_subcommand)
+        && !is_telemetry_reset_command(v2_subcommand)
         && !utils::detached::bg_side_effects_disabled()
         && !telemetry_deferred()
         && telemetry_flush_due()
     {
-        let log_dir = config.flox.cache_dir.join("log");
+        let log_dir = utils::detached::send_telemetry_log_dir(&config.flox.cache_dir);
         let args = [String::from("send-telemetry"), String::from("-vv")];
         let spawn_result = utils::detached::DetachedCommand {
             args: &args,

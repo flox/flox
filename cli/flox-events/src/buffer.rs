@@ -178,6 +178,35 @@ impl EventsBuffer {
         }))
     }
 
+    /// Delete the buffer file and its lock file from `data_dir`, discarding
+    /// every buffered event, including entries this binary cannot parse.
+    /// Succeeds without doing anything when `data_dir` does not exist.
+    ///
+    /// Blocks until the file lock is acquired, so no other process is
+    /// mid-write. The lock file is deleted while still held. A process that
+    /// was already waiting on it then locks the deleted file, while a process
+    /// that starts later creates and locks a new one, so those two processes
+    /// do not exclude each other until the first one releases its lock.
+    pub fn delete(data_dir: &Path) -> Result<()> {
+        if !data_dir
+            .try_exists()
+            .context("Could not check the v2 events buffer directory")?
+        {
+            return Ok(());
+        }
+
+        let lock_file_path = data_dir.join(EVENTS_LOCK_FILE_NAME);
+        let mut events_lock =
+            LockFile::open(&lock_file_path).context("Could not open v2 events lock file")?;
+        events_lock
+            .lock()
+            .context("Could not lock v2 events buffer")?;
+
+        remove_file_if_present(&data_dir.join(EVENTS_BUFFER_FILE_NAME))
+            .context("Could not delete v2 events buffer file")?;
+        remove_file_if_present(&lock_file_path).context("Could not delete v2 events lock file")
+    }
+
     pub(crate) fn is_expired(&self, expiry: Duration) -> bool {
         let now = OffsetDateTime::now_utc();
         self.oldest_timestamp()
@@ -312,6 +341,13 @@ impl EventsBuffer {
     }
 }
 
+fn remove_file_if_present(path: &Path) -> std::io::Result<()> {
+    match std::fs::remove_file(path) {
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        result => result,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -367,5 +403,30 @@ mod tests {
             vec![future.as_str()],
             "the sent entry is drained and the unreadable one is written back"
         );
+    }
+
+    #[test]
+    fn delete_removes_the_buffer_with_unreadable_entries_and_the_lock_file() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join(EVENTS_BUFFER_FILE_NAME),
+            format!(
+                "{}\n{}\n",
+                envelope("cli.environment.delete"),
+                envelope("cli.environment.from.the.future"),
+            ),
+        )
+        .unwrap();
+        drop(EventsBuffer::read(dir.path()).unwrap());
+
+        EventsBuffer::delete(dir.path()).unwrap();
+
+        let remaining: Vec<_> = std::fs::read_dir(dir.path()).unwrap().collect();
+        assert!(remaining.is_empty(), "left behind: {remaining:?}");
+
+        EventsBuffer::delete(dir.path()).expect("deleting a missing buffer succeeds");
+        EventsBuffer::delete(&dir.path().join("missing"))
+            .expect("deleting from a missing directory succeeds");
+        assert!(!dir.path().join("missing").exists());
     }
 }
