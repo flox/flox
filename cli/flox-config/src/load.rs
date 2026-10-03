@@ -8,7 +8,7 @@ use itertools::{Either, Itertools};
 use tracing::debug;
 use xdg::BaseDirectories;
 
-use crate::config::{Config, FLOX_CONFIG_FILE, FLOX_DIR_NAME};
+use crate::config::{Config, FLOX_CONFIG_FILE, FLOX_DIR_NAME, FloxConfig};
 
 const FLOX_CONFIG_DIR_VAR: &str = "FLOX_CONFIG_DIR";
 
@@ -31,11 +31,30 @@ pub(crate) fn parse_with(
 ) -> Result<Config> {
     let final_config = raw_config_from_parts(flox_dirs, user_config_dir, system_config_dir, env)?;
 
-    let cli_config: Config = final_config
+    let mut cli_config: Config = final_config
         .to_owned()
         .try_deserialize()
         .context("Could not parse config")?;
+    resolve_flox_dirs(&mut cli_config.flox, flox_dirs).context("Could not parse config")?;
     Ok(cli_config)
+}
+
+/// Replace an empty `cache_dir`, `data_dir` or `state_dir` with its default.
+///
+/// An empty path would otherwise resolve against the current directory,
+/// so Flox would write its files into whichever directory it runs in.
+fn resolve_flox_dirs(config: &mut FloxConfig, flox_dirs: &BaseDirectories) -> Result<()> {
+    let dirs = [
+        (&mut config.cache_dir, flox_dirs.get_cache_home()),
+        (&mut config.data_dir, flox_dirs.get_data_home()),
+        (&mut config.state_dir, flox_dirs.get_state_home()),
+    ];
+    for (dir, default) in dirs {
+        if dir.as_os_str().is_empty() {
+            *dir = default.context("$HOME not set")?;
+        }
+    }
+    Ok(())
 }
 
 /// Locates the system wide flox config dir.
@@ -391,5 +410,46 @@ mod tests {
         assert_eq!(config.flox.floxhub_url, Some(floxhub_url.parse().unwrap()));
         assert!(config.flox.disable_metrics);
         assert_eq!(config.flox.search_limit, Some(search_limit));
+    }
+
+    /// An empty dir from the environment or a config file must not resolve
+    /// to the current directory.
+    #[test]
+    fn empty_dirs_fall_back_to_defaults() {
+        let flox_dirs = mock_flox_dirs();
+        let user_config_dir = tempfile::tempdir().unwrap();
+        fs::write(
+            user_config_dir.path().join(FLOX_CONFIG_FILE),
+            "data_dir = \"\"\n",
+        )
+        .unwrap();
+
+        let env = [
+            ("FLOX_CACHE_DIR".into(), "".into()),
+            ("FLOX_STATE_DIR".into(), "".into()),
+        ];
+        let config = Config::parse_with(&flox_dirs, user_config_dir.path(), None, env).unwrap();
+
+        assert_eq!(
+            (
+                config.flox.cache_dir,
+                config.flox.data_dir,
+                config.flox.state_dir
+            ),
+            (
+                flox_dirs.get_cache_home().unwrap(),
+                flox_dirs.get_data_home().unwrap(),
+                flox_dirs.get_state_home().unwrap()
+            )
+        );
+
+        // An absolute value is kept.
+        let state_dir = tempfile::tempdir().unwrap();
+        let env = [(
+            "FLOX_STATE_DIR".into(),
+            state_dir.path().to_string_lossy().into_owned(),
+        )];
+        let config = Config::parse_with(&flox_dirs, user_config_dir.path(), None, env).unwrap();
+        assert_eq!(config.flox.state_dir, state_dir.path());
     }
 }
