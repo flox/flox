@@ -26,8 +26,8 @@ use tracing::debug;
 use uuid::Uuid;
 
 use crate::utils::detect_shell::detect_shell_name_for_metrics;
+use crate::utils::init::read_metrics_uuid;
 use crate::utils::local_environment_id;
-use crate::utils::metrics::read_metrics_uuid;
 
 /// Stores the invocation_id resolved by [`resolve_invocation_id`] so detached
 /// subprocess spawn sites can propagate it via [`FLOX_INVOCATION_ID_VAR`].

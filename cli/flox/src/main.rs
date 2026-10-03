@@ -38,8 +38,8 @@ use crate::utils::errors::{
     format_remote_error,
 };
 use crate::utils::events::duration_to_ms;
-use crate::utils::init::init_telemetry_uuid;
-use crate::utils::metrics::{Hub, read_metrics_uuid};
+use crate::utils::init::{init_telemetry_uuid, read_metrics_uuid};
+use crate::utils::metrics::Hub;
 
 mod beta;
 mod commands;

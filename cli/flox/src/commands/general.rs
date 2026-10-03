@@ -15,12 +15,12 @@ use toml_edit::{Key, TomlError};
 use tracing::{debug, instrument};
 
 use crate::subcommand_metric;
-use crate::utils::message;
-use crate::utils::metrics::{
+use crate::utils::init::{
     METRICS_EVENTS_FILE_NAME,
     METRICS_LOCK_FILE_NAME,
     METRICS_UUID_FILE_NAME,
 };
+use crate::utils::message;
 
 // Reset the metrics queue (if any), reset metrics ID, and re-prompt for consent
 #[derive(Bpaf, Clone)]
