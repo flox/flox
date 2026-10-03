@@ -3,10 +3,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use flox_core::{Version, WriteError, write_atomically};
-use floxhub_client::LockedInputEntry;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, instrument};
 
+use super::direct_input::DirectInput;
 use super::tree::PackageTreeNode;
 use crate::{CatalogId, CatalogRef};
 
@@ -32,14 +32,7 @@ pub struct BuildLock {
     pub(crate) _version: Version<1>,
     /// The direct (first-order) catalog inputs, keyed by the server's
     /// canonical `<catalog>/<attr-path>` form.
-    ///
-    /// Note: `LockedInputEntry` is generated from the catalog OpenAPI spec.
-    /// Serializing it verbatim into this on-disk lock couples the persisted
-    /// format to the generated schema, so regenerating the client can change
-    /// the lock format. A later increment should insulate this with a
-    /// hand-owned domain type (cf. the `BaseCatalogInfo` newtype and `From`
-    /// impls in `floxhub-client`).
-    pub(crate) direct_catalog_inputs: BTreeMap<String, LockedInputEntry>,
+    pub(crate) direct_catalog_inputs: BTreeMap<String, DirectInput>,
     pub(crate) catalogs: BTreeMap<CatalogId, CatalogLock>,
 }
 
@@ -88,12 +81,12 @@ impl BuildLock {
     pub fn subset_direct(
         &self,
         references: &BTreeSet<CatalogRef>,
-    ) -> Result<BTreeMap<String, LockedInputEntry>, StaleLockError> {
+    ) -> Result<BTreeMap<String, DirectInput>, StaleLockError> {
         subset_direct_inputs(&self.direct_catalog_inputs, references)
     }
 
     /// The direct (first-order) catalog inputs the lock pins.
-    pub fn direct_catalog_inputs(&self) -> &BTreeMap<String, LockedInputEntry> {
+    pub fn direct_catalog_inputs(&self) -> &BTreeMap<String, DirectInput> {
         &self.direct_catalog_inputs
     }
 }
@@ -115,9 +108,9 @@ impl BuildLock {
 /// verbatim and never reconstructed. A wildcard reference selects every
 /// entry under its prefix.
 pub fn subset_direct_inputs(
-    direct_catalog_inputs: &BTreeMap<String, LockedInputEntry>,
+    direct_catalog_inputs: &BTreeMap<String, DirectInput>,
     references: &BTreeSet<CatalogRef>,
-) -> Result<BTreeMap<String, LockedInputEntry>, StaleLockError> {
+) -> Result<BTreeMap<String, DirectInput>, StaleLockError> {
     let mut subset = BTreeMap::new();
     let mut missing = Vec::new();
     for reference in references {
@@ -127,7 +120,7 @@ pub fn subset_direct_inputs(
         let (catalog, path) = (names[1], &names[2..]);
         let wildcard = reference.path().is_wildcard();
 
-        let mut matched: Vec<(&String, &LockedInputEntry)> = direct_catalog_inputs
+        let mut matched: Vec<(&String, &DirectInput)> = direct_catalog_inputs
             .iter()
             .filter(|(_, entry)| {
                 entry.catalog == catalog && {
@@ -311,6 +304,39 @@ mod tests {
             references(&["catalogs.myorg.missing", "catalogs.other.gone"])
                 .into_iter()
                 .collect::<Vec<_>>()
+        );
+    }
+
+    /// A lock whose direct entry pins a source the NEF can fetch but the
+    /// catalog never issues — here a `path` flakeref — reads and subsets
+    /// like any other: the lock does not require its sources to be git.
+    #[test]
+    fn lock_with_a_non_git_source_reads_and_subsets() {
+        let rendered = serde_json::json!({
+            "version": 1,
+            "direct_catalog_inputs": {
+                "myorg/hello": {
+                    "attr_path": ["hello"],
+                    "build_type": "nef",
+                    "catalog": "myorg",
+                    "locked_inputs_hash": "sha256-test",
+                    "source": { "type": "path", "path": "/src/hello", "dir": ".flox" },
+                }
+            },
+            "catalogs": {}
+        });
+
+        let read: BuildLock = serde_json::from_value(rendered).expect("a path source parses");
+        let subset = read
+            .subset_direct(&references(&["catalogs.myorg.hello"]))
+            .expect("references are covered");
+
+        assert_eq!(subset.keys().collect::<Vec<_>>(), vec![
+            &"myorg/hello".to_string()
+        ]);
+        assert_eq!(
+            subset["myorg/hello"].source.as_value(),
+            &serde_json::json!({ "type": "path", "path": "/src/hello", "dir": ".flox" })
         );
     }
 

@@ -10,6 +10,7 @@ use tracing::instrument;
 
 use crate::CatalogId;
 use crate::lock::build_lock::{BuildLock, CatalogLock};
+use crate::lock::direct_input::DirectInput;
 use crate::lock::tree::PackageTreeBuilder;
 
 /// Build a hierarchical [BuildLock] from the flat locked-input map (the merged
@@ -33,9 +34,9 @@ pub fn build_lock_from_locked_inputs<'d>(
             let entry = locked.get(key).cloned().with_context(|| {
                 format!("Direct dependency '{key}' does not appear to be locked")
             })?;
-            Ok((key.clone(), entry))
+            Ok((key.clone(), DirectInput::from(entry)))
         })
-        .collect::<Result<BTreeMap<String, LockedInputEntry>>>()?;
+        .collect::<Result<BTreeMap<String, DirectInput>>>()?;
 
     for entry in locked.into_values() {
         let LockedInputEntry {
