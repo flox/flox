@@ -27,7 +27,7 @@ use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironmentErr
 use flox_rust_sdk::providers::services::process_compose::ServiceError;
 use tracing::{debug, warn};
 use utils::errors::format_service_error;
-use utils::init::init_logger;
+use utils::init::{init_logger, telemetry_notice_visible, user_messages_visible};
 use utils::{message, populate_default_nix_env_vars};
 
 use crate::utils::errors::{
@@ -37,7 +37,7 @@ use crate::utils::errors::{
     format_remote_error,
 };
 use crate::utils::events::duration_to_ms;
-use crate::utils::init::init_telemetry_uuid;
+use crate::utils::init::{defer_telemetry, init_telemetry_uuid};
 use crate::utils::metrics::{Hub, read_metrics_uuid};
 
 mod beta;
@@ -124,10 +124,26 @@ fn main() -> ExitCode {
         config
     });
     let metrics_uuid = if !config.flox.disable_metrics {
-        init_telemetry_uuid(&config.flox.data_dir, &config.flox.cache_dir)
-            .and_then(|_| read_metrics_uuid(&config))
-            .inspect_err(|e| warn!("Failed to initialize metrics UUID: {e}"))
-            .ok()
+        // A first run that cannot show the telemetry notice creates no uuid
+        // and records nothing; see `init_telemetry_uuid`.
+        let initialized =
+            init_telemetry_uuid(&config.flox.data_dir, &config.flox.cache_dir, || {
+                let args = env::args_os().collect::<Vec<_>>();
+                telemetry_notice_visible(&args, user_messages_visible(verbosity))
+            });
+        match initialized {
+            Ok(true) => read_metrics_uuid(&config)
+                .inspect_err(|e| warn!("Failed to initialize metrics UUID: {e}"))
+                .ok(),
+            Ok(false) => {
+                defer_telemetry();
+                None
+            },
+            Err(e) => {
+                warn!("Failed to initialize metrics UUID: {e}");
+                None
+            },
+        }
     } else {
         None
     };
