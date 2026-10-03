@@ -139,6 +139,7 @@ impl Start {
                     message::updated(format!("Service '{}' started.", process.name));
                 },
                 Err(e) => {
+                    tracing::info!(service = %process.name, error = %e, "Service start failed");
                     message::error(format!("Failed to start service '{}': {}", process.name, e));
                     failure_count += 1;
                 },

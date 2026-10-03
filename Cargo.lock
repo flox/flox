@@ -1588,6 +1588,7 @@ dependencies = [
  "interim",
  "itertools 0.14.0",
  "keyring-core",
+ "log",
  "minus",
  "nef-lock-catalog",
  "nix",

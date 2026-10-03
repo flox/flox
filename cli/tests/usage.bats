@@ -117,7 +117,7 @@ Administration
 Available options:
     -v, --verbose          Increase logging verbosity
                            Invoke multiple times for increasing detail.
-    -q, --quiet            Silence logs except for errors
+    -q, --quiet            Silence routine notices and diagnostic logs
         --floxhub-url=URL  Base URL of the FloxHub instance to target for this
                            invocation
     -V, --version          Print the version of the program

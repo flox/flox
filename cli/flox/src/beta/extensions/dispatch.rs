@@ -18,6 +18,7 @@ use thiserror::Error;
 use tracing::{debug, warn};
 
 use super::manifest::{InstalledState, parse_installed_state};
+use crate::utils::message;
 
 #[derive(Debug, Error)]
 pub enum FindError {
@@ -162,6 +163,7 @@ pub fn try_dispatch_external(data_dir: &Path) -> Option<ExitCode> {
         Err(FindError::NotFound(_)) => return None,
         Err(e) => {
             warn!(extension = name_str, error = %e, "extension lookup failed");
+            message::warning(format!("Extension lookup failed for '{name_str}': {e}"));
             return None;
         },
     };
@@ -219,6 +221,10 @@ fn load_installed_state(install_dir: &Path) -> Option<InstalledState> {
         Ok(s) => Some(s),
         Err(e) => {
             warn!(path = %path.display(), error = %e, "failed to parse extension installed state");
+            message::warning(format!(
+                "Failed to parse extension installed state at {}: {e}",
+                path.display()
+            ));
             None
         },
     }

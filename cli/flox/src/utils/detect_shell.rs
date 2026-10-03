@@ -19,6 +19,7 @@ use anyhow::Result;
 use shell_gen::ShellWithPath;
 use tracing::{debug, warn};
 
+use crate::utils::message;
 use crate::utils::openers::CliShellExt;
 
 pub static INTERACTIVE_BASH_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
@@ -70,6 +71,9 @@ fn detect_shell_for_subshell_with(
 fn subshell_shell_from_chain(detected: Option<ShellWithPath>) -> ShellWithPath {
     detected.unwrap_or_else(|| {
         warn!("Failed to detect shell from environment or parent process. Defaulting to bash");
+        message::warning(
+            "Failed to detect shell from environment or parent process. Defaulting to bash",
+        );
         ShellWithPath::Bash(INTERACTIVE_BASH_BIN.clone())
     })
 }
@@ -118,7 +122,8 @@ fn detect_shell_for_in_place_with(
     ShellWithPath::detect_from_env("FLOX_SHELL")
         .or_else(|_| parent_shell_fn())
         .or_else(|err| {
-            warn!("Failed to detect shell from environment: {err}");
+            warn!(error = %err, "Failed to detect shell from environment");
+            message::warning(format!("Failed to detect shell from environment: {err}"));
             ShellWithPath::detect_from_env("SHELL")
         })
 }
