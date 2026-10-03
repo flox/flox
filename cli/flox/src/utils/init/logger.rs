@@ -22,7 +22,21 @@ static LOGGER_HANDLE: OnceLock<Handle<EnvFilter, Registry>> = OnceLock::new();
 pub(crate) fn init_logger(verbosity: Option<Verbosity>) {
     let verbosity = verbosity.unwrap_or_default();
 
-    let log_filter = match verbosity {
+    let log_filter = log_filter(verbosity);
+
+    let filter_handle = LOGGER_HANDLE.get_or_init(|| {
+        let (subscriber, reload_handle) = create_registry_and_filter_reload_handle();
+        subscriber.init();
+        reload_handle
+    });
+
+    update_filters(filter_handle, log_filter);
+}
+
+/// The filter directives for `verbosity`.
+/// A valid `RUST_LOG` replaces them, see [update_filters].
+fn log_filter(verbosity: Verbosity) -> &'static str {
+    match verbosity {
         // Show only errors
         Verbosity::Quiet => "off,flox=error",
         // Only show warnings, and user facing messages
@@ -37,15 +51,28 @@ pub(crate) fn init_logger(verbosity: Option<Verbosity>) {
         Verbosity::Verbose(3) => "warn,flox=trace,flox-rust-sdk=trace,flox-core=trace",
         // Show trace for all libraries
         Verbosity::Verbose(_) => "trace",
-    };
+    }
+}
 
-    let filter_handle = LOGGER_HANDLE.get_or_init(|| {
-        let (subscriber, reload_handle) = create_registry_and_filter_reload_handle();
-        subscriber.init();
-        reload_handle
-    });
+/// Whether the logger that [init_logger] sets up for `verbosity` prints
+/// user-facing messages, i.e. those of [crate::utils::message].
+///
+/// `-q` hides them, and so does a `RUST_LOG` filter that drops `INFO` events
+/// of that module, for example `RUST_LOG=warn`.
+pub(crate) fn user_messages_visible(verbosity: Verbosity) -> bool {
+    EnvFilter::try_from_default_env()
+        .or_else(|_| EnvFilter::try_new(log_filter(verbosity)))
+        .is_ok_and(filter_shows_user_messages)
+}
 
-    update_filters(filter_handle, log_filter);
+/// Evaluate `filter` for an `INFO` event of [crate::utils::message] outside of
+/// any span, which is how the message layer receives a user-facing message.
+fn filter_shows_user_messages(filter: EnvFilter) -> bool {
+    let subscriber = tracing_subscriber::registry().with(filter);
+    tracing::subscriber::with_default(
+        subscriber,
+        || tracing::enabled!(target: "flox::utils::message", tracing::Level::INFO),
+    )
 }
 
 pub fn update_filters(filter_handle: &Handle<EnvFilter, Registry>, log_filter: &str) {
@@ -301,3 +328,54 @@ mod indicatif {
     }
 }
 // endregion: indicatif
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn quiet_hides_user_messages() {
+        assert!(!filter_shows_user_messages(EnvFilter::new(log_filter(
+            Verbosity::Quiet
+        ))));
+    }
+
+    #[test]
+    fn default_and_verbose_show_user_messages() {
+        for verbosity in (0..=4).map(Verbosity::Verbose) {
+            assert!(
+                filter_shows_user_messages(EnvFilter::new(log_filter(verbosity))),
+                "{verbosity:?} hides user messages"
+            );
+        }
+    }
+
+    /// `RUST_LOG` replaces the verbosity filter, so the same evaluation decides
+    /// whether a user-facing message is printed.
+    #[test]
+    fn rust_log_filters_decide_user_message_visibility() {
+        for directives in [
+            "off",
+            "error",
+            "warn",
+            "flox=error",
+            "info,flox::utils=warn",
+        ] {
+            assert!(
+                !filter_shows_user_messages(EnvFilter::new(directives)),
+                "RUST_LOG={directives} shows user messages"
+            );
+        }
+        for directives in [
+            "info",
+            "debug",
+            "flox=info",
+            "error,flox::utils::message=info",
+        ] {
+            assert!(
+                filter_shows_user_messages(EnvFilter::new(directives)),
+                "RUST_LOG={directives} hides user messages"
+            );
+        }
+    }
+}
