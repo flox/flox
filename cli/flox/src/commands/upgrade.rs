@@ -17,7 +17,6 @@ use crate::commands::{ensure_auth, environment_description};
 use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message::{self, stderr_supports_color};
 use crate::utils::upgrade_output::{count_upgrade_categories, format_upgrade_summary};
-use crate::{environment_subcommand_metric, subcommand_metric};
 
 // Upgrade packages in an environment
 #[derive(Bpaf, Clone)]
@@ -36,10 +35,6 @@ pub struct Upgrade {
 impl Upgrade {
     #[instrument(name = "upgrade", skip_all)]
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
-        // Record subcommand metric prior to environment_subcommand_metric below
-        // in case we error before then
-        subcommand_metric!("upgrade");
-
         tracing::debug!(
             to_upgrade = self.groups_or_iids.join(","),
             "upgrading groups and install ids"
@@ -54,7 +49,6 @@ impl Upgrade {
             .environment
             .detect_concrete_environment(&mut flox, "Upgrade")
             .await?;
-        environment_subcommand_metric!("upgrade", concrete_environment);
         if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentUpgrade(
             CliEnvironmentPayload::new(env_detail_from_concrete(&flox, &concrete_environment)),
         )) {

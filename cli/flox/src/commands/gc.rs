@@ -69,7 +69,7 @@ use flox_rust_sdk::models::env_registry;
 use flox_rust_sdk::providers::nix::nix_base_command;
 use tracing::{Span, debug, info_span, instrument, trace};
 
-use crate::{message, subcommand_metric};
+use crate::message;
 
 #[derive(Bpaf, Debug, Clone)]
 pub struct Gc {}
@@ -77,8 +77,6 @@ pub struct Gc {}
 impl Gc {
     #[instrument(skip_all)]
     pub fn handle(self, flox: Flox) -> Result<()> {
-        subcommand_metric!("gc");
-
         let span = info_span!("collecting_garbage", progress = "Collecting garbage");
         let _guard = span.enter();
         env_registry::garbage_collect(&flox)?;

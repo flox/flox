@@ -60,7 +60,6 @@ use crate::utils::dialog::{Confirm, Dialog};
 use crate::utils::errors::display_chain;
 use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message;
-use crate::{environment_subcommand_metric, subcommand_metric};
 
 const PUBLISH_COMPLETION_POLL_INTERVAL_MILLIS: u64 = 2_000; // 1s
 const PUBLISH_COMPLETION_TIMEOUT_MILLIS: u64 = 30 * 60 * 1_000; // 30 min
@@ -282,7 +281,6 @@ impl Publish {
         let env = self
             .environment
             .detect_concrete_environment(&mut flox, "Publish")?;
-        environment_subcommand_metric!("publish", env);
         if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentPublish(
             CliEnvironmentPublishPayload::new(env_detail_from_concrete(&flox, &env)),
         )) {
@@ -420,11 +418,6 @@ impl Publish {
             .package
             .kind()
             .is_manifest_build();
-        subcommand_metric!(
-            "publish",
-            "has_expression_build" = has_expression_build,
-            "has_manifest_build" = has_manifest_build
-        );
         if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentPublish(
             CliEnvironmentPublishPayload::new(env_detail)
                 .with_build_kinds(has_expression_build, has_manifest_build)

@@ -87,10 +87,8 @@ Two modules are involved, by design:
   there is domain data worth reporting; that touches `cli/flox-events`
   and is reviewed as a wire-contract change, so the
   keep-`flox-rust-sdk`-unchanged guidance above doesn't make it free.
-  Don't add new `subcommand_metric!` calls — the existing beta
-  commands that use the macro predate the v2 pipeline; don't copy
-  them. Event names are frozen once a release that can emit them
-  ships, gated or not.
+  Event names are frozen once a release that can emit them ships,
+  gated or not.
 - Don't put beta-only logic in `commands/`, elsewhere in `flox`, or in
   `flox-rust-sdk`; keep it in the `beta` module.
 - Integration tests are not required for beta commands while they

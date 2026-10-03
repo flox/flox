@@ -22,19 +22,21 @@ That is why expensive payload-only work must go behind
 default with a first-run notice; see `flox config --help` for the
 user-facing description of what is collected.
 
-## The two streams
+## One stream
 
-The CLI currently emits two telemetry streams in parallel:
+The CLI emits one usage-event stream: typed events recorded through
+`EventsHub::global().record_event(...)`, integrated via
+`cli/flox/src/utils/events.rs`. All instrumentation goes here.
 
-- **Legacy (v1):** the `subcommand_metric!` macros in
-  `cli/flox/src/utils/metrics.rs`. Do not add new instrumentation
-  here.
-- **v2 (this crate):** typed events recorded through
-  `EventsHub::global().record_event(...)`, integrated via
-  `cli/flox/src/utils/events.rs`. All new instrumentation goes here.
-
-The two stacks share no code and write separate on-disk buffers.
-`disable_metrics` silences both.
+The legacy (v1) stream, the `subcommand_metric!` macros, is retired.
+Older CLI releases still send it. Every subcommand, and bare `flox`,
+deletes that stream's leftover buffer, `metrics-events-v2.json` in the
+cache dir, unless another process holds `metrics-lock`. These v2
+`subcommand` values keep the legacy spelling instead of the parsed
+command name, so downstream joins across both streams keep working:
+`auth2`, `lock`, `activate::allow`, `activate::deny`, `build::clean`,
+`build::import-nixpkgs`, `build::update-catalogs`, `include::upgrade`,
+and the `services::*` and `generations::*` verbs.
 
 ## The wire contract
 
@@ -411,11 +413,11 @@ build tools are not on bare PATH). Four gotchas leave your collector
 silent:
 
 1. Use `_FLOX_METRICS_URL_V2_OVERRIDE` (and
-   `_FLOX_METRICS_API_KEY_V2_OVERRIDE`) to point the v2 stream at a
+   `_FLOX_METRICS_API_KEY_V2_OVERRIDE`) to point the stream at a
    local collector. The unsuffixed `_FLOX_METRICS_URL_OVERRIDE`
-   redirects only the **legacy** stream — with only it set, your
-   collector stays quiet while your test events go to the production
-   endpoint, which is worse than no output.
+   belonged to the retired legacy stream and has no effect — with
+   only it set, your collector stays quiet while your test events go
+   to the production endpoint, which is worse than no output.
 2. Set `_FLOX_FORCE_FLUSH_METRICS=true`. Without it a single command
    sends nothing — the buffer flushes on expiry and in batches.
 3. Use a real dispatched subcommand. `flox --version` returns before
@@ -423,10 +425,10 @@ silent:
 4. Check that metrics aren't disabled (`flox config --get
    disable_metrics`, `FLOX_DISABLE_METRICS`) — many developers have
    the opt-out set, and with it on no client is installed and nothing
-   is sent, with no error. Also look in the right buffer: the v2
+   is sent, with no error. Also look in the right buffer: the
    stream buffers to `events-v2.json` in the data dir; the
    similarly-named `metrics-events-v2.json` in the cache dir belongs
-   to the legacy stream.
+   to the retired legacy stream, and the CLI deletes it.
 
 ```bash
 # terminal 1: a local collector that acknowledges each send

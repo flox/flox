@@ -40,7 +40,6 @@ use super::{
     dir_environment_select,
     needs_project_files_error,
 };
-use crate::subcommand_metric;
 use crate::utils::catalog_lock::BuildLockGuard;
 use crate::utils::detect_shell::INTERACTIVE_BASH_BIN;
 use crate::utils::message;
@@ -96,7 +95,6 @@ impl Develop {
     }
 
     pub async fn handle(self, flox: Flox) -> Result<()> {
-        subcommand_metric!("develop");
         Self::develop(flox, self).await
     }
 

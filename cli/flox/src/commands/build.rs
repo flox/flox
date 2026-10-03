@@ -42,7 +42,6 @@ use super::{DirEnvironmentSelect, dir_environment_select, needs_project_files_er
 use crate::utils::catalog_lock::BuildLockGuard;
 use crate::utils::events::duration_to_ms;
 use crate::utils::message;
-use crate::{environment_subcommand_metric, subcommand_metric};
 
 /// How the user invokes the catalog-lock update, for messages that name it.
 ///
@@ -159,9 +158,7 @@ impl Build {
     /// Centrally-derived subcommand string for this invocation.
     /// Returns the `build::clean` / `build::import-nixpkgs` /
     /// `build::update-catalogs` form for the build pseudo-subcommands,
-    /// preserving the join-key continuity the legacy
-    /// `environment_subcommand_metric!` stream already used at
-    /// `cli/flox/src/commands/build.rs:146,154,162`.
+    /// preserving the join keys the retired legacy stream used.
     pub fn subcommand_name(&self) -> &'static str {
         match &self.subcommand_or_targets {
             SubcommandOrBuildTargets::Clean { .. } => "build::clean",
@@ -177,7 +174,6 @@ impl Build {
                 let env = self
                     .environment
                     .detect_concrete_environment(&mut flox, "Clean build files of")?;
-                environment_subcommand_metric!("build::clean", env);
 
                 Self::clean(flox, env, targets).await
             },
@@ -189,7 +185,6 @@ impl Build {
                 let env = self
                     .environment
                     .detect_concrete_environment(&mut flox, "Import package definition in")?;
-                environment_subcommand_metric!("build::import-nixpkgs", env);
 
                 Self::import_nixpkgs(flox, env, installable, force, base_catalog_url_select).await
             },
@@ -197,7 +192,6 @@ impl Build {
                 let env = self
                     .environment
                     .detect_concrete_environment(&mut flox, "Update catalogs in")?;
-                environment_subcommand_metric!("build::update-catalogs", env);
 
                 Self::update_catalogs(&flox, env).await
             },
@@ -209,7 +203,6 @@ impl Build {
                 let env = self
                     .environment
                     .detect_concrete_environment(&mut flox, "Build packages of")?;
-                environment_subcommand_metric!("build", env);
 
                 Self::build(
                     flox,
@@ -329,11 +322,6 @@ impl Build {
         let has_manifest_build = packages_to_build
             .iter()
             .any(|target| target.kind().is_manifest_build());
-        subcommand_metric!(
-            "build",
-            "has_expression_build" = has_expression_build,
-            "has_manifest_build" = has_manifest_build
-        );
 
         // The catalog lock the NEF evals consume, created by the CLI: the
         // committed .flox/catalog.lock exactly as found, or a fresh

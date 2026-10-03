@@ -13,7 +13,6 @@ use itertools::Itertools;
 use tracing::{debug, instrument};
 
 use crate::commands::{EnvironmentSelect, environment_select};
-use crate::environment_subcommand_metric;
 use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message;
 
@@ -36,7 +35,6 @@ impl Rollback {
             .detect_concrete_environment(&mut flox, "Rollback using")
             .await?;
 
-        environment_subcommand_metric!("generations::rollback", env);
         if let Err(err) =
             EventsHub::global().record_event(EventKind::CliEnvironmentGenerationsRollback(
                 CliEnvironmentPayload::new(env_detail_from_concrete(&flox, &env)),

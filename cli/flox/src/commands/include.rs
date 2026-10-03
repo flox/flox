@@ -8,7 +8,6 @@ use tracing::{debug, info_span, instrument};
 
 use super::EnvironmentSelect;
 use crate::commands::{display_help, environment_description, environment_select};
-use crate::environment_subcommand_metric;
 use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message::{self, print_overridden_manifest_fields};
 
@@ -75,7 +74,6 @@ impl Upgrade {
             )
             .await?;
 
-        environment_subcommand_metric!("include::upgrade", environment);
         if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentIncludeUpgrade(
             CliEnvironmentPayload::new(env_detail_from_concrete(&flox, &environment)),
         )) {
