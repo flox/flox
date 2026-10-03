@@ -28,7 +28,12 @@ use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironmentErr
 use flox_rust_sdk::providers::services::process_compose::ServiceError;
 use tracing::{debug, warn};
 use utils::errors::format_service_error;
-use utils::init::init_logger;
+use utils::init::{
+    init_logger,
+    telemetry_deferred,
+    telemetry_notice_visible,
+    user_messages_visible,
+};
 use utils::{message, populate_default_nix_env_vars};
 
 use crate::utils::errors::{
@@ -113,10 +118,16 @@ fn main() -> ExitCode {
 
     let config = Config::parse().unwrap_or_default();
     let metrics_uuid = if !config.flox.disable_metrics {
-        init_telemetry_uuid(&config.flox.data_dir, &config.flox.cache_dir)
-            .and_then(|_| read_metrics_uuid(&config))
-            .inspect_err(|e| warn!("Failed to initialize metrics UUID: {e}"))
-            .ok()
+        // A first run that cannot show the telemetry notice creates no uuid
+        // and records nothing; see `init_telemetry_uuid`.
+        init_telemetry_uuid(&config.flox.data_dir, &config.flox.cache_dir, || {
+            let args = env::args_os().collect::<Vec<_>>();
+            telemetry_notice_visible(&args, user_messages_visible(verbosity))
+        })
+        .and_then(|initialized| initialized.then(|| read_metrics_uuid(&config)).transpose())
+        .inspect_err(|e| warn!("Failed to initialize metrics UUID: {e}"))
+        .ok()
+        .flatten()
     } else {
         None
     };
@@ -257,12 +268,14 @@ fn main() -> ExitCode {
     // - neither buffer is due and flushing was not explicitly forced;
     // - this invocation is itself a detached side-effect command (prevents
     //   a fork-bomb and stops `send-telemetry` from re-spawning itself);
-    // - `_FLOX_TESTING_DISABLE_BG_SIDE_EFFECTS=1` (CI escape hatch).
+    // - `_FLOX_TESTING_DISABLE_BG_SIDE_EFFECTS=1` (CI escape hatch);
+    // - telemetry is deferred until the notice is shown (nothing to send).
     //
     // Child logs to a single rolling file — see `LogFile::Rolling`.
     if !config.flox.disable_metrics
         && !is_detached_side_effect_command(v2_subcommand)
         && !utils::detached::bg_side_effects_disabled()
+        && !telemetry_deferred()
         && telemetry_flush_due()
     {
         let log_dir = config.flox.cache_dir.join("log");
