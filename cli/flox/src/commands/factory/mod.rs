@@ -183,6 +183,7 @@ pub(crate) mod test_helpers {
             source_repo_url: "https://github.com/example/repo".to_string(),
             source_commit_sha: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2".to_string(),
             nixpkgs_revision: "deadbeef1234567890deadbeef1234567890dead".to_string(),
+            stability: None,
             created_at: chrono::Utc.with_ymd_and_hms(2025, 1, 1, 0, 0, 0).unwrap(),
             exit_code: None,
             task,

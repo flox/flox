@@ -259,6 +259,13 @@ coordinator-reported status appears.*/
     ///      "title": "Source Repo Url",
     ///      "type": "string"
     ///    },
+    ///    "stability": {
+    ///      "title": "Stability",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
     ///    "status": {
     ///      "$ref": "#/components/schemas/EffectiveBuildStatus"
     ///    },
@@ -299,6 +306,8 @@ coordinator-reported status appears.*/
         pub nixpkgs_revision: ::std::string::String,
         pub source_commit_sha: ::std::string::String,
         pub source_repo_url: ::std::string::String,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub stability: ::std::option::Option<::std::string::String>,
         pub status: crate::status::EffectiveBuildStatus,
         pub system: ::std::string::String,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]

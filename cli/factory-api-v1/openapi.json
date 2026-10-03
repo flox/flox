@@ -559,6 +559,11 @@
             "type": "string",
             "title": "Nixpkgs Revision"
           },
+          "stability": {
+            "title": "Stability",
+            "nullable": true,
+            "type": "string"
+          },
           "system": {
             "type": "string",
             "title": "System"
