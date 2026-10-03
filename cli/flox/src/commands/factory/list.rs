@@ -18,7 +18,6 @@ use serde::Serialize;
 use tracing::instrument;
 
 use super::{effective_status, effective_updated_at};
-use crate::subcommand_metric;
 use crate::utils::message::page_output;
 
 /// List Flox Factory builds.
@@ -66,8 +65,6 @@ pub struct List {
 impl List {
     #[instrument(name = "list", skip_all)]
     pub async fn handle(self, client: &impl FactoryClientTrait) -> Result<()> {
-        subcommand_metric!("factory::list");
-
         let filters = BuildFilters {
             status: self.status,
             system: self.system,

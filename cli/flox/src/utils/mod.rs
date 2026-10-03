@@ -21,7 +21,6 @@ pub mod init;
 pub mod local_environment_id;
 pub mod markdown;
 pub mod message;
-pub mod metrics;
 pub mod openers;
 pub mod search;
 pub mod tracing;
@@ -43,7 +42,7 @@ pub static FLOX_ACTIVATIONS_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
 /// Timeout used for network operations that run after the main flox command has
 /// completed.
 ///
-/// This is used for metrics submission and checking for updates.
+/// This is used for checking for updates.
 pub const TRAILING_NETWORK_CALL_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Set the default nix environment variables for the current process

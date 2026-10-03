@@ -15,7 +15,6 @@ use indoc::formatdoc;
 use tracing::{debug, instrument};
 
 use crate::commands::{EnvironmentSelect, environment_select};
-use crate::environment_subcommand_metric;
 use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message::{page_output, stdout_supports_color};
 
@@ -53,7 +52,6 @@ impl History {
             .environment
             .detect_concrete_environment(&mut flox, "Show history for")
             .await?;
-        environment_subcommand_metric!("generations::history", env);
         if let Err(err) =
             EventsHub::global().record_event(EventKind::CliEnvironmentGenerationsHistory(
                 CliEnvironmentPayload::new(env_detail_from_concrete(&flox, &env)),

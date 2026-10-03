@@ -14,7 +14,6 @@ use tokio::fs;
 use toml_edit::{Key, TomlError};
 use tracing::{debug, instrument};
 
-use crate::subcommand_metric;
 use crate::utils::init::{
     METRICS_EVENTS_FILE_NAME,
     METRICS_LOCK_FILE_NAME,
@@ -28,7 +27,6 @@ pub struct ResetMetrics {}
 impl ResetMetrics {
     #[instrument(name = "reset-metrics", skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
-        subcommand_metric!("reset-metrics");
         let mut metrics_lock = LockFile::open(&flox.cache_dir.join(METRICS_LOCK_FILE_NAME))?;
         tokio::task::spawn_blocking(move || metrics_lock.lock()).await??;
 
@@ -84,7 +82,6 @@ impl ConfigArgs {
     /// handle config flags like commands
     #[instrument(name = "config", skip_all)]
     pub async fn handle(&self, config: Config, flox: Flox) -> Result<()> {
-        subcommand_metric!("config");
         match self {
             ConfigArgs::List => println!("{}", config.get_verbatim(&[])?),
             ConfigArgs::Reset => {

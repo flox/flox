@@ -10,7 +10,6 @@ use flox_rust_sdk::models::environment::fetcher::IncludeFetcher;
 use tracing::instrument;
 
 use crate::commands::SHELL_COMPLETION_FILE;
-use crate::subcommand_metric;
 
 /// Lock a manifest file read from the path specified or stdin if `-`.
 /// If provided, uses the lockfile from the path specified by `--lockfile`
@@ -31,8 +30,6 @@ pub struct LockManifest {
 impl LockManifest {
     #[instrument(name = "lock", skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
-        subcommand_metric!("lock");
-
         let manifest_path = if self.manifest == Path::new("-") {
             Path::new("/dev/stdin")
         } else {

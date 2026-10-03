@@ -23,7 +23,6 @@ use tracing::{debug, info, instrument};
 
 use super::{EnvironmentSelect, environment_select};
 use crate::commands::SHELL_COMPLETION_FILE;
-use crate::environment_subcommand_metric;
 use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message;
 use crate::utils::openers::first_in_path;
@@ -69,7 +68,6 @@ impl Containerize {
             .environment
             .detect_concrete_environment(&mut flox, "Containerize")
             .await?;
-        environment_subcommand_metric!("containerize", env);
         if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentContainerize(
             CliEnvironmentPayload::new(env_detail_from_concrete(&flox, &env)),
         )) {

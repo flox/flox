@@ -1,10 +1,5 @@
-//! Integration wrapper between the flox binary and the [`flox_events`] crate.
-//!
-//! The CLI emits two telemetry streams in parallel: the legacy
-//! `subcommand_metric!` pipeline (`cli/flox/src/utils/metrics.rs`) and the
-//! v2-events pipeline (this module + the [`flox_events`] crate). The two
-//! stacks share no code and write separate on-disk buffers.
-//! `config.flox.disable_metrics` silences both.
+//! Integration wrapper between the flox binary and the [`flox_events`] crate,
+//! the CLI's telemetry stream. `config.flox.disable_metrics` silences it.
 //!
 //! Authenticated invocations additionally carry a pseudonymous subject
 //! identifier as `auth_subject`. This wrapper derives it and `credential_type`
@@ -108,9 +103,8 @@ fn credential_type_from_kind(kind: CredentialKind) -> CredentialType {
 }
 
 /// Build the [`SharedMetadataTemplate`] stamped onto every v2 event emitted
-/// by this process. The fields mirror the legacy
-/// [`crate::utils::metrics::MetricEntry`] so downstream consumers can
-/// reconstruct the existing columns.
+/// by this process. The fields mirror the per-event fields of the retired
+/// legacy stream so downstream consumers keep their existing columns.
 fn shared_metadata_template(credential_type: CredentialType) -> SharedMetadataTemplate {
     let linux_release = sys_info::linux_os_release().ok();
     SharedMetadataTemplate {
@@ -160,7 +154,7 @@ fn architecture_from_system(system: &str) -> Option<String> {
 /// Try to build an [`EventsClient`] to install on the global
 /// [`flox_events::EventsHub`].
 ///
-/// Clients across invocations share an anonymous per-installation id via
+/// Clients across invocations share the per-installation device ID read by
 /// [`read_metrics_uuid`].
 ///
 /// Returns `None` if
@@ -315,8 +309,8 @@ fn read_env_lineage_fields(flox: &Flox, env: &ConcreteEnvironment) -> EnvLineage
 }
 
 /// Build an [`EnvDetail`] for the supplied [`ConcreteEnvironment`], using the
-/// same env-kind / env-ref mapping as the legacy
-/// `environment_subcommand_metric!` macro. Shared across call sites so the
+/// env-kind / env-ref mapping of the retired legacy stream. Shared across
+/// call sites so the
 /// per-kind match is not duplicated.
 fn env_detail_with_lineage(
     env: &ConcreteEnvironment,

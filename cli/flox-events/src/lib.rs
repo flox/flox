@@ -225,11 +225,9 @@ pub enum CredentialType {
 
 /// Shared metadata fields stamped onto every `cli.*` command event payload.
 ///
-/// These fields drive existing `cli.telemetry` reporting downstream, so the
-/// new pipeline carries them on its payloads to preserve continuity once the
-/// cutover flips production traffic. The shape mirrors the columns the legacy
-/// `MetricEntry` carries today (with `extras` deferred to per-domain payloads
-/// in later PRs).
+/// These fields drive existing reporting downstream. The shape mirrors the
+/// per-event fields of the retired legacy stream; its `extras` moved to
+/// per-domain payloads.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CommandPayload {
     /// Subcommand name derived from the parsed bpaf command (e.g. `install`,
@@ -872,8 +870,8 @@ impl CliBuildPayload {
 }
 
 /// Payload for [`EventKind::CliSearch`]. Carries the user-supplied
-/// search term verbatim, matching the legacy `subcommand_metric!(
-/// "search", "search_term" = …)` extras.
+/// search term verbatim, matching the `search_term` extra of the retired
+/// legacy stream.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CliSearchPayload {
     search_term: String,
@@ -2295,7 +2293,7 @@ mod pipeline_tests {
     }
 
     /// Guard drop leaves unexpired events in the on-disk buffer for a later
-    /// invocation to deliver, matching the legacy `MetricGuard`.
+    /// invocation to deliver.
     #[test]
     #[serial(global_events_client)]
     fn events_guard_drop_defers_unexpired_events() {
@@ -2322,9 +2320,8 @@ mod pipeline_tests {
         assert_eq!(buffered.lines().count(), 1, "event stays buffered on disk");
     }
 
-    /// A hub hands out at most one live guard, mirroring the legacy
-    /// `Hub::try_guard` invariant. Uses a local hub so it neither touches nor
-    /// races the global one.
+    /// A hub hands out at most one live guard. Uses a local hub so it
+    /// neither touches nor races the global one.
     #[test]
     fn try_guard_rejects_a_second_active_guard() {
         let hub = EventsHub::new();
