@@ -104,3 +104,59 @@ enable_blocking_telemetry_endpoints() {
   assert_output --partial "192.0.2.1"
   assert [ -s "$FLOX_DATA_DIR/events-v2.json" ]
 }
+
+# A flush sends only what is buffered, so once `reset-metrics` has deleted the
+# buffers, no buffered event recorded under the old device ID can be sent.
+@test "reset-metrics deletes the device ID, both event buffers and the send-telemetry log" {
+  # Fill both buffers and write a send-telemetry log under the current ID.
+  export _FLOX_FORCE_FLUSH_METRICS=true
+  run "$FLOX_BIN" envs --active
+  assert_success
+  wait_for_telemetry_flush
+  local old_uuid
+  old_uuid="$(cat "$FLOX_DATA_DIR/metrics-uuid")"
+  # Every file the reset deletes exists, so the checks below are not vacuous.
+  run grep -lF "$old_uuid" "$FLOX_DATA_DIR/events-v2.json" "$FLOX_CACHE_DIR/metrics-events-v2.json"
+  assert_success
+  assert_line "$FLOX_DATA_DIR/events-v2.json"
+  assert_line "$FLOX_CACHE_DIR/metrics-events-v2.json"
+  assert [ -e "$FLOX_DATA_DIR/events-v2.lock" ]
+  assert [ -e "$FLOX_CACHE_DIR/metrics-lock" ]
+  assert [ -s "$FLOX_CACHE_DIR/log/send-telemetry.log" ]
+
+  # Flushing stays forced, so a spawned sender would recreate the log.
+  run "$FLOX_BIN" reset-metrics
+  assert_success
+
+  run grep -rlF "$old_uuid" "$FLOX_DATA_DIR" "$FLOX_CACHE_DIR"
+  assert_failure 1
+  refute [ -e "$FLOX_DATA_DIR/metrics-uuid" ]
+  refute [ -e "$FLOX_DATA_DIR/events-v2.json" ]
+  refute [ -e "$FLOX_DATA_DIR/events-v2.lock" ]
+  refute [ -e "$FLOX_CACHE_DIR/metrics-events-v2.json" ]
+  refute [ -e "$FLOX_CACHE_DIR/metrics-lock" ]
+  refute [ -e "$FLOX_CACHE_DIR/log/send-telemetry.log" ]
+}
+
+@test "first command after reset-metrics shows the notice and buffers only the new device ID" {
+  run "$FLOX_BIN" envs --active
+  assert_success
+  local old_uuid
+  old_uuid="$(cat "$FLOX_DATA_DIR/metrics-uuid")"
+
+  run "$FLOX_BIN" reset-metrics
+  assert_success
+
+  run "$FLOX_BIN" envs --active
+  assert_success
+  assert_output --partial "FLOX_DISABLE_METRICS=true"
+  local new_uuid
+  new_uuid="$(cat "$FLOX_DATA_DIR/metrics-uuid")"
+  assert [ "$new_uuid" != "$old_uuid" ]
+
+  run jq -rs 'map(.device_id) | unique | .[]' "$FLOX_DATA_DIR/events-v2.json"
+  assert_success
+  assert_output "$new_uuid"
+  run grep -rlF "$old_uuid" "$FLOX_DATA_DIR" "$FLOX_CACHE_DIR"
+  assert_failure 1
+}
