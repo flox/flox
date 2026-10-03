@@ -1135,7 +1135,7 @@ impl AdminCommands {
 #[derive(Bpaf, Clone)]
 #[bpaf(hide)]
 enum InternalCommands {
-    /// Reset the metrics queue (if any), reset metrics ID, and re-prompt for consent
+    /// Delete the telemetry device ID, the unsent telemetry events and the send-telemetry log
     #[bpaf(command("reset-metrics"), hide)]
     ResetMetrics(#[bpaf(external(general::reset_metrics))] general::ResetMetrics),
 
