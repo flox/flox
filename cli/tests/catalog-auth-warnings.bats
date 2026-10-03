@@ -7,8 +7,9 @@
 # catalog auth gating is enforced server-side.
 #
 # Commands that never resolve (fully locked environments, empty manifests)
-# must stay quiet; any command that triggers a resolve warns, rate-limited to
-# once per 8 hours via a timestamp file in the cache directory.
+# must stay quiet, including about the logged-out state itself; any command
+# that triggers a resolve warns, rate-limited to once per 8 hours via a
+# timestamp file in the cache directory.
 #
 # bats file_tags=catalog-auth-warnings
 #
@@ -18,6 +19,7 @@ load test_support.bash
 
 # ---------------------------------------------------------------------------- #
 
+LOGGED_OUT="You are not logged in to FloxHub."
 RESOLVE_AUTH_WARNING="Resolving packages will require authentication to FloxHub in an upcoming release."
 RESOLVE_AUTH_DOCS_URL="https://go.flox.dev/auth"
 STAMP_FILE_NAME="resolve-auth-warning-timestamp.json"
@@ -59,6 +61,7 @@ teardown() {
   "$FLOX_BIN" init
   run "$FLOX_BIN" install hello
   assert_success
+  assert_output --partial "$LOGGED_OUT"
   assert_output --partial "$RESOLVE_AUTH_WARNING"
 }
 
@@ -150,6 +153,7 @@ teardown() {
   unset FLOX_FLOXHUB_TOKEN
   run "$FLOX_BIN" init
   assert_success
+  refute_output --partial "$LOGGED_OUT"
   refute_output --partial "$RESOLVE_AUTH_WARNING"
 }
 
@@ -157,12 +161,14 @@ teardown() {
   skip_x86_64_darwin_replay
   # Lock the environment while logged in, then activate logged out: the
   # lockfile means no resolve happens, so no warning — the case that must
-  # stay quiet for `flox activate` in shell rc files.
+  # stay quiet for `flox activate` in shell rc files. Activating does not
+  # need a login, so not even the logged-out state is reported.
   "$FLOX_BIN" init
   "$FLOX_BIN" install hello
   unset FLOX_FLOXHUB_TOKEN
   run "$FLOX_BIN" activate -- true
   assert_success
+  refute_output --partial "$LOGGED_OUT"
   refute_output --partial "$RESOLVE_AUTH_WARNING"
 }
 

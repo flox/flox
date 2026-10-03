@@ -62,8 +62,6 @@ teardown() {
   export FLOX_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjE3MDQwNjM2MDB9.-5VCofPtmYQuvh21EV1nEJhTFV_URkRP0WFu4QDPFxY"
 
   run "$FLOX_BIN" init
-  assert_output --partial 'You are not logged in to FloxHub.'
-  assert_output --partial "Run 'flox auth login' to log in."
 
   # Redirect stdin from /dev/null to ensure non-interactive mode
   run "$FLOX_BIN" push --owner owner < /dev/null

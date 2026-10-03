@@ -23,6 +23,7 @@ const RESOLVE_AUTH_WARNING_FILE_NAME: &str = "resolve-auth-warning-timestamp.jso
 const RESOLVE_AUTH_WARNING_EXPIRY: Duration = Duration::hours(8);
 
 const RESOLVE_AUTH_WARNING: &str = indoc! {"
+    You are not logged in to FloxHub.
     Resolving packages will require authentication to FloxHub in an upcoming release.
     See https://go.flox.dev/auth for more info.
     Run 'flox auth login' to authenticate now.\
