@@ -69,7 +69,7 @@ const TELEMETRY_NOTICE: &str = indoc! {"
       - whether Flox runs in CI, VS Code or Imageless Kubernetes, and which AI
         coding tool runs it
       - the value of FLOX_INVOCATION_SOURCE, when it is set
-      - the search terms you type, and the command names you search for
+      - the search terms you type
       - environment names, with the owner of each FloxHub environment
       - each environment's type, package count, generation and schema versions
       - for each activation: its mode, shell and invocation type, whether it
