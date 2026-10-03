@@ -5,6 +5,7 @@ use std::str::FromStr;
 use anyhow::{Context, Result};
 use bpaf::Bpaf;
 use flox_config::{Config, FLOX_CONFIG_FILE, ReadWriteError};
+use flox_events::{EventsBuffer, EventsHub};
 use flox_rust_sdk::flox::Flox;
 use fslock::LockFile;
 use indoc::indoc;
@@ -15,6 +16,7 @@ use toml_edit::{Key, TomlError};
 use tracing::{debug, instrument};
 
 use crate::subcommand_metric;
+use crate::utils::detached::{SEND_TELEMETRY_LOG_NAME, send_telemetry_log_dir};
 use crate::utils::message;
 use crate::utils::metrics::{
     METRICS_EVENTS_FILE_NAME,
@@ -28,28 +30,18 @@ pub struct ResetMetrics {}
 impl ResetMetrics {
     #[instrument(name = "reset-metrics", skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
-        subcommand_metric!("reset-metrics");
-        let mut metrics_lock = LockFile::open(&flox.cache_dir.join(METRICS_LOCK_FILE_NAME))?;
-        tokio::task::spawn_blocking(move || metrics_lock.lock()).await??;
+        // An event recorded from here on would carry the ID this command
+        // deletes, and would recreate the v2 buffer.
+        EventsHub::global().clear_client();
 
-        if let Err(err) =
-            tokio::fs::remove_file(flox.cache_dir.join(METRICS_EVENTS_FILE_NAME)).await
-        {
-            match err.kind() {
-                std::io::ErrorKind::NotFound => {},
-                _ => Err(err)?,
-            }
-        }
-
-        if let Err(err) = tokio::fs::remove_file(flox.data_dir.join(METRICS_UUID_FILE_NAME)).await {
-            match err.kind() {
-                std::io::ErrorKind::NotFound => {},
-                _ => Err(err)?,
-            }
-        }
+        let data_dir = flox.data_dir.clone();
+        let cache_dir = flox.cache_dir.clone();
+        tokio::task::spawn_blocking(move || delete_device_id_and_buffers(&data_dir, &cache_dir))
+            .await??;
 
         let notice = indoc! {"
             Successfully reset telemetry ID for this machine!
+            Deleted unsent telemetry events.
 
             A new ID will be assigned next time you use Flox.
 
@@ -62,6 +54,43 @@ impl ResetMetrics {
 
         message::plain(notice);
         Ok(())
+    }
+}
+
+/// Delete the device ID, the two event buffers and the send-telemetry log,
+/// which all hold the ID, and the buffers' lock files.
+///
+/// Holds the metrics lock throughout, so no process creates a new ID or
+/// appends to the legacy buffer until the old ID is gone. Deletes the device
+/// ID last, so when an earlier deletion fails, the old ID and the events
+/// recorded under it stay together and rerunning the command finishes the
+/// reset.
+fn delete_device_id_and_buffers(data_dir: &Path, cache_dir: &Path) -> Result<()> {
+    let metrics_lock_path = cache_dir.join(METRICS_LOCK_FILE_NAME);
+    let mut metrics_lock =
+        LockFile::open(&metrics_lock_path).context("Could not open metrics lock file")?;
+    metrics_lock
+        .lock()
+        .context("Could not lock metrics lock file")?;
+
+    remove_file_if_present(&cache_dir.join(METRICS_EVENTS_FILE_NAME))?;
+    EventsBuffer::delete(data_dir)?;
+    remove_file_if_present(&send_telemetry_log_dir(cache_dir).join(SEND_TELEMETRY_LOG_NAME))?;
+    remove_file_if_present(&data_dir.join(METRICS_UUID_FILE_NAME))?;
+
+    // Best effort: the lock file holds no data. Deleting it while it is held
+    // has the effect described on `EventsBuffer::delete`: a process already
+    // waiting on it and a process that starts later do not exclude each other.
+    if let Err(err) = remove_file_if_present(&metrics_lock_path) {
+        debug!(error = %err, "Failed to delete metrics lock file");
+    }
+    Ok(())
+}
+
+fn remove_file_if_present(path: &Path) -> Result<()> {
+    match std::fs::remove_file(path) {
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(()),
+        result => result.with_context(|| format!("Could not delete {}", path.display())),
     }
 }
 
@@ -283,5 +312,50 @@ mod tests {
               |                         ^
             invalid unquoted key, expected letters, numbers, `-`, `_`
         "#});
+    }
+
+    fn sorted_entries(dir: &Path) -> Vec<String> {
+        let mut names: Vec<String> = std::fs::read_dir(dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+        names
+    }
+
+    #[test]
+    fn delete_device_id_and_buffers_leaves_no_telemetry_files() {
+        let data_dir = tempfile::tempdir().unwrap();
+        let cache_dir = tempfile::tempdir().unwrap();
+        let log_dir = send_telemetry_log_dir(cache_dir.path());
+        std::fs::create_dir_all(&log_dir).unwrap();
+        drop(EventsBuffer::read(data_dir.path()).unwrap());
+        for path in [
+            data_dir.path().join(METRICS_UUID_FILE_NAME),
+            cache_dir.path().join(METRICS_EVENTS_FILE_NAME),
+            cache_dir.path().join(METRICS_LOCK_FILE_NAME),
+            log_dir.join(SEND_TELEMETRY_LOG_NAME),
+        ] {
+            std::fs::write(path, "").unwrap();
+        }
+
+        delete_device_id_and_buffers(data_dir.path(), cache_dir.path()).unwrap();
+
+        assert_eq!(sorted_entries(data_dir.path()), Vec::<String>::new());
+        assert_eq!(sorted_entries(cache_dir.path()), vec!["log"]);
+        assert_eq!(sorted_entries(&log_dir), Vec::<String>::new());
+    }
+
+    #[test]
+    fn delete_device_id_and_buffers_keeps_the_device_id_when_a_deletion_fails() {
+        let data_dir = tempfile::tempdir().unwrap();
+        let cache_dir = tempfile::tempdir().unwrap();
+        // A directory in place of the v2 buffer cannot be deleted as a file.
+        std::fs::create_dir(data_dir.path().join(flox_events::EVENTS_BUFFER_FILE_NAME)).unwrap();
+        std::fs::write(data_dir.path().join(METRICS_UUID_FILE_NAME), "").unwrap();
+
+        delete_device_id_and_buffers(data_dir.path(), cache_dir.path()).unwrap_err();
+
+        assert!(data_dir.path().join(METRICS_UUID_FILE_NAME).exists());
     }
 }
