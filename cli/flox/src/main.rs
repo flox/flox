@@ -111,7 +111,19 @@ fn main() -> ExitCode {
         return ExitCode::from(1);
     }
 
-    let config = Config::parse().unwrap_or_default();
+    // Fail closed when the config does not parse. The defaults enable metrics
+    // and leave the data and cache dirs empty, so they would create the
+    // metrics UUID in the current directory and initialize Sentry, whatever
+    // `disable_metrics` the unparsed sources set.
+    // `run()` parses the config again and reports the error
+    // (when a subcommand is dispatched).
+    let config = Config::parse().unwrap_or_else(|err| {
+        let error = format!("{err:#}");
+        debug!(%error, "Failed to parse config, disabling metrics");
+        let mut config = Config::default();
+        config.flox.disable_metrics = true;
+        config
+    });
     let metrics_uuid = if !config.flox.disable_metrics {
         init_telemetry_uuid(&config.flox.data_dir, &config.flox.cache_dir)
             .and_then(|_| read_metrics_uuid(&config))
