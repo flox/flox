@@ -8,7 +8,7 @@
 
 use std::fs::{File, OpenOptions};
 use std::os::fd::AsRawFd;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use anyhow::{Context, Result, bail};
@@ -212,6 +212,11 @@ impl DetachedCommand<'_> {
 
 /// The rolling log filename for the send-telemetry child.
 pub const SEND_TELEMETRY_LOG_NAME: &str = "send-telemetry.log";
+
+/// The directory under `cache_dir` that holds the send-telemetry log.
+pub fn send_telemetry_log_dir(cache_dir: &Path) -> PathBuf {
+    cache_dir.join("log")
+}
 
 #[cfg(test)]
 mod tests {
