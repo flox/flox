@@ -108,9 +108,18 @@ sharing environments, and administration.
 # ENVIRONMENT VARIABLES
 
 `$FLOX_DISABLE_METRICS`
-:   Variable for disabling the collection/sending of metrics data.
-    If set to `true`, prevents Flox from submitting basic metrics information
-    such as a unique token and the subcommand issued.
+:   Set to `true` to turn off telemetry.
+    Telemetry is the usage events and error reports that Flox sends to Flox and to Sentry (`sentry.io`).
+    Both carry a random device ID, which Flox links to your FloxHub account when you sign in.
+    FloxHub logs the requests the CLI sends it with your IP address, and turning telemetry off does not stop those requests.
+    Flox extensions can collect and send their own telemetry.
+
+    This variable overrides `disable_metrics` in every config file.
+    It accepts only `true` or `false`, in any letter case.
+    Any other value, `1` included, makes Flox commands fail with a configuration error.
+
+    See `disable_metrics` in [`flox-config(1)`](./flox-config.md) for how to turn telemetry off.
+    For what Flox collects, see [Flox data collection](https://flox.dev/docs/concepts/data-collection).
 
 `$FLOX_MAX_PARALLEL_DOWNLOADS`
 :   Variable for controlling parallel downloads when building an environment.
