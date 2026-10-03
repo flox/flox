@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use flox_core::{WriteError, write_atomically};
 use itertools::Itertools;
@@ -9,6 +9,7 @@ use toml_edit::{DocumentMut, Item, Key, Table, TableLike};
 use tracing::{debug, trace};
 
 use crate::config::Config;
+use crate::load::relative_dir;
 
 /// Error returned by [`Config::get()`]
 #[derive(Debug, Error)]
@@ -22,6 +23,8 @@ pub enum ReadWriteError {
     InvalidKey(Vec<Key>),
     #[error("Config key '{}' not in user configuration", _0.iter().map(|key| key.display_repr().into_owned()).collect_vec().join("."))]
     NotAUserValue(Vec<Key>),
+    #[error("{key} '{}' is not an absolute path", path.display())]
+    RelativeDir { key: &'static str, path: PathBuf },
     #[error(transparent)]
     TomlEdit(#[from] toml_edit::TomlError),
     #[error(transparent)]
@@ -121,6 +124,15 @@ pub(crate) fn write_to<V: Serialize>(
             let validation_config: Config = toml_edit::de::from_document(validation_document)?;
 
             validation_config.get_verbatim(path)?;
+
+            // Loading the config rejects a relative dir,
+            // which would leave every later command failing.
+            if let Some((dir_key, dir)) = relative_dir(&validation_config.flox) {
+                return Err(ReadWriteError::RelativeDir {
+                    key: dir_key,
+                    path: dir.to_path_buf(),
+                });
+            }
         },
     }
 
@@ -236,6 +248,23 @@ mod tests {
         let config_content =
             Config::write_to(None, &Key::parse("does_not_exist").unwrap(), Some("true"));
         assert!(matches!(config_content, Err(ReadWriteError::InvalidKey(_))));
+    }
+
+    #[test]
+    fn writing_relative_dir_is_rejected() {
+        for key in ["cache_dir", "data_dir", "state_dir"] {
+            let err = Config::write_to(None, &Key::parse(key).unwrap(), Some("flox")).unwrap_err();
+            assert_eq!(
+                err.to_string(),
+                format!("{key} 'flox' is not an absolute path")
+            );
+
+            for value in ["/tmp/flox", ""] {
+                let config_content =
+                    Config::write_to(None, &Key::parse(key).unwrap(), Some(value)).unwrap();
+                assert_eq!(config_content, format!("{key} = \"{value}\"\n"));
+            }
+        }
     }
 
     #[test]

@@ -2,13 +2,13 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use config::{Config as HierarchicalConfig, Environment};
 use itertools::{Either, Itertools};
 use tracing::debug;
 use xdg::BaseDirectories;
 
-use crate::config::{Config, FLOX_CONFIG_FILE, FLOX_DIR_NAME};
+use crate::config::{Config, FLOX_CONFIG_FILE, FLOX_DIR_NAME, FloxConfig};
 
 const FLOX_CONFIG_DIR_VAR: &str = "FLOX_CONFIG_DIR";
 
@@ -31,11 +31,53 @@ pub(crate) fn parse_with(
 ) -> Result<Config> {
     let final_config = raw_config_from_parts(flox_dirs, user_config_dir, system_config_dir, env)?;
 
-    let cli_config: Config = final_config
+    let mut cli_config: Config = final_config
         .to_owned()
         .try_deserialize()
         .context("Could not parse config")?;
+    resolve_flox_dirs(&mut cli_config.flox, flox_dirs).context("Could not parse config")?;
     Ok(cli_config)
+}
+
+/// Replace an empty `cache_dir`, `data_dir` or `state_dir` with its default
+/// and reject a relative one.
+///
+/// Either would otherwise resolve against the current directory,
+/// so Flox would write its files into whichever directory it runs in.
+fn resolve_flox_dirs(config: &mut FloxConfig, flox_dirs: &BaseDirectories) -> Result<()> {
+    let dirs = [
+        (&mut config.cache_dir, flox_dirs.get_cache_home()),
+        (&mut config.data_dir, flox_dirs.get_data_home()),
+        (&mut config.state_dir, flox_dirs.get_state_home()),
+    ];
+    for (dir, default) in dirs {
+        if dir.as_os_str().is_empty() {
+            *dir = default.context("$HOME not set")?;
+        }
+    }
+    if let Some((key, dir)) = relative_dir(config) {
+        bail!(
+            "{key} '{}' is not an absolute path; set 'FLOX_{}' and '{key}' in flox.toml to an absolute path or unset them",
+            dir.display(),
+            key.to_uppercase()
+        );
+    }
+    Ok(())
+}
+
+/// The first of `cache_dir`, `data_dir` and `state_dir` that holds a
+/// relative path, with its config key.
+///
+/// An empty value is not relative: it stands for the default.
+pub(crate) fn relative_dir(config: &FloxConfig) -> Option<(&'static str, &Path)> {
+    [
+        ("cache_dir", &config.cache_dir),
+        ("data_dir", &config.data_dir),
+        ("state_dir", &config.state_dir),
+    ]
+    .into_iter()
+    .find(|(_, dir)| !dir.as_os_str().is_empty() && dir.is_relative())
+    .map(|(key, dir)| (key, dir.as_path()))
 }
 
 /// Locates the system wide flox config dir.
@@ -391,5 +433,112 @@ mod tests {
         assert_eq!(config.flox.floxhub_url, Some(floxhub_url.parse().unwrap()));
         assert!(config.flox.disable_metrics);
         assert_eq!(config.flox.search_limit, Some(search_limit));
+    }
+
+    /// An empty dir from the environment or a config file must not resolve
+    /// to the current directory.
+    #[test]
+    fn empty_dirs_fall_back_to_defaults() {
+        let flox_dirs = mock_flox_dirs();
+        let user_config_dir = tempfile::tempdir().unwrap();
+        fs::write(
+            user_config_dir.path().join(FLOX_CONFIG_FILE),
+            "data_dir = \"\"\n",
+        )
+        .unwrap();
+
+        let env = [
+            ("FLOX_CACHE_DIR".into(), "".into()),
+            ("FLOX_STATE_DIR".into(), "".into()),
+        ];
+        let config = Config::parse_with(&flox_dirs, user_config_dir.path(), None, env).unwrap();
+
+        assert_eq!(
+            (
+                config.flox.cache_dir,
+                config.flox.data_dir,
+                config.flox.state_dir
+            ),
+            (
+                flox_dirs.get_cache_home().unwrap(),
+                flox_dirs.get_data_home().unwrap(),
+                flox_dirs.get_state_home().unwrap()
+            )
+        );
+
+        // An absolute value is kept.
+        let state_dir = tempfile::tempdir().unwrap();
+        let env = [(
+            "FLOX_STATE_DIR".into(),
+            state_dir.path().to_string_lossy().into_owned(),
+        )];
+        let config = Config::parse_with(&flox_dirs, user_config_dir.path(), None, env).unwrap();
+        assert_eq!(config.flox.state_dir, state_dir.path());
+    }
+
+    #[test]
+    fn relative_dirs_are_rejected() {
+        let user_config_dir = tempfile::tempdir().unwrap();
+        for (var, value) in [
+            ("FLOX_CACHE_DIR", "."),
+            ("FLOX_DATA_DIR", "flox-data"),
+            ("FLOX_STATE_DIR", "~/flox-state"),
+        ] {
+            let err = Config::parse_with(&mock_flox_dirs(), user_config_dir.path(), None, [(
+                var.to_string(),
+                value.to_string(),
+            )])
+            .unwrap_err();
+            let key = var.trim_start_matches("FLOX_").to_lowercase();
+            assert_eq!(
+                format!("{err:#}"),
+                format!(
+                    "Could not parse config: {key} '{value}' is not an absolute path; set '{var}' and '{key}' in flox.toml to an absolute path or unset them"
+                )
+            );
+        }
+
+        fs::write(
+            user_config_dir.path().join(FLOX_CONFIG_FILE),
+            "cache_dir = \"cache\"\n",
+        )
+        .unwrap();
+        let err =
+            Config::parse_with(&mock_flox_dirs(), user_config_dir.path(), None, []).unwrap_err();
+        assert_eq!(
+            format!("{err:#}"),
+            "Could not parse config: cache_dir 'cache' is not an absolute path; set 'FLOX_CACHE_DIR' and 'cache_dir' in flox.toml to an absolute path or unset them"
+        );
+    }
+
+    /// The default that replaces an empty dir must be absolute too.
+    #[test]
+    fn empty_dir_with_relative_default_is_rejected() {
+        let user_config_dir = tempfile::tempdir().unwrap();
+        let absolute_dir = tempfile::tempdir().unwrap();
+        let absolute_dir = absolute_dir.path().to_string_lossy().into_owned();
+
+        // xdg ignores a relative `XDG_*_HOME` but not a relative `HOME`.
+        let flox_dirs = temp_env::with_vars(
+            [
+                ("HOME", Some("relative-home")),
+                ("XDG_CACHE_HOME", None),
+                ("XDG_DATA_HOME", None),
+                ("XDG_STATE_HOME", None),
+            ],
+            BaseDirectories::new,
+        );
+        let env = [
+            ("FLOX_CACHE_DIR".into(), "".into()),
+            ("FLOX_DATA_DIR".into(), absolute_dir.clone()),
+            ("FLOX_STATE_DIR".into(), absolute_dir),
+        ];
+        let err = Config::parse_with(&flox_dirs, user_config_dir.path(), None, env).unwrap_err();
+        let err = format!("{err:#}");
+        assert!(
+            err.starts_with("Could not parse config: cache_dir 'relative-home/.cache")
+                && err.contains("' is not an absolute path;"),
+            "{err}"
+        );
     }
 }
