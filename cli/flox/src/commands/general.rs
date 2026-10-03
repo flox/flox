@@ -22,7 +22,7 @@ use crate::utils::metrics::{
     METRICS_UUID_FILE_NAME,
 };
 
-// Reset the metrics queue (if any), reset metrics ID, and re-prompt for consent
+// Delete the telemetry device ID and the unsent legacy telemetry events
 #[derive(Bpaf, Clone)]
 pub struct ResetMetrics {}
 impl ResetMetrics {
@@ -49,15 +49,17 @@ impl ResetMetrics {
         }
 
         let notice = indoc! {"
-            Successfully reset telemetry ID for this machine!
+            Deleted your telemetry device ID, if one existed.
+            Deleted your unsent events from the legacy telemetry stream.
+            Your other unsent events, and the events of this command, keep the old ID.
+            Flox sends them when telemetry is on.
+            The reset does not delete events that Flox has already received.
+            Flox creates a new device ID the next time it runs with telemetry on.
 
-            A new ID will be assigned next time you use Flox.
+            To turn telemetry off, do one of the following:
 
-            The collection of metrics can be disabled in the following ways:
-
-                environment: FLOX_DISABLE_METRICS=true
-                user-wide: flox config --set disable_metrics true
-                system-wide: update /etc/flox.toml as described in flox-config(1)
+              add 'export FLOX_DISABLE_METRICS=true' to your shell profile
+              run 'flox config --set disable_metrics true'
         "};
 
         message::plain(notice);
