@@ -112,6 +112,14 @@ sharing environments, and administration.
     If set to `true`, prevents Flox from submitting basic metrics information
     such as a unique token and the subcommand issued.
 
+`$DO_NOT_TRACK`
+:   Set `DO_NOT_TRACK=true` to turn off telemetry.
+    Flox treats every value except an empty value, `0` and `false` as `true`.
+    Flox ignores letter case and surrounding whitespace in the value.
+    `DO_NOT_TRACK` turns off everything that `disable_metrics = true` turns off.
+    It overrides `FLOX_DISABLE_METRICS=false` and `disable_metrics = false` in every config file.
+    The installer script at get.flox.dev does not read `DO_NOT_TRACK`.
+
 `$FLOX_MAX_PARALLEL_DOWNLOADS`
 :   Variable for controlling parallel downloads when building an environment.
     By default, every package for an environment is downloaded in parallel, but

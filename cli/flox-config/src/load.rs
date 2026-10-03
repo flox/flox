@@ -4,6 +4,7 @@ use std::{env, fs};
 
 use anyhow::{Context, Result};
 use config::{Config as HierarchicalConfig, Environment};
+use flox_core::vars::{DO_NOT_TRACK_VAR, do_not_track};
 use itertools::{Either, Itertools};
 use tracing::debug;
 use xdg::BaseDirectories;
@@ -29,12 +30,23 @@ pub(crate) fn parse_with(
     system_config_dir: Option<&Path>,
     env: impl IntoIterator<Item = (String, String)>,
 ) -> Result<Config> {
+    let env = env.into_iter().collect::<Vec<_>>();
+    let tracking_refused = env
+        .iter()
+        .any(|(key, value)| key == DO_NOT_TRACK_VAR && do_not_track(value));
     let final_config = raw_config_from_parts(flox_dirs, user_config_dir, system_config_dir, env)?;
 
-    let cli_config: Config = final_config
+    let mut cli_config: Config = final_config
         .to_owned()
         .try_deserialize()
         .context("Could not parse config")?;
+
+    // `DO_NOT_TRACK` wins over `disable_metrics = false` from every source,
+    // including `FLOX_DISABLE_METRICS=false`: the NixOS module, for example,
+    // exports that `false` to every Flox service by default.
+    if tracking_refused {
+        cli_config.flox.disable_metrics = true;
+    }
     Ok(cli_config)
 }
 
@@ -391,5 +403,64 @@ mod tests {
         assert_eq!(config.flox.floxhub_url, Some(floxhub_url.parse().unwrap()));
         assert!(config.flox.disable_metrics);
         assert_eq!(config.flox.search_limit, Some(search_limit));
+    }
+
+    /// Parse `disable_metrics` from a system and a user config file, each
+    /// setting it to `files_value`, plus the given environment.
+    fn disable_metrics_with(files_value: bool, env: &[(&str, &str)]) -> bool {
+        let user_config_dir = tempfile::tempdir().unwrap();
+        let system_config_dir = tempfile::tempdir().unwrap();
+        for dir in [&user_config_dir, &system_config_dir] {
+            fs::write(
+                dir.path().join(FLOX_CONFIG_FILE),
+                format!("disable_metrics = {files_value}\n"),
+            )
+            .unwrap();
+        }
+        let env = env
+            .iter()
+            .map(|(key, value)| (key.to_string(), value.to_string()));
+
+        Config::parse_with(
+            &mock_flox_dirs(),
+            user_config_dir.path(),
+            Some(system_config_dir.path()),
+            env,
+        )
+        .unwrap()
+        .flox
+        .disable_metrics
+    }
+
+    #[test]
+    fn do_not_track_overrides_disable_metrics_false_in_files_and_env() {
+        assert!(disable_metrics_with(false, &[
+            ("FLOX_DISABLE_METRICS", "false"),
+            ("DO_NOT_TRACK", "1"),
+        ]));
+    }
+
+    #[test]
+    fn do_not_track_values_that_disable_metrics() {
+        for value in ["1", "true", "TRUE", "yes", "anything", " 1 ", "2"] {
+            assert!(
+                disable_metrics_with(false, &[("DO_NOT_TRACK", value)]),
+                "DO_NOT_TRACK={value:?} should disable metrics"
+            );
+        }
+    }
+
+    #[test]
+    fn do_not_track_values_that_leave_metrics_unchanged() {
+        for value in ["", "  ", "0", " 0 ", "false", "FALSE", "False", " false "] {
+            assert!(
+                !disable_metrics_with(false, &[("DO_NOT_TRACK", value)]),
+                "DO_NOT_TRACK={value:?} should not disable metrics"
+            );
+            assert!(
+                disable_metrics_with(true, &[("DO_NOT_TRACK", value)]),
+                "DO_NOT_TRACK={value:?} should not enable metrics"
+            );
+        }
     }
 }
