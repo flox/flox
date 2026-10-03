@@ -5,6 +5,7 @@ use std::str::FromStr;
 use anyhow::{Context, Result};
 use bpaf::Bpaf;
 use flox_config::{Config, FLOX_CONFIG_FILE, ReadWriteError};
+use flox_core::vars::do_not_track_from_env;
 use flox_rust_sdk::flox::Flox;
 use fslock::LockFile;
 use indoc::indoc;
@@ -55,7 +56,7 @@ impl ResetMetrics {
 
             The collection of metrics can be disabled in the following ways:
 
-                environment: FLOX_DISABLE_METRICS=true
+                environment: FLOX_DISABLE_METRICS=true or DO_NOT_TRACK=true
                 user-wide: flox config --set disable_metrics true
                 system-wide: update /etc/flox.toml as described in flox-config(1)
         "};
@@ -111,7 +112,16 @@ impl ConfigArgs {
                     },
                 };
 
-                update_config(&flox.config_dir, key, Some(parsed_value))?
+                let enables_metrics =
+                    key == "disable_metrics" && parsed_value == Value::Bool(false);
+                update_config(&flox.config_dir, key, Some(parsed_value))?;
+
+                if enables_metrics && do_not_track_from_env() {
+                    message::info(indoc! {"
+                        DO_NOT_TRACK still disables telemetry.
+                        Flox ignores 'disable_metrics = false' while DO_NOT_TRACK is set.
+                    "});
+                }
             },
             ConfigArgs::Delete(ConfigDelete { key, .. }) => {
                 update_config::<()>(&flox.config_dir, key, None)?

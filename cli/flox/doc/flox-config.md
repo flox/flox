@@ -36,6 +36,8 @@ Config values are read from the following sources in order of descending priorit
 3. System settings from `/etc/flox.toml` or `FLOX_SYSTEM_CONFIG_DIR/flox.toml`.
 4. `flox` provided defaults.
 
+`DO_NOT_TRACK=true` sets `disable_metrics` to `true`, whatever the other sources set.
+
 `flox config` commands that mutate configuration always write to the user config file
 determined in step 2.
 
@@ -144,6 +146,7 @@ flox config --set 'trusted_environments."owner/name"' trust
 
 `disable_metrics`
 :   Disable collecting and sending usage metrics.
+    `DO_NOT_TRACK=true` forces this option to `true`.
 
 `floxhub_token`
 :   Token to authenticate on FloxHub.
@@ -209,3 +212,11 @@ flox config --set 'trusted_environments."owner/name"' trust
 :   Variable for disabling the collection/sending of metrics data.
     If set to `true`, prevents Flox from submitting basic metrics information
     such as a unique token and the subcommand issued.
+
+`$DO_NOT_TRACK`
+:   Set `DO_NOT_TRACK=true` to turn off telemetry.
+    Flox treats every value except an empty value, `0` and `false` as `true`.
+    Flox ignores letter case and surrounding whitespace in the value.
+    `DO_NOT_TRACK` turns off everything that `disable_metrics = true` turns off.
+    It overrides `FLOX_DISABLE_METRICS=false` and `disable_metrics = false` in every config file.
+    The installer script at get.flox.dev does not read `DO_NOT_TRACK`.

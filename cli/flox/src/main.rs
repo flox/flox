@@ -19,7 +19,7 @@ use commands::{
 };
 use flox_config::Config;
 use flox_core::sentry::init_sentry;
-use flox_core::vars::{FLOX_VERSION_STRING, FLOX_VERSION_VAR};
+use flox_core::vars::{FLOX_VERSION_STRING, FLOX_VERSION_VAR, do_not_track_from_env};
 use flox_events::{EventsHub, LifecycleFields};
 use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::models::environment::EnvironmentError;
@@ -111,7 +111,13 @@ fn main() -> ExitCode {
         return ExitCode::from(1);
     }
 
-    let config = Config::parse().unwrap_or_default();
+    // `run()` reports a parse error; until then, defaults stand in for the
+    // config, except that `DO_NOT_TRACK` still disables metrics.
+    let config = Config::parse().unwrap_or_else(|_| {
+        let mut config = Config::default();
+        config.flox.disable_metrics = do_not_track_from_env();
+        config
+    });
     let metrics_uuid = if !config.flox.disable_metrics {
         init_telemetry_uuid(&config.flox.data_dir, &config.flox.cache_dir)
             .and_then(|_| read_metrics_uuid(&config))
