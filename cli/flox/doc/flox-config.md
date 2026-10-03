@@ -27,9 +27,8 @@ and some built-in defaults.
 Config values are read from the following sources in order of descending priority:
 
 1. Environment variables.
-   All config options may be set by prefixing with `FLOX_` and using
-   `SCREAMING_SNAKE_CASE`.
-   For example, `disable_metrics` may be set with `FLOX_DISABLE_METRICS=true`.
+   To set a config option with an environment variable, prefix its name with `FLOX_` and write it in `SCREAMING_SNAKE_CASE`.
+   For example, `FLOX_DISABLE_METRICS=true` sets `disable_metrics` to `true`.
 2. User customizations from `$FLOX_CONFIG_DIR/flox.toml` if set,
    otherwise `flox/flox.toml` in `$XDG_CONFIG_HOME` or any of `$XDG_CONFIG_DIRS`,
    wherever it is found first.
@@ -145,7 +144,24 @@ flox config --set 'trusted_environments."owner/name"' trust
     take effect (default: false).
 
 `disable_metrics`
-:   Disable collecting and sending usage metrics.
+:   Set to `true` to turn off telemetry (default: `false`).
+    Telemetry is the usage events and error reports that Flox sends to Flox and to Sentry (`sentry.io`).
+    Both carry a random device ID, which Flox links to your FloxHub account when you sign in.
+    FloxHub logs the requests the CLI sends it, such as package searches and installs, with your IP address.
+    Flox extensions can collect and send their own telemetry.
+    For what Flox collects, see [Flox data collection](https://flox.dev/docs/concepts/data-collection).
+
+    Turning telemetry off stops usage events and error reports.
+    It does not stop the requests that features such as search and install need.
+    It does not delete the device ID or the events that Flox saved but has not sent, and Flox sends them if you turn telemetry back on.
+
+    `FLOX_DISABLE_METRICS=true` sets `disable_metrics` to `true`.
+    To turn telemetry off before Flox sends anything, add `export FLOX_DISABLE_METRICS=true` to your shell profile before you run Flox.
+    Flox creates the device ID when it prints the first-run notice.
+    To turn it off for every user on a machine, set `disable_metrics = true` in `/etc/flox.toml`.
+    Environment variables and your user config file override `/etc/flox.toml`.
+    On macOS, installing or upgrading Flox with the `.pkg` installer or Homebrew replaces `/etc/flox.toml`, so set it again after each upgrade.
+    For CI, Imageless Kubernetes and NixOS, see [Turn off telemetry](https://flox.dev/docs/concepts/data-collection#turn-off-telemetry).
 
 `floxhub_token`
 :   Token to authenticate on FloxHub.
@@ -157,7 +173,8 @@ flox config --set 'trusted_environments."owner/name"' trust
 `installer_channel`
 :   Release channel to use when checking for updates to Flox.
     Valid values are `stable`, `nightly`, or `qa`.
-    (default: `stable`)
+    When `installer_channel` is not set, Flox does not check for updates.
+    (default: not set)
 
 `search_limit`
 :   How many items `flox search` should show by default.
@@ -209,6 +226,8 @@ flox config --set 'trusted_environments."owner/name"' trust
 # ENVIRONMENT VARIABLES
 
 `$FLOX_DISABLE_METRICS`
-:   Variable for disabling the collection/sending of metrics data.
-    If set to `true`, prevents Flox from submitting basic metrics information
-    such as a unique token and the subcommand issued.
+:   Set to `true` to turn off telemetry.
+    This variable overrides `disable_metrics` in every config file.
+    It accepts only `true` or `false`, in any letter case.
+    Any other value, `1` included, makes Flox commands fail with a configuration error.
+    See `disable_metrics` for what telemetry is and what turning it off does not stop.
