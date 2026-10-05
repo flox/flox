@@ -28,6 +28,7 @@ use crate::{
     ScanError,
     StaleLockError,
     lock_references,
+    materialize_catalogs,
     render_unresolvable,
     scan_package,
     write_lock,
@@ -65,6 +66,9 @@ pub enum CatalogLockError {
 
     #[error(transparent)]
     Lockfile(#[from] LockfileError),
+
+    #[error("catalog lock cannot be materialized: {0:#}")]
+    Materialize(anyhow::Error),
 }
 
 /// Resolve `references` through the catalog, or produce an empty lock
@@ -114,6 +118,16 @@ pub async fn lock_project_catalog(
 ) -> Result<BTreeSet<CatalogRef>, CatalogLockError> {
     let references = scan_references(expressions_dir, rel_file_paths)?;
     let lock = resolve_lock(client, references.clone()).await?;
+    materialize_catalogs(&lock).map_err(|error| {
+        let scanned = references
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(", ");
+        CatalogLockError::Materialize(
+            error.context(format!("while locking catalog references: {scanned}")),
+        )
+    })?;
     write_lock(&lock, &lockfile_path)?;
     debug!(
         path = %lockfile_path.as_ref().display(),
