@@ -6,6 +6,7 @@
   system ? builtins.currentSystem or null,
 }:
 let
+  # The NEF overlay exposes this same pinned instance as `catalogs.nixpkgs`.
   nixpkgs = import nixpkgs-flake {
     inherit system;
     config = {

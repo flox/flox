@@ -140,6 +140,16 @@ fn lock_from_response(mut response: BuildInputsLookupResponse) -> Result<BuildLo
         return Err(LockError::Unresolvable(group.unresolvable));
     }
 
+    for (reference, advisory) in &group.not_lockable {
+        if advisory.kind != "base_catalog"
+            || (reference != "nixpkgs" && !reference.starts_with("nixpkgs."))
+        {
+            return Err(LockError::Transform(anyhow::anyhow!(
+                "catalog reference '{reference}' cannot be locked"
+            )));
+        }
+    }
+
     let direct = group.matched.keys();
 
     debug!(resolved = group.lock.len(), "all references resolved");
