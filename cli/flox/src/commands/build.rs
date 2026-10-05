@@ -33,6 +33,7 @@ use flox_rust_sdk::utils::{CommandExt, FLOX_INTERPRETER};
 use floxhub_client::{BaseCatalogUrl, CatalogClientTrait, FloxhubClientError};
 use indoc::formatdoc;
 use itertools::Itertools;
+/// Share the relock command with the crate that reports legacy locks.
 pub(crate) use nef_lock_catalog::UPDATE_CATALOGS_COMMAND;
 use nef_lock_catalog::{NixFlakeref, catalog_lockfile_path, lock_project_catalog};
 use thiserror::Error;
@@ -328,9 +329,9 @@ impl Build {
             "has_manifest_build" = has_manifest_build
         );
 
-        // The catalog lock the NEF evals consume, created by the CLI: the
-        // committed .flox/catalog.lock exactly as found, or a fresh
-        // ephemeral lock living only for this invocation. Scanning is
+        // The catalog lock the NEF evals consume, created by the CLI: a
+        // temporary builder file materialized from the committed lock, or
+        // from fresh resolution when no committed lock exists. Scanning is
         // scoped to the expressions being built — the scanner follows
         // imports, so their references are exactly what the evals look up —
         // except when a manifest build is among the targets, whose `${pkg}`
@@ -372,7 +373,10 @@ impl Build {
         };
 
         let catalog_lock = match &*expression_lock_rel_paths {
-            [] => None,
+            [] => {
+                validate_manifest_only_catalog_lock(&env.dot_flox_path())?;
+                None
+            },
             expression_lock_rel_paths => Some(
                 BuildLockGuard::new_existing_or_ephemeral(
                     &flox.floxhub_client,
@@ -612,15 +616,33 @@ impl Build {
 
         let rel_file_paths =
             expression_rel_paths(&PackageTargets::new(&manifest, &expression_ref)?.all());
+        let lockfile_path = catalog_lockfile_path(env.dot_flox_path());
 
         if rel_file_paths.is_empty() {
-            message::plain(
-                "No Nix expression builds found; only expression builds reference the catalog.",
-            );
+            if lockfile_path.exists() {
+                let old: serde_json::Value =
+                    serde_json::from_slice(&std::fs::read(&lockfile_path)?)?;
+                let discarded = old
+                    .get("locked_inputs")
+                    .or_else(|| old.get("direct_catalog_inputs"))
+                    .and_then(serde_json::Value::as_object)
+                    .map_or(0, serde_json::Map::len);
+                nef_lock_catalog::write_lock(
+                    &nef_lock_catalog::BuildLock::default(),
+                    &lockfile_path,
+                )?;
+                message::created(formatdoc! {"
+                No Nix expression builds found; replaced '.flox/catalog.lock' \
+                with an empty version 2 lock, discarding {discarded} entries.
+                Commit the file so every revision builds against the same inputs."});
+            } else {
+                message::plain(
+                    "No Nix expression builds found; only expression builds reference the catalog.",
+                );
+            }
             return Ok(());
         }
 
-        let lockfile_path = catalog_lockfile_path(env.dot_flox_path());
         let references = lock_project_catalog(
             &flox.floxhub_client,
             nix_expression_dir(&env),
@@ -635,9 +657,9 @@ impl Build {
                 Commit the file so every revision builds against the same inputs."});
         } else {
             message::created(formatdoc! {"
-                Locked {count} catalog reference(s) to '.flox/catalog.lock'.
+                Locked {count} non-base catalog reference(s) to '.flox/catalog.lock'.
                 Commit the file so every revision builds against the same inputs.",
-                count = references.len(),
+                count = references.iter().filter(|reference| !reference.to_string().starts_with("catalogs.nixpkgs.")).count(),
             });
         }
         Ok(())
@@ -905,6 +927,14 @@ pub(crate) fn expression_rel_paths(targets: &[PackageTarget]) -> Vec<PathBuf> {
             PackageTargetKind::ManifestBuild { .. } => None,
         })
         .collect()
+}
+
+fn validate_manifest_only_catalog_lock(dot_flox_path: &Path) -> Result<()> {
+    let path = catalog_lockfile_path(dot_flox_path);
+    if path.exists() {
+        nef_lock_catalog::read_lock(&path)?;
+    }
+    Ok(())
 }
 
 pub(crate) fn packages_to_build<'o>(
