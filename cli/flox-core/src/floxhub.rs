@@ -68,6 +68,18 @@ pub struct Floxhub {
     git_url_overridden: bool,
 }
 
+/// The labels between `hub` and `flox.dev` when `host` has the hosted (SaaS)
+/// shape `hub.<...>.flox.dev`, and `None` for any other host.
+///
+/// The single definition of "hosted", so URL routing and
+/// [`Floxhub::is_hosted`] cannot disagree.
+fn hosted_intermediate_labels(host: &str) -> Option<Vec<&str>> {
+    match host.split('.').collect::<Vec<_>>().as_slice() {
+        ["hub", intermediate @ .., "flox", "dev"] => Some(intermediate.to_vec()),
+        _ => None,
+    }
+}
+
 impl Floxhub {
     pub fn new(
         base_url: Url,
@@ -118,31 +130,28 @@ impl Floxhub {
             return Ok(url_override);
         }
 
-        let host_components = base_url
+        let host = base_url
             .host_str()
-            .ok_or(FloxhubError::CannotBeABase(base_url.to_string()))?
-            .split(".")
-            .collect::<Vec<_>>();
-        match host_components.as_slice() {
-            ["hub", intermediate @ .., "flox", "dev"] => {
-                let host: String = [&[transform.saas_prefix], intermediate, &["flox", "dev"]]
-                    .into_iter()
-                    .flatten()
-                    .join(".");
+            .ok_or(FloxhubError::CannotBeABase(base_url.to_string()))?;
+        let Some(intermediate) = hosted_intermediate_labels(host) else {
+            let url = Self::route_url(base_url, transform.path)?;
+            debug!(%base_url, transformed=%url, "Transformed Flox Enterprise url");
+            return Ok(url);
+        };
 
-                let mut url = base_url.clone();
-                url.set_host(Some(&host)).unwrap();
-                url.set_path(transform.saas_path);
+        let host = [&[transform.saas_prefix], intermediate.as_slice(), &[
+            "flox", "dev",
+        ]]
+        .into_iter()
+        .flatten()
+        .join(".");
 
-                debug!(%base_url, transformed=%url, "Transformed Flox SaaS url");
-                Ok(url)
-            },
-            _ => {
-                let url = Self::route_url(base_url, transform.path)?;
-                debug!(%base_url, transformed=%url, "Transformed Flox Enterprise url");
-                Ok(url)
-            },
-        }
+        let mut url = base_url.clone();
+        url.set_host(Some(&host)).unwrap();
+        url.set_path(transform.saas_path);
+
+        debug!(%base_url, transformed=%url, "Transformed Flox SaaS url");
+        Ok(url)
     }
 
     /// Return the base url of the FloxHub instance
@@ -153,19 +162,13 @@ impl Floxhub {
 
     /// Whether this FloxHub is the hosted (SaaS) deployment.
     ///
-    /// Keys on the same `hub.<...>.flox.dev` host shape as
-    /// [`Self::resolve_effective_url`], so staging and preview bases count as
-    /// hosted while enterprise / on-premise deployments never match.
+    /// Staging and preview bases count as hosted; enterprise / on-premise
+    /// deployments never match.
     pub fn is_hosted(&self) -> bool {
-        let Some(host) = self.base_url.host_str() else {
-            return false;
-        };
-        matches!(host.split('.').collect::<Vec<_>>().as_slice(), [
-            "hub",
-            ..,
-            "flox",
-            "dev"
-        ])
+        self.base_url
+            .host_str()
+            .and_then(hosted_intermediate_labels)
+            .is_some()
     }
 
     /// Return the url of the FloxHub api endpoint

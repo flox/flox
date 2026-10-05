@@ -371,7 +371,7 @@ impl FloxArgs {
             &config.flox.config_dir,
             &config.flox.cache_dir,
         );
-        let authn_mode = effective_authn_mode(&config, &floxhub);
+        let authn_mode = config.effective_authn_mode(&floxhub);
         let uses_token_auth = matches!(authn_mode, flox_config::AuthnMode::Token);
         let should_store_credentials = uses_token_auth && !self.is_prompt_hook_flow();
         let credential = if should_store_credentials {
@@ -645,18 +645,6 @@ impl FloxArgs {
                 );
             }
         }
-    }
-}
-
-/// Resolve the effective authn mode.
-/// When `floxhub_authn_mode` is unset, the hosted FloxHub always
-/// authenticates via token (Auth0); other deployments get the default
-/// compiled into this build.
-fn effective_authn_mode(config: &Config, floxhub: &Floxhub) -> flox_config::AuthnMode {
-    match &config.flox.floxhub_authn_mode {
-        Some(mode) => mode.clone(),
-        None if floxhub.is_hosted() => flox_config::AuthnMode::Token,
-        None => flox_config::AuthnMode::default(),
     }
 }
 

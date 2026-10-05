@@ -7,6 +7,7 @@ use anyhow::Result;
 use flox_core::activate::context::AutoActivateFishMode;
 use flox_core::data::environment_ref::RemoteEnvironmentRef;
 use flox_core::features::Features;
+use flox_core::floxhub::Floxhub;
 use glob::{MatchOptions, Pattern};
 use serde::{Deserialize, Serialize};
 use toml_edit::Key;
@@ -48,7 +49,7 @@ impl Default for AuthnMode {
     /// `FLOX_DEFAULT_AUTHN_MODE=kerberos` so their users need no
     /// `floxhub_authn_mode` config, and the deployment is not named in source.
     /// The hosted FloxHub only supports token auth and overrides this default;
-    /// see the `effective_authn_mode` helpers in consumers.
+    /// see [`Config::effective_authn_mode`].
     ///
     /// The Nix interface (`defaultAuthnMode` on `pkgs/flox-cli`) rejects
     /// invalid values before invoking Cargo; a direct Cargo build with an
@@ -351,6 +352,19 @@ impl Display for InstallerChannel {
 }
 
 impl Config {
+    /// The authn mode to use against `floxhub`.
+    ///
+    /// An explicit `floxhub_authn_mode` always wins. When it is unset, the
+    /// hosted FloxHub authenticates via token (it supports nothing else);
+    /// other deployments get the default compiled into this build.
+    pub fn effective_authn_mode(&self, floxhub: &Floxhub) -> AuthnMode {
+        match &self.flox.floxhub_authn_mode {
+            Some(mode) => mode.clone(),
+            None if floxhub.is_hosted() => AuthnMode::Token,
+            None => AuthnMode::default(),
+        }
+    }
+
     /// Creates a [Config] from the environment and config files
     pub fn parse() -> Result<Config> {
         load::parse()
@@ -408,6 +422,40 @@ mod tests {
             let serialized = serde_json::to_string(&channel).unwrap();
             prop_assert_eq!(display_quoted, serialized);
         }
+    }
+
+    /// An explicit mode wins everywhere, the hosted FloxHub is token-only,
+    /// and only other deployments see the compiled-in default.
+    #[test]
+    fn effective_authn_mode_resolution_order() {
+        let hosted = Floxhub::new("https://hub.flox.dev".parse().unwrap(), None, None).unwrap();
+        let on_prem = Floxhub::new(
+            "https://floxhub.example.internal".parse().unwrap(),
+            None,
+            None,
+        )
+        .unwrap();
+        let explicit = |mode: AuthnMode| {
+            let mut config = Config::default();
+            config.flox.floxhub_authn_mode = Some(mode);
+            config
+        };
+        let unset = Config::default();
+
+        assert_eq!(
+            [
+                explicit(AuthnMode::Kerberos).effective_authn_mode(&hosted),
+                explicit(AuthnMode::Token).effective_authn_mode(&on_prem),
+                unset.effective_authn_mode(&hosted),
+                unset.effective_authn_mode(&on_prem),
+            ],
+            [
+                AuthnMode::Kerberos,
+                AuthnMode::Token,
+                AuthnMode::Token,
+                AuthnMode::default(),
+            ]
+        );
     }
 
     fn preferences(
