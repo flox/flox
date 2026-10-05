@@ -1217,13 +1217,102 @@ fn parse_publishable_remote_url(raw: &str, remote_name: &str) -> Result<Url, Pub
     Ok(url)
 }
 
+/// Turn a failed upstream lookup into product-level guidance.
+///
+/// The Git command output stays in the debug log; it never reaches the user.
+fn upstream_lookup_error(
+    git: &GitCommandProvider,
+    local_branch_ref: &str,
+    err: GitCommandGetOriginError,
+) -> PublishError {
+    let branch = local_branch_ref
+        .strip_prefix("refs/heads/")
+        .unwrap_or(local_branch_ref);
+    match err {
+        GitCommandGetOriginError::NoUpstream => {
+            let remote_hint = git
+                .remotes()
+                .ok()
+                .and_then(|r| match r.as_slice() {
+                    [single] if !single.is_empty() => Some(single.clone()),
+                    _ => None,
+                })
+                .unwrap_or_else(|| "REMOTE".to_string());
+            build_repo_err(&formatdoc! {"
+                Current branch '{branch}' has no upstream remote configured.
+                Set one with 'git branch --set-upstream-to={remote_hint}/{branch}'"
+            })
+        },
+        GitCommandGetOriginError::UpstreamNotABranch { upstream } => build_repo_err(&formatdoc! {"
+            Current branch '{branch}' tracks '{upstream}', which is not a branch.
+            Configure a branch upstream with 'git branch --set-upstream-to=REMOTE/{branch}'"
+        }),
+        GitCommandGetOriginError::AmbiguousLocalRef { ref_, rows } => {
+            debug!(%ref_, ?rows, "multiple upstream configurations found");
+            build_repo_err(&formatdoc! {"
+                Found multiple upstream configurations for '{ref_}'.
+                Remove the duplicate upstream settings from the repository's Git configuration, then retry publishing."
+            })
+        },
+        GitCommandGetOriginError::AccessDenied(cmd_err) => {
+            debug!("access denied reading the upstream remote: {cmd_err}");
+            build_repo_err(
+                "Could not access the remote repository.\n\
+                 Check your SSH agent ('ssh-add -l') or credential configuration.",
+            )
+        },
+        GitCommandGetOriginError::Command(cmd_err) => {
+            debug!("failed to read the upstream remote: {cmd_err}");
+            build_repo_err(&formatdoc! {"
+                Could not read the upstream remote of branch '{branch}'.
+                Check the repository's Git configuration, then retry publishing."
+            })
+        },
+    }
+}
+
+/// Turn a failed branch-containment check into product-level guidance.
+///
+/// Commands the user is asked to run are quoted. The Git command output stays
+/// in the debug log; it never reaches the user.
+fn containment_error(err: GitCommandError, remote: &str, branch: &str) -> PublishError {
+    match err {
+        GitCommandError::MissingRemoteBranch { remote, branch } => build_repo_err(&format!(
+            "Remote branch '{remote}/{branch}' no longer exists. Restore that branch or configure an existing branch upstream before publishing."
+        )),
+        GitCommandError::ShallowRepository => build_repo_err(&formatdoc! {"
+            This repository is a shallow clone, so its history is incomplete.
+            Download the full history with 'git fetch --unshallow {remote}', then retry publishing."
+        }),
+        GitCommandError::RemoteTipNotFetched { .. } => build_repo_err(&formatdoc! {"
+            The current tip of remote branch '{remote}/{branch}' is not in this repository.
+            Download it with 'git fetch {remote} {branch}', then retry publishing."
+        }),
+        ref cmd_err if cmd_err.is_access_denied() => {
+            debug!("access denied verifying branch containment: {cmd_err}");
+            build_repo_err(&formatdoc! {"
+                Could not access remote '{remote}' while verifying branch containment.
+                Check your SSH agent ('ssh-add -l') or credential configuration."
+            })
+        },
+        cmd_err => {
+            debug!("branch containment check failed: {cmd_err}");
+            build_repo_err(&formatdoc! {"
+                Could not verify that the local revision is on remote branch '{remote}/{branch}'.
+                Check that the remote is reachable, then retry publishing."
+            })
+        },
+    }
+}
+
 /// Check the local repo that the build source is in to make sure that it's in
 /// a state amenable to publishing an artifact built from it.
 ///
 /// This entails checking that:
 /// - The repo has a remote configured.
 /// - The tracked source files are clean.
-/// - The current revision exists on the tracked remote branch.
+/// - The history is complete and the current revision is reachable from the
+///   tracked remote branch as the remote advertises it now, without fetching.
 #[instrument(skip_all, fields(progress = "Checking repository state"))]
 fn gather_build_repo_meta(
     git: &GitCommandProvider,
@@ -1238,64 +1327,36 @@ fn gather_build_repo_meta(
         ));
     }
 
-    let remote_info = git.get_current_branch_remote_info().map_err(|e| match e {
-        GitCommandGetOriginError::NoUpstream => {
-            let remote_hint = git
-                .remotes()
-                .ok()
-                .and_then(|r| match r.as_slice() {
-                    [single] if !single.is_empty() => Some(single.clone()),
-                    _ => None,
-                })
-                .unwrap_or_else(|| "<remote>".to_string());
-
-            if let Some(branch) = status
-                .ref_
-                .as_deref()
-                .and_then(|r| r.strip_prefix("refs/heads/"))
-            {
-                build_repo_err(&formatdoc! {"
-                    Current branch '{branch}' has no upstream remote configured.
-                    Set one with 'git branch --set-upstream-to={remote_hint}/{branch}'"
-                })
-            } else {
-                build_repo_err(&formatdoc! {"
-                    Repository is in detached HEAD state and has no upstream remote configured.
-                    Check out a branch before publishing: \
-                        git checkout -b <branch-name>"
-                })
-            }
-        },
-        GitCommandGetOriginError::AccessDenied(ref cmd_err) => build_repo_err(&formatdoc! {"
-            Could not access the remote repository: {cmd_err}
-            Check your SSH agent (`ssh-add -l`) or credential configuration."
-        }),
-        GitCommandGetOriginError::Command(ref cmd_err) => build_repo_err(&cmd_err.to_string()),
-    })?;
-
-    let rev_on_remote = match git.rev_exists_on_remote(&status.rev, &remote_info.name) {
-        Ok(exists) => exists,
-        Err(ref cmd_err) if cmd_err.is_access_denied() => {
+    // A detached HEAD or tag has no branch upstream; suggest checking out a branch.
+    let local_branch_ref = match status.ref_.as_deref() {
+        Some(ref_) if ref_.starts_with("refs/heads/") => ref_,
+        Some(ref_) => {
             return Err(build_repo_err(&formatdoc! {"
-                Could not access remote '{remote_name}' while verifying the local revision: {cmd_err}
-                Check your SSH agent (`ssh-add -l`) or credential configuration.",
-                remote_name = remote_info.name,
+                '{ref_}' is not a branch.
+                Check out a branch before publishing: 'git checkout -b BRANCH'"
             }));
         },
-        Err(cmd_err) => {
+        None => {
             return Err(build_repo_err(&formatdoc! {"
-                Failed to check whether local revision exists on remote '{remote_name}/{remote_branch}': {cmd_err}",
-                remote_name = remote_info.name,
-                remote_branch = remote_info.reference,
+                Repository is in detached HEAD state.
+                Check out a branch before publishing: 'git checkout -b BRANCH'"
             }));
         },
     };
+
+    let remote_info = git
+        .get_current_branch_remote_info(local_branch_ref)
+        .map_err(|e| upstream_lookup_error(git, local_branch_ref, e))?;
+
+    let rev_on_remote = git
+        .rev_is_on_remote_branch(&status.rev, &remote_info.name, &remote_info.reference)
+        .map_err(|e| containment_error(e, &remote_info.name, remote_info.short_branch()))?;
     if !rev_on_remote {
         return Err(build_repo_err(&formatdoc! {"
-            Local revision is not present on remote '{remote_name}/{remote_branch}'.
-            Push your commits with 'git push'",
+            Local revision is not contained in remote branch '{remote_name}/{remote_branch}'.
+            Push this revision with 'git push {remote_name} HEAD:{remote_branch}' before publishing.",
             remote_name = remote_info.name,
-            remote_branch = remote_info.reference,
+            remote_branch = remote_info.short_branch(),
         }));
     }
 
@@ -1335,7 +1396,9 @@ fn url_for_remote_containing_current_rev(
     // Check the configured remotes, once each, in order of..
     let mut ordered_remotes = IndexSet::new();
     // 1. Tracked remote for branch, if configured.
-    if let Ok(tracked_remote) = git.get_current_branch_remote_info() {
+    if let Some(local_branch_ref) = status.ref_.as_deref()
+        && let Ok(tracked_remote) = git.get_current_branch_remote_info(local_branch_ref)
+    {
         ordered_remotes.insert(tracked_remote.name);
     }
     // 2. Preferred remotes, if they are present.
@@ -3419,8 +3482,8 @@ pub mod tests {
         let err = gather_build_repo_meta(&git).unwrap_err();
         let msg = err.to_string();
         assert!(
-            msg.contains("--set-upstream-to=<remote>/main"),
-            "Expected placeholder <remote> in suggestion, got: {msg}"
+            msg.contains("--set-upstream-to=REMOTE/main"),
+            "Expected placeholder REMOTE in suggestion, got: {msg}"
         );
     }
 
@@ -3445,8 +3508,199 @@ pub mod tests {
             "Expected 'origin/main' in message, got: {msg}"
         );
         assert!(
-            msg.contains("git push"),
-            "Expected 'git push' suggestion, got: {msg}"
+            msg.contains("git push origin HEAD:main"),
+            "Expected an explicit upstream branch in the push suggestion, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn gather_repo_meta_reports_deleted_remote_branch() {
+        let (git, _tempdir) = init_temp_repo(false);
+        let _remotes = create_remotes(&git, &["origin"]);
+        git.checkout("main", true).unwrap();
+        commit_file(&git, "base.txt");
+        git.push_ref("origin", "main", false).unwrap();
+        GitCommandProvider::run_command(git.new_command().args(["fetch", "origin", "main"]))
+            .unwrap();
+        GitCommandProvider::run_command(git.new_command().args([
+            "branch",
+            "--set-upstream-to=origin/main",
+            "main",
+        ]))
+        .unwrap();
+        GitCommandProvider::run_command(git.new_command().args([
+            "push",
+            "origin",
+            ":refs/heads/main",
+        ]))
+        .unwrap();
+        let error = gather_build_repo_meta(&git).unwrap_err().to_string();
+        assert!(error.contains("no longer exists"), "{error}");
+        assert!(!error.contains("full history"), "{error}");
+    }
+
+    /// A clone of a remote whose `main` holds two commits, the repository that
+    /// pushes to that remote, and a guard keeping their directories alive.
+    fn clone_of_two_commit_remote(
+        flags: &[&str],
+    ) -> (
+        GitCommandProvider,
+        GitCommandProvider,
+        Box<dyn std::any::Any>,
+    ) {
+        let (origin, origin_dir) = init_temp_repo(false);
+        let remotes = create_remotes(&origin, &["origin"]);
+        origin.checkout("main", true).unwrap();
+        commit_file(&origin, "base.txt");
+        commit_file(&origin, "tip.txt");
+        origin.push_ref("origin", "main", false).unwrap();
+
+        let clone_dir = tempfile::tempdir().unwrap();
+        GitCommandProvider::run_command(
+            test_git_options()
+                .new_command()
+                .arg("clone")
+                .args(flags)
+                .args([
+                    "--branch",
+                    "main",
+                    &get_remote_url(&remotes, "origin"),
+                    clone_dir.path().to_str().unwrap(),
+                ]),
+        )
+        .unwrap();
+        let clone = GitCommandProvider::open(clone_dir.path()).unwrap();
+        (clone, origin, Box::new((origin_dir, remotes, clone_dir)))
+    }
+
+    #[test]
+    fn gather_repo_meta_counts_full_history_and_refuses_a_shallow_checkout() {
+        let (full, _origin, _guard) = clone_of_two_commit_remote(&[]);
+        let meta = gather_build_repo_meta(&full).unwrap();
+        assert_eq!(meta.rev_count, 2);
+
+        let (shallow, _origin, _guard) = clone_of_two_commit_remote(&["--depth", "1"]);
+        let shallow_file = shallow.path().join(".git/shallow");
+        let before = std::fs::read_to_string(&shallow_file).unwrap();
+        let err = gather_build_repo_meta(&shallow).unwrap_err().to_string();
+        assert!(
+            err.contains("'git fetch --unshallow origin'"),
+            "unexpected message: {err}"
+        );
+        assert_eq!(std::fs::read_to_string(&shallow_file).unwrap(), before);
+    }
+
+    #[test]
+    fn gather_repo_meta_refuses_a_remote_tip_that_was_never_fetched() {
+        let (clone, origin, _guard) = clone_of_two_commit_remote(&[]);
+        // The remote advances after the clone.
+        commit_file(&origin, "newer.txt");
+        origin.push_ref("origin", "main", false).unwrap();
+
+        let err = gather_build_repo_meta(&clone).unwrap_err().to_string();
+        assert!(err.contains("'git fetch origin main'"), "{err}");
+        assert!(!clone.path().join(".git/FETCH_HEAD").exists());
+    }
+
+    #[test]
+    fn mapped_git_failures_hide_tool_output_and_quote_commands() {
+        const RAW: &str = "RAW-TOOL-OUTPUT";
+        let bad_exit = |stderr: &str| GitCommandError::BadExit(128, RAW.into(), stderr.into());
+        let cases = [
+            (
+                GitCommandError::ShallowRepository,
+                "'git fetch --unshallow origin'",
+            ),
+            (
+                GitCommandError::RemoteTipNotFetched {
+                    remote: "origin".into(),
+                    branch: "main".into(),
+                },
+                "'git fetch origin main'",
+            ),
+            (
+                GitCommandError::MissingRemoteBranch {
+                    remote: "origin".into(),
+                    branch: "main".into(),
+                },
+                "no longer exists",
+            ),
+            (bad_exit("Permission denied (publickey)"), "'ssh-add -l'"),
+            (bad_exit("fatal: unable to access"), "remote is reachable"),
+        ];
+        for (err, expected) in cases {
+            let msg = containment_error(err, "origin", "main").to_string();
+            assert!(msg.contains(expected), "{msg}");
+            for raw in [RAW, "exit code", "stdout", "stderr", "Permission denied"] {
+                assert!(!msg.contains(raw), "{raw:?} leaked into: {msg}");
+            }
+        }
+    }
+
+    #[test]
+    fn not_a_branch_upstream_suggestion_uses_uppercase_placeholder() {
+        let (git, _dir) = init_temp_repo(false);
+        let msg = upstream_lookup_error(
+            &git,
+            "refs/heads/main",
+            GitCommandGetOriginError::UpstreamNotABranch {
+                upstream: "refs/tags/v1".into(),
+            },
+        )
+        .to_string();
+        assert!(
+            msg.contains("'git branch --set-upstream-to=REMOTE/main'"),
+            "{msg}"
+        );
+    }
+
+    #[test]
+    fn mapped_upstream_failures_hide_tool_output_and_parsed_rows() {
+        const RAW: &str = "RAW-TOOL-OUTPUT";
+        let (git, _dir) = init_temp_repo(false);
+        let bad_exit = || GitCommandError::BadExit(128, RAW.into(), RAW.into());
+        let cases = [
+            GitCommandGetOriginError::AmbiguousLocalRef {
+                ref_: "refs/heads/main".into(),
+                rows: vec![RAW.into()],
+            },
+            GitCommandGetOriginError::AccessDenied(bad_exit()),
+            GitCommandGetOriginError::Command(bad_exit()),
+        ];
+        for err in cases {
+            let msg = upstream_lookup_error(&git, "refs/heads/main", err).to_string();
+            for raw in [RAW, "exit code", "stdout", "stderr"] {
+                assert!(!msg.contains(raw), "{raw:?} leaked into: {msg}");
+            }
+        }
+    }
+
+    #[test]
+    fn gather_repo_meta_refuses_a_revision_only_on_a_sibling_branch() {
+        let (git, _tempdir) = init_temp_repo(false);
+        let _remotes = create_remotes(&git, &["origin"]);
+        git.checkout("main", true).unwrap();
+        commit_file(&git, "base.txt");
+        let base = git.status().unwrap().rev;
+        git.push_ref("origin", "main", false).unwrap();
+        git.create_branch("sibling", &base).unwrap();
+        git.checkout("sibling", false).unwrap();
+        commit_file(&git, "sibling.txt");
+        git.push_ref("origin", "sibling", false).unwrap();
+        GitCommandProvider::run_command(git.new_command().args(["fetch", "origin", "main"]))
+            .unwrap();
+        GitCommandProvider::run_command(git.new_command().args([
+            "branch",
+            "--set-upstream-to=origin/main",
+            "sibling",
+        ]))
+        .unwrap();
+
+        let err = gather_build_repo_meta(&git).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("not contained in remote branch 'origin/main'"),
+            "{msg}"
         );
     }
 

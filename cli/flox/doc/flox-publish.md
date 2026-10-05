@@ -32,9 +32,18 @@ in the Flox Catalog.
 
 Flox makes some assertions before publishing, specifically:
 
-- The Flox environment used to build the package is tracked as a git repository.
-- Tracked files in the repository are all clean.
-- The repository has a remote defined and the current revision has been pushed to it.
+- The Flox environment used to build the package is tracked in a Git repository.
+- Tracked files in the repository are clean.
+- A local branch is checked out, and it tracks an upstream branch on a remote.
+  A detached HEAD cannot be published.
+- The clone contains the full repository history.
+  For `actions/checkout`, set `fetch-depth: 0`.
+  Shallow history cannot provide the revision count used to order builds;
+  see [ECO-373](https://linear.app/floxdotdev/issue/ECO-373/investigate-shallow-clones-breaking-rev-count-semantics-and-build).
+- The checked-out revision belongs to the upstream branch advertised by the
+  remote.
+  The exact advertised branch tip must already be available locally.
+  Run `git fetch <REMOTE>` before publishing if the remote branch has advanced.
 - For a manifest build, the environment must have at least one package in the
   `toplevel` package group: the package is published against the nixpkgs
   revision that group is locked to, and an environment with no such package is
