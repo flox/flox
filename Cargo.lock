@@ -3172,6 +3172,7 @@ dependencies = [
  "flox-config",
  "flox-core",
  "floxhub-client",
+ "httpmock",
  "indent",
  "indoc",
  "rnix",

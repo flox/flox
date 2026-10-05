@@ -27,6 +27,7 @@ use crate::{
     LockfileError,
     ScanError,
     StaleLockError,
+    build_catalog_trees,
     lock_references,
     render_unresolvable,
     scan_package,
@@ -65,6 +66,9 @@ pub enum CatalogLockError {
 
     #[error(transparent)]
     Lockfile(#[from] LockfileError),
+
+    #[error("catalog lock cannot be materialized: {0:#}")]
+    Materialize(anyhow::Error),
 }
 
 /// Resolve `references` through the catalog, or produce an empty lock
@@ -114,6 +118,17 @@ pub async fn lock_project_catalog(
 ) -> Result<BTreeSet<CatalogRef>, CatalogLockError> {
     let references = scan_references(expressions_dir, rel_file_paths)?;
     let lock = resolve_lock(client, references.clone()).await?;
+    // Validate evaluator compatibility before replacing the committed lock.
+    build_catalog_trees(&lock).map_err(|error| {
+        let scanned = references
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(", ");
+        CatalogLockError::Materialize(
+            error.context(format!("while locking catalog references: {scanned}")),
+        )
+    })?;
     write_lock(&lock, &lockfile_path)?;
     debug!(
         path = %lockfile_path.as_ref().display(),
@@ -125,7 +140,8 @@ pub async fn lock_project_catalog(
 
 #[cfg(test)]
 mod tests {
-    use floxhub_client::client::test_helpers::new_noop;
+    use floxhub_client::FloxhubClient;
+    use floxhub_client::client::test_helpers::{client_config, new_noop};
     use tempfile::tempdir;
 
     use super::*;
@@ -169,5 +185,46 @@ mod tests {
             std::fs::read_to_string(&lockfile_path).unwrap(),
             "{\n  \"version\": 2,\n  \"locked_inputs\": {},\n  \"direct_inputs\": []\n}\n"
         );
+    }
+
+    #[tokio::test]
+    async fn colliding_lookup_does_not_replace_the_committed_lock() {
+        let server = httpmock::MockServer::start_async().await;
+        let mock = server.mock(|when, then| {
+            when.method("POST").path("/api/v1/catalog/build-inputs/lookup");
+            let source = serde_json::json!({
+                "type": "git", "url": "https://example.com/repo",
+                "rev": "abc123", "ref": "refs/heads/main", "dir": "."
+            });
+            then.status(200).json_body(serde_json::json!({
+                "version": 1,
+                "groups": {"default": {
+                    "lock": {
+                        "myorg/a": {"attr_path": ["a"], "build_type": "nef", "catalog": "myorg", "inputs": [], "locked_inputs_hash": "h1", "source": source},
+                        "myorg/a.b": {"attr_path": ["a", "b"], "build_type": "nef", "catalog": "myorg", "inputs": [], "locked_inputs_hash": "h2", "source": source}
+                    },
+                    "matched": {"myorg/a": ["myorg.a"], "myorg/a.b": ["myorg.a.b"]}
+                }}
+            }));
+        });
+        let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        let (_project, dot_flox, pkgs_dir) =
+            project_with_expression("{ catalogs }: [ catalogs.myorg.a catalogs.myorg.a.b ]");
+        let path = catalog_lockfile_path(&dot_flox);
+        std::fs::write(&path, "unchanged").unwrap();
+        let error = lock_project_catalog(&client, &pkgs_dir, ["hello.nix"], &path)
+            .await
+            .unwrap_err()
+            .to_string();
+        mock.assert();
+        for expected in [
+            "myorg/a",
+            "myorg/a.b",
+            "catalogs.myorg.a",
+            "catalogs.myorg.a.b",
+        ] {
+            assert!(error.contains(expected), "{error}");
+        }
+        assert_eq!(std::fs::read_to_string(path).unwrap(), "unchanged");
     }
 }

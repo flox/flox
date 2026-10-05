@@ -44,7 +44,7 @@ pub fn build_lock_from_locked_inputs<'d>(
 }
 
 /// Build the nested, evaluator-facing JSON catalog trees in memory from the
-/// flat locked inputs.
+/// flat locked inputs, refusing inputs whose attribute paths collide.
 pub fn build_catalog_trees(lock: &BuildLock) -> Result<serde_json::Value> {
     materialize_entries(lock.locked_inputs.iter())
 }
@@ -53,7 +53,33 @@ fn materialize_entries<'a>(
     entries: impl IntoIterator<Item = (&'a String, &'a LockedInput)>,
 ) -> Result<serde_json::Value> {
     let mut builders: BTreeMap<CatalogId, PackageTreeBuilder> = BTreeMap::new();
+    // Attribute paths already inserted, per catalog, ordered so every path
+    // that extends a given one is adjacent to it.
+    let mut seen: BTreeMap<&str, BTreeMap<&[String], &String>> = BTreeMap::new();
     for (key, entry) in entries {
+        let catalog_seen = seen.entry(entry.catalog.as_str()).or_default();
+        let path = entry.attr_path.as_slice();
+        // The first path at or after this one is either this path or its
+        // smallest extension, so one lookup finds an exact or extending
+        // collision; the shorter paths it could extend are its prefixes.
+        let extending = catalog_seen
+            .range::<&[String], _>(path..)
+            .next()
+            .filter(|(other, _)| other.starts_with(path));
+        let prefix = (1..path.len()).find_map(|len| {
+            catalog_seen
+                .get_key_value(&path[..len])
+                .map(|(other, other_key)| (*other, *other_key))
+        });
+        if let Some((other, other_key)) = extending.map(|(o, k)| (*o, *k)).or(prefix) {
+            anyhow::bail!(
+                "catalog '{catalog}' has colliding lock keys '{other_key}' (catalogs.{catalog}.{}) and '{key}' (catalogs.{catalog}.{})",
+                other.join("."),
+                path.join("."),
+                catalog = entry.catalog,
+            );
+        }
+        catalog_seen.insert(path, key);
         builders
             .entry(CatalogId(entry.catalog.clone()))
             .or_insert_with(PackageTreeBuilder::new)
@@ -353,6 +379,81 @@ mod tests {
         let err = build_lock_from_locked_inputs(locked, [&"myorg/dangling".to_string()])
             .expect_err("a dangling direct key is refused");
         assert!(err.to_string().contains("myorg/dangling"));
+    }
+
+    #[test]
+    fn materialization_rejects_prefix_collisions_in_both_orders() {
+        let source = git_source("https://example.com/repo", "abc");
+        let locked = HashMap::from([
+            (
+                "myorg/a".to_string(),
+                entry("myorg", &["a"], BuildType::Nef, source.clone()),
+            ),
+            (
+                "myorg/a.b".to_string(),
+                entry("myorg", &["a", "b"], BuildType::Nef, source),
+            ),
+        ]);
+        let lock = build_lock_from_locked_inputs(locked, [&"myorg/a".to_string()]).unwrap();
+        for entries in [
+            lock.locked_inputs.iter().collect::<Vec<_>>(),
+            lock.locked_inputs.iter().rev().collect::<Vec<_>>(),
+        ] {
+            let err = materialize_entries(entries).unwrap_err();
+            let message = format!("{err:#}");
+            for expected in [
+                "myorg/a",
+                "myorg/a.b",
+                "catalogs.myorg.a",
+                "catalogs.myorg.a.b",
+            ] {
+                assert!(message.contains(expected), "{message}");
+            }
+        }
+    }
+
+    #[test]
+    fn materialization_rejects_two_keys_for_one_exact_path() {
+        let source = git_source("https://example.com/repo", "abc");
+        let locked = HashMap::from([
+            (
+                "myorg/alias-one".to_string(),
+                entry("myorg", &["a"], BuildType::Nef, source.clone()),
+            ),
+            (
+                "myorg/alias-two".to_string(),
+                entry("myorg", &["a"], BuildType::Nef, source),
+            ),
+        ]);
+        let lock = build_lock_from_locked_inputs(locked, [&"myorg/alias-one".to_string()]).unwrap();
+        let error = build_catalog_trees(&lock).unwrap_err().to_string();
+        assert!(error.contains("myorg/alias-one"), "{error}");
+        assert!(error.contains("myorg/alias-two"), "{error}");
+    }
+
+    #[test]
+    fn materialization_accepts_shared_paths_across_catalogs_and_sibling_names() {
+        let source = git_source("https://example.com/repo", "abc");
+        let locked = HashMap::from([
+            (
+                "alpha/a".to_string(),
+                entry("alpha", &["a"], BuildType::Nef, source.clone()),
+            ),
+            (
+                "beta/a.b".to_string(),
+                entry("beta", &["a", "b"], BuildType::Nef, source.clone()),
+            ),
+            (
+                "beta/a.bc".to_string(),
+                entry("beta", &["a", "bc"], BuildType::Nef, source.clone()),
+            ),
+            (
+                "beta/ab".to_string(),
+                entry("beta", &["ab"], BuildType::Nef, source),
+            ),
+        ]);
+        let lock = build_lock_from_locked_inputs(locked, [&"alpha/a".to_string()]).unwrap();
+        build_catalog_trees(&lock).expect("distinct paths do not collide");
     }
 
     #[test]
