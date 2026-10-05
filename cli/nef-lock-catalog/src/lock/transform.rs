@@ -53,7 +53,24 @@ fn materialize_entries<'a>(
     entries: impl IntoIterator<Item = (&'a String, &'a LockedInput)>,
 ) -> Result<serde_json::Value> {
     let mut builders: BTreeMap<CatalogId, PackageTreeBuilder> = BTreeMap::new();
+    let mut seen: BTreeMap<(String, Vec<String>), &String> = BTreeMap::new();
     for (key, entry) in entries {
+        for ((catalog, path), previous_key) in &seen {
+            if catalog == &entry.catalog
+                && (path.starts_with(&entry.attr_path) || entry.attr_path.starts_with(path))
+            {
+                anyhow::bail!(
+                    "catalog '{}' has colliding lock keys '{}' (catalogs.{catalog}.{}) and '{}' (catalogs.{catalog}.{})",
+                    entry.catalog,
+                    previous_key,
+                    path.join("."),
+                    key,
+                    entry.attr_path.join("."),
+                    catalog = entry.catalog,
+                );
+            }
+        }
+        seen.insert((entry.catalog.clone(), entry.attr_path.clone()), key);
         builders
             .entry(CatalogId(entry.catalog.clone()))
             .or_insert_with(PackageTreeBuilder::new)
