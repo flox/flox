@@ -21,7 +21,6 @@ use tracing::{debug, instrument};
 
 use super::{EnvironmentSelect, environment_select};
 use crate::commands::render_composition_manifest;
-use crate::environment_subcommand_metric;
 use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message;
 use crate::utils::tracing::sentry_set_tag;
@@ -67,7 +66,6 @@ impl List {
             .environment
             .detect_concrete_environment(&mut flox, "List using")
             .await?;
-        environment_subcommand_metric!("list", env);
         if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentList(
             CliEnvironmentPayload::new(env_detail_from_concrete(&flox, &env)),
         )) {

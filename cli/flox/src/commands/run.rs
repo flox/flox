@@ -50,7 +50,6 @@ use toml_edit::Key;
 use tracing::{debug, info_span};
 
 use crate::commands::general::{remove_config_key_with_query, update_config_with_query};
-use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::message;
 
@@ -273,8 +272,6 @@ impl Run {
     /// Entry point: parse args with POSIX stop-at-first-positional semantics,
     /// then resolve, download, and exec.
     pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
-        subcommand_metric!("run");
-
         // Re-read raw OS args. bpaf has already consumed the first `--`, so
         // we cannot rely on self._raw_args for correct passthrough semantics.
         // Locating the first "run" token is safe: the only options before a
@@ -295,7 +292,6 @@ impl Run {
                 return Ok(());
             },
             ParsedArgs::Reselect(run_args) => {
-                subcommand_metric!("run::reselect");
                 // Lossy matches how `resolve_command` derives the
                 // preference key from the executable.
                 let command = run_args.executable.to_string_lossy().into_owned();

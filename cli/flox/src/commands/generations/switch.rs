@@ -10,7 +10,6 @@ use flox_rust_sdk::models::environment::generations::{
 use tracing::{debug, instrument};
 
 use crate::commands::{EnvironmentSelect, environment_select};
-use crate::environment_subcommand_metric;
 use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message;
 
@@ -32,7 +31,6 @@ impl Switch {
             .detect_concrete_environment(&mut flox, "Switch using")
             .await?;
 
-        environment_subcommand_metric!("generations::switch", env);
         if let Err(err) =
             EventsHub::global().record_event(EventKind::CliEnvironmentGenerationsSwitch(
                 CliEnvironmentPayload::new(env_detail_from_concrete(&flox, &env)),

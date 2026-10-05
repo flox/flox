@@ -41,7 +41,6 @@ use crate::utils::dialog::{Confirm, Dialog};
 use crate::utils::errors::format_error;
 use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message;
-use crate::{environment_subcommand_metric, subcommand_metric};
 
 // Edit declarative environment configuration
 #[derive(Bpaf, Clone)]
@@ -82,10 +81,6 @@ pub enum EditAction {
 impl Edit {
     #[instrument(name = "edit", skip_all)]
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
-        // Record subcommand metric prior to environment_subcommand_metric below
-        // in case we error before then
-        subcommand_metric!("edit");
-
         // Ensure the user is logged in for the following remote operations
         if let EnvironmentSelect::Remote(_) = self.environment {
             ensure_auth(&mut flox).await?;
@@ -100,7 +95,6 @@ impl Edit {
             Err(EnvironmentSelectError::Anyhow(e)) => Err(e)?,
             Err(e) => Err(e)?,
         };
-        environment_subcommand_metric!("edit", detected_environment);
         // Capture the environment detail once, before the edit can create a new
         // generation, so both cli.environment.edit events for this invocation
         // report the generation the command started from (as `activate` does).
@@ -295,7 +289,6 @@ impl Edit {
                     .as_ref()
                     .map(|compose| &compose.include);
                 let edited_includes = old_includes != new_includes;
-                subcommand_metric!("edit", "edited_includes" = edited_includes);
                 if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentEdit(
                     CliEnvironmentEditPayload::new(env_detail)
                         .with_edited_includes(edited_includes)

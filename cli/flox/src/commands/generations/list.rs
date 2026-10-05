@@ -17,7 +17,6 @@ use renderdag::{Ancestor, GraphRowRenderer, Renderer as _};
 use tracing::{debug, instrument};
 
 use crate::commands::{EnvironmentSelect, environment_select};
-use crate::environment_subcommand_metric;
 use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message::{page_output, stdout_supports_color};
 
@@ -59,7 +58,6 @@ impl List {
             .detect_concrete_environment(&mut flox, "List using")
             .await?;
         let request_tree = self.output_mode == OutputMode::Tree;
-        environment_subcommand_metric!("generations::list", env, request_tree = request_tree);
         if let Err(err) =
             EventsHub::global().record_event(EventKind::CliEnvironmentGenerationsList(
                 CliEnvironmentGenerationsListPayload::new(env_detail_from_concrete(&flox, &env))

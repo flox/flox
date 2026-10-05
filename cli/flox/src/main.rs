@@ -45,7 +45,6 @@ use crate::utils::errors::{
 };
 use crate::utils::events::duration_to_ms;
 use crate::utils::init::{init_telemetry_uuid, read_metrics_uuid};
-use crate::utils::metrics::Hub;
 
 mod beta;
 mod commands;
@@ -148,7 +147,6 @@ fn main() -> ExitCode {
     // Sentry client must be initialized before starting an async runtime or spawning threads
     // https://docs.sentry.io/platforms/rust/#async-main-function
     let _sentry_guard = metrics_uuid.map(|uuid| init_sentry("flox-cli", uuid));
-    let _metrics_guard = Hub::global().try_guard().ok();
     let _v2_events_guard = EventsHub::global().try_guard().ok();
 
     // Pass down the verbosity level to all sub-processes. Subsystems have no
@@ -272,13 +270,13 @@ fn main() -> ExitCode {
         debug!(error = %err, "Failed to record v2 cli.command_completed event");
     }
 
-    // Spawn a detached `send-telemetry` child to flush both telemetry
-    // pipelines from their on-disk buffers. The parent exits immediately
-    // after spawning, so no network I/O blocks the shell prompt.
+    // Spawn a detached `send-telemetry` child to flush the telemetry buffer.
+    // The parent exits immediately after spawning, so no network I/O blocks
+    // the shell prompt.
     //
     // Skipped when:
     // - metrics are disabled (no data to send);
-    // - neither buffer is due and flushing was not explicitly forced;
+    // - the buffer is not due and flushing was not explicitly forced;
     // - this invocation is itself a detached side-effect command (prevents
     //   a fork-bomb and stops `send-telemetry` from re-spawning itself);
     // - this invocation reset the device ID (see `is_telemetry_reset_command`);
@@ -309,7 +307,6 @@ fn main() -> ExitCode {
     }
 
     drop(_v2_events_guard);
-    drop(_metrics_guard);
     drop(_sentry_guard);
 
     ExitCode::from(code)
@@ -326,13 +323,9 @@ fn telemetry_flush_due() -> bool {
         return true;
     }
 
-    // If the advisory check fails, let the background sender try. Checking one
-    // pipeline must not prevent the other from delivering its buffered events.
+    // If the advisory check fails, let the background sender try.
     EventsHub::global().is_flush_due().unwrap_or_else(|err| {
         debug!(error = %err, "Failed to check v2 events expiry");
-        true
-    }) || Hub::global().is_flush_due().unwrap_or_else(|err| {
-        debug!(error = %err, "Failed to check metrics expiry");
         true
     })
 }

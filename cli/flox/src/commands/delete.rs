@@ -7,7 +7,6 @@ use indoc::formatdoc;
 use tracing::{debug, instrument};
 
 use crate::commands::{DirEnvironmentSelect, dir_environment_select, environment_description};
-use crate::environment_subcommand_metric;
 use crate::utils::dialog::{Confirm, Dialog};
 use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message;
@@ -32,7 +31,6 @@ impl Delete {
             .environment
             .detect_concrete_environment(&mut flox, "Delete")?;
 
-        environment_subcommand_metric!("delete", environment);
         if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentDelete(
             CliEnvironmentPayload::new(env_detail_from_concrete(&flox, &environment)),
         )) {

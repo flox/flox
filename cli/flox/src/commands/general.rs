@@ -16,7 +16,6 @@ use tokio::fs;
 use toml_edit::{Key, TomlError};
 use tracing::{debug, instrument};
 
-use crate::subcommand_metric;
 use crate::utils::detached::{SEND_TELEMETRY_LOG_NAME, send_telemetry_log_dir};
 use crate::utils::init::{
     METRICS_EVENTS_FILE_NAME,
@@ -116,7 +115,6 @@ impl ConfigArgs {
     /// handle config flags like commands
     #[instrument(name = "config", skip_all)]
     pub async fn handle(&self, config: Config, flox: Flox) -> Result<()> {
-        subcommand_metric!("config");
         match self {
             ConfigArgs::List => println!("{}", config.get_verbatim(&[])?),
             ConfigArgs::Reset => {

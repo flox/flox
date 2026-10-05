@@ -159,6 +159,48 @@ fn defer_telemetry() -> bool {
     false
 }
 
+/// Delete the buffer of the retired legacy telemetry stream, if any.
+///
+/// Best-effort and non-blocking: an older `flox` on the same machine can
+/// still hold the lock while it writes or sends that buffer, so contention
+/// leaves the file for a later run instead of stalling this one. Creates
+/// nothing when there is no buffer.
+pub fn remove_legacy_metrics_buffer(cache_dir: &Path) {
+    // An empty or relative cache dir resolves against the current directory.
+    if !cache_dir.is_absolute() {
+        return;
+    }
+    let buffer_path = cache_dir.join(METRICS_EVENTS_FILE_NAME);
+    if fs::symlink_metadata(&buffer_path).is_err() {
+        return;
+    }
+
+    let mut metrics_lock = match LockFile::open(&cache_dir.join(METRICS_LOCK_FILE_NAME)) {
+        Ok(lock) => lock,
+        Err(err) => {
+            debug!(error = %err, "Could not open the metrics lock; keeping the legacy buffer");
+            return;
+        },
+    };
+    match metrics_lock.try_lock() {
+        Ok(true) => {},
+        Ok(false) => {
+            debug!("Metrics lock held by another process; keeping the legacy buffer");
+            return;
+        },
+        Err(err) => {
+            debug!(error = %err, "Could not lock the metrics lock; keeping the legacy buffer");
+            return;
+        },
+    }
+
+    match fs::remove_file(&buffer_path) {
+        Ok(()) => debug!(path = %buffer_path.display(), "Removed the legacy metrics buffer"),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {},
+        Err(err) => debug!(error = %err, "Could not remove the legacy metrics buffer"),
+    }
+}
+
 /// Read the device ID that [`init_telemetry_uuid`] created.
 pub(crate) fn read_metrics_uuid(config: &Config) -> Result<Uuid> {
     let uuid_path = config.flox.data_dir.join(METRICS_UUID_FILE_NAME);
@@ -341,6 +383,46 @@ mod tests {
         let uuid = read_metrics_uuid(&config_with_data_dir(&data_dir)).unwrap();
 
         assert_eq!(uuid.to_string(), written);
+    }
+
+    /// The buffer goes; the device ID and the lock stay.
+    #[test]
+    fn remove_legacy_metrics_buffer_keeps_device_id_and_lock() {
+        let tempdir = TempDir::new().unwrap();
+        let data_dir = tempdir.path().join("data");
+        let cache_dir = tempdir.path().join("cache");
+        init_telemetry_uuid(&data_dir, &cache_dir, || true).unwrap();
+        fs::write(cache_dir.join(METRICS_EVENTS_FILE_NAME), "{}\n").unwrap();
+
+        remove_legacy_metrics_buffer(&cache_dir);
+
+        assert!(!cache_dir.join(METRICS_EVENTS_FILE_NAME).exists());
+        assert!(cache_dir.join(METRICS_LOCK_FILE_NAME).exists());
+        assert!(data_dir.join(METRICS_UUID_FILE_NAME).exists());
+    }
+
+    /// Opted-out installations have no metrics files; don't create any.
+    #[test]
+    fn remove_legacy_metrics_buffer_without_buffer_creates_nothing() {
+        let tempdir = TempDir::new().unwrap();
+
+        remove_legacy_metrics_buffer(tempdir.path());
+
+        assert_eq!(fs::read_dir(tempdir.path()).unwrap().count(), 0);
+    }
+
+    /// An older `flox` holding the lock must not stall this invocation.
+    #[test]
+    fn remove_legacy_metrics_buffer_skips_while_lock_is_held() {
+        let tempdir = TempDir::new().unwrap();
+        let buffer_path = tempdir.path().join(METRICS_EVENTS_FILE_NAME);
+        fs::write(&buffer_path, "{}\n").unwrap();
+        let mut held = LockFile::open(&tempdir.path().join(METRICS_LOCK_FILE_NAME)).unwrap();
+        held.lock().unwrap();
+
+        remove_legacy_metrics_buffer(tempdir.path());
+
+        assert!(buffer_path.exists());
     }
 
     /// The error names the file, so a user can find and remove it.
