@@ -5,7 +5,7 @@ use indoc::formatdoc;
 use serde::Serialize;
 use tracing::instrument;
 
-use super::effective_status;
+use super::{effective_status, trigger_label};
 use crate::subcommand_metric;
 
 /// Show the status of a single Flox Factory build.
@@ -60,6 +60,7 @@ struct BuildStatusDisplay {
     system: String,
     attr_path: String,
     catalog_name: String,
+    trigger: String,
     status: String,
     created_at: String,
 }
@@ -67,12 +68,14 @@ struct BuildStatusDisplay {
 impl From<BuildResponse> for BuildStatusDisplay {
     fn from(b: BuildResponse) -> Self {
         let status = effective_status(&b);
+        let trigger = trigger_label(&b);
 
         BuildStatusDisplay {
             build_id: b.build_id,
             system: b.system,
             attr_path: b.attr_path,
             catalog_name: b.catalog_name,
+            trigger,
             status,
             created_at: b.created_at.to_rfc3339(),
         }
@@ -85,6 +88,7 @@ impl std::fmt::Display for BuildStatusDisplay {
         writeln!(f, "{:<14} {}", "System:", self.system)?;
         writeln!(f, "{:<14} {}", "Attr path:", self.attr_path)?;
         writeln!(f, "{:<14} {}", "Catalog:", self.catalog_name)?;
+        writeln!(f, "{:<14} {}", "Trigger:", self.trigger)?;
         writeln!(f, "{:<14} {}", "Status:", self.status)?;
         writeln!(f, "{:<14} {}", "Created:", self.created_at)?;
         Ok(())
@@ -93,7 +97,7 @@ impl std::fmt::Display for BuildStatusDisplay {
 
 #[cfg(test)]
 mod tests {
-    use floxhub_client::EffectiveBuildStatus;
+    use floxhub_client::{BuildTrigger, EffectiveBuildStatus};
     use indoc::indoc;
     use pretty_assertions::assert_eq;
 
@@ -116,17 +120,22 @@ mod tests {
 
     #[test]
     fn status_table_shows_effective_status_when_dispatched() {
-        let build = make_build(
+        let mut build = make_build(
             42,
             "x86_64-linux",
             "hello",
             Some(EffectiveBuildStatus::Running),
         );
+        build.trigger = Some(BuildTrigger {
+            kind: Some("source_push".to_string().into()),
+            stabilities: vec!["staging".to_string()],
+        });
         assert_eq!(render(build, false).unwrap(), indoc! {"
             Build ID:      42
             System:        x86_64-linux
             Attr path:     hello
             Catalog:       my-catalog
+            Trigger:       source_push (staging)
             Status:        running
             Created:       2025-01-01T00:00:00+00:00
         "});
@@ -140,6 +149,7 @@ mod tests {
             System:        x86_64-linux
             Attr path:     hello
             Catalog:       my-catalog
+            Trigger:       -
             Status:        pending
             Created:       2025-01-01T00:00:00+00:00
         "});
