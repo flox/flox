@@ -19,6 +19,10 @@ fn main() {
             && (*k == "/api/v1/catalog/info/base-catalog" || !k.starts_with("/api/v1/catalog/info"))
             && !k.starts_with("/api/v1/catalog/status")
     });
+    // TODO(HUB-318): When can the composed server schema supply the Factory
+    // token used by existing publishers and replace this compatibility field?
+    spec_json["components"]["schemas"]["PackageBuildWithNarInfo"]["properties"]["factory_build_token"] =
+        serde_json::json!({"title": "Factory Build Token", "nullable": true, "type": "string"});
     let spec = serde_json::from_value(spec_json).expect("Failed to parse openapi spec");
 
     let client = generate_client(&spec);
@@ -40,6 +44,21 @@ fn generator() -> progenitor::Generator {
     settings.with_replacement(
         "CatalogStoreConfig",
         "crate::types::CatalogStoreConfig",
+        vec![].into_iter(),
+    );
+    settings.with_replacement(
+        "LockedGitSource",
+        "crate::types::LockedGitSource",
+        vec![].into_iter(),
+    );
+    settings.with_replacement(
+        "LockedInputEntry",
+        "crate::types::LockedInputEntry",
+        vec![].into_iter(),
+    );
+    settings.with_replacement(
+        "CheckBuildRequest",
+        "crate::types::CheckBuildRequest",
         vec![].into_iter(),
     );
     settings.with_inner_type(parse_quote! { crate::hooks::RequestHooks });

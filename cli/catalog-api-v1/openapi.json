@@ -1397,7 +1397,7 @@
           "catalogs"
         ],
         "summary": "Check if a build already exists",
-        "description": "Check whether a build already exists for the given source tuple.\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n- **package_name**: The name of the package\n\nRequest Body:\n- **source_url**: Source repository URL\n- **source_rev**: Source revision\n- **nixpkgs_rev**: Nixpkgs revision used for the build\n- **system**: Target system (e.g. x86_64-linux)\n- **locked_inputs**: Optional flat map of DIRECT catalog dependencies,\n  same shape as the locked_inputs field on the publish endpoint.  The\n  check is always closure-aware \u2014 there is no hash-blind path:\n  absent/null/{} \u2192 empty closure (H(\u2205)); {\u2026} \u2192 resolved + Merkle-hashed.\n  Old clients that omit the field are accepted (no 422); they are treated\n  as publishing with an empty closure.\n\nReturns:\n- **CheckBuildResponse** with already_published=true and provenance\n  if a matching build exists, or already_published=false otherwise.",
+        "description": "Check whether a build already exists for the given source tuple.\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n- **package_name**: The name of the package\n\nRequest Body:\n- **source_url**: Source repository URL\n- **source_rev**: Source revision\n- **nixpkgs_rev**: Nixpkgs revision used for the build\n- **system**: Target system (e.g. x86_64-linux)\n- **locked_inputs**, **direct_inputs**: the same mode-selecting pair as\n  the publish endpoint (build_lock.selects_v2): absent/null\n  direct_inputs is legacy, which always answers\n  already_published=false. Any list,\n  including [], selects v2: locked_inputs must hold the complete\n  closure, which is validated and walked the same way as publish; a\n  well-shaped but unresolvable closure is an advisory miss, never a\n  hard failure.\n\nReturns:\n- **CheckBuildResponse** with already_published=true and provenance\n  if a matching build exists, or already_published=false otherwise.",
         "operationId": "check_build_api_v1_catalog_catalogs__catalog_name__packages__package_name__check_build_post",
         "security": [
           {
@@ -2332,7 +2332,7 @@
           "groups"
         ],
         "title": "BuildInputsLookupRequest",
-        "description": "Request body for the /build-inputs/lookup endpoint.\n\nA lookup names one or more `groups` of references to resolve, optionally\nanchored at a `reference_point`.\n\nThe response is source revisions plus DAG edges: for each reference, the\nlatest revision of its own source together with the transitive non-base\nsources that revision was built against.  That answer carries no system\nand no nixpkgs base revision, so the request body names neither.  A base\nrevision is selected at build time, against which the same lock may be\nbuilt repeatedly."
+        "description": "Request body for the /build-inputs/lookup endpoint.\n\nA lookup names one or more `groups` of references to resolve, optionally\nanchored at a `reference_point`. Base-catalog references are advisory\nbecause the caller supplies them through pinned evaluation.\n\nThe response is source revisions plus DAG edges: for each reference, the\nlatest revision of its own source together with the transitive non-base\nsources that revision was built against.  That answer carries no system\nand no nixpkgs base revision, so the request body names neither.  A base\nrevision is selected at build time, against which the same lock may be\nbuilt repeatedly."
       },
       "BuildInputsLookupResponse": {
         "properties": {
@@ -2747,10 +2747,13 @@
             },
             "type": "object"
           },
-          "factory_build_token": {
-            "title": "Factory Build Token",
+          "direct_inputs": {
+            "title": "Direct Inputs",
             "nullable": true,
-            "type": "string"
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           }
         },
         "type": "object",
@@ -2917,6 +2920,13 @@
             "type": "object",
             "title": "Lock"
           },
+          "not_lockable": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/NotLockableEntry"
+            },
+            "type": "object",
+            "title": "Not Lockable"
+          },
           "unresolvable": {
             "items": {
               "$ref": "#/components/schemas/UnresolvableEntry"
@@ -2940,7 +2950,7 @@
           "lock"
         ],
         "title": "GroupResult",
-        "description": "Result for a single LookupGroup.\n\nlock carries the resolved LockedInputs map (full transitive closure).\nunresolvable is scoped INSIDE the group (never at the top-level response).\nKeeping unresolvable entries group-scoped is the contract the lookup\nhandler must respect when building this response.\n\nmatched maps locked-input keys (same namespace as lock \u2014 every matched\nkey must also exist in lock) to the list of raw user-query strings that\ndirectly pulled this entry in.  A direct dep matched by several queries\nhas several entries in its value list; a wildcard query pulling several\ndeps means that query string appears under several keys.  Roots are\nimplicit \u2014 they are the keys of matched.\n\nmatched is response-only; it must NOT appear on the publish request path.\nUse pydantic.Field(default_factory=dict) so an empty match set serializes\ncleanly (mirrors how unresolvable defaults)."
+        "description": "Keep failures scoped to one group; any failure invalidates its lock.\n\n`matched` identifies direct roots and preserves the queries selecting each\nroot. `not_lockable` is advisory: pinned evaluation supplies base inputs."
       },
       "HealthCheck": {
         "properties": {
@@ -3075,7 +3085,7 @@
           "dir"
         ],
         "title": "LockedGitSource",
-        "description": "A locked git flakeref, in its attribute form.\n\nLocked inputs are only ever tracked as git flakerefs, so this models a git\nsource honestly rather than a generic flakeref: type must equal \"git\", and\nthe four git fields are required \u2014 url (source), rev (commit), ref (the\nexisting CLI lockfile contract), and dir (the subdir holding build\ninstructions).  The CLI needs all of them to rebuild a locked input.  A git\nflakeref is still an open attribute set, so any git-native attribute beyond\nthese (e.g. narHash) flows through unchanged via extra=\"allow\"; the contract\nboundary validates field presence and that type == \"git\", not the\nflakeref's deeper semantics (the downstream publish path parses url + rev\nfor storage identity).\n\nThe round-trip is value/dict-equal: with every named field required there\nare no unset fields to emit as null, and extras serialize verbatim, so the\ndefault model_dump reproduces the input attribute set (no injected nulls).\nKey ORDER is not preserved or relied upon \u2014 the identity hash reads url/rev\nvalues, not the serialized form."
+        "description": "Preserve all git attributes, including unknown source fields, on round-trip.\n\nThe CLI needs the required source fields to rebuild each locked input."
       },
       "LockedInputEntry": {
         "properties": {
@@ -3104,6 +3114,16 @@
             },
             "type": "array"
           },
+          "version": {
+            "title": "Version",
+            "nullable": true,
+            "type": "string"
+          },
+          "build": {
+            "title": "Build",
+            "nullable": true,
+            "type": "string"
+          },
           "locked_inputs_hash": {
             "type": "string",
             "title": "Locked Inputs Hash"
@@ -3131,7 +3151,7 @@
           "locked_inputs_hash"
         ],
         "title": "LockedInputEntry",
-        "description": "An entry in a flat locked-inputs map.\n\nPublish leaves `inputs` as `null` because the server reconstructs the DAG\nfrom `package_inputs`. Lookup supplies direct input keys. An empty list\nmeans no dependencies.\n\n`locked_inputs_hash` is required. Lookup computes it from the closure it\nassembled; publish uses it to select a stored closure. Boundary children,\nincluding redacted or unencodable rows, can contribute to that hash without\nappearing in `inputs`. Lookup can compute a digest no stored row carries,\nwhich publish rejects."
+        "description": "Require the closure hash and preserve nullable inputs and reserved fields.\n\nA nonempty `unresolvable` list invalidates the whole lookup group. Legacy\npublish ignores child lists; v2 publish requires the reachable closure."
       },
       "LockedSourceItem": {
         "properties": {
@@ -3206,7 +3226,7 @@
           "references"
         ],
         "title": "LookupGroup",
-        "description": "A named group of reference strings for a build-inputs lookup.\n\nreferences is flat and mixed-kind; the server disambiguates.\nWildcard sentinels are owner-first, like '<owner>.*' (whole\ncatalog) or '<owner>.<pkgset>.*' (package set) \u2014 e.g. 'brantley.*'\n\u2014 and are accepted without validation; the server expands them."
+        "description": "Accept exact references and catalog/package-set wildcards in one group."
       },
       "MessageLevel": {
         "type": "string",
@@ -3365,6 +3385,21 @@
         "type": "object",
         "title": "NarInfos"
       },
+      "NotLockableEntry": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "base_catalog",
+            "title": "Kind"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "title": "NotLockableEntry",
+        "description": "A requested reference whose catalog is supplied by pinned evaluation."
+      },
       "PackageBuild": {
         "properties": {
           "url": {
@@ -3504,7 +3539,15 @@
         "title": "PackageBuildList"
       },
       "PackageBuildResponse": {
-        "properties": {},
+        "properties": {
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/PublishWarning"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
         "type": "object",
         "title": "PackageBuildResponse"
       },
@@ -3601,10 +3644,13 @@
             },
             "type": "object"
           },
-          "factory_build_token": {
-            "title": "Factory Build Token",
+          "direct_inputs": {
+            "title": "Direct Inputs",
             "nullable": true,
-            "type": "string"
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           },
           "deep_overrides": {
             "title": "Deep Overrides",
@@ -4400,6 +4446,30 @@
         ],
         "title": "PublishInfoResponseCatalog"
       },
+      "PublishWarning": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "input": {
+            "type": "string",
+            "title": "Input"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "input",
+          "message"
+        ],
+        "title": "PublishWarning",
+        "description": "A publish diagnostic with an open code and a message for display."
+      },
       "PublishedCatalog": {
         "properties": {
           "name": {
@@ -4502,7 +4572,7 @@
         },
         "type": "object",
         "title": "ReferencePoint",
-        "description": "Temporal anchor for a build-inputs lookup.\n\nAt most one of as_of_date / as_of_build may be set.  When both are\nabsent the server interprets this as \"now\".  Uses a plain optional-\nfields model with a model_validator \u2014 NOT a discriminated union \u2014\nbecause the two anchors carry different value types."
+        "description": "Allow at most one temporal anchor; no anchor means now."
       },
       "ResolutionMessageGeneral": {
         "properties": {
