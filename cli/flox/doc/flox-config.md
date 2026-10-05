@@ -35,6 +35,8 @@ Config values are read from the following sources in order of descending priorit
 3. System settings from `/etc/flox.toml` or `FLOX_SYSTEM_CONFIG_DIR/flox.toml`.
 4. `flox` provided defaults.
 
+`DO_NOT_TRACK=true` sets `disable_metrics` to `true`, whatever the other sources set.
+
 `flox config` commands that mutate configuration always write to the user config file
 determined in step 2.
 
@@ -156,7 +158,8 @@ flox config --set 'trusted_environments."owner/name"' trust
     It does not delete the device ID or the events that Flox saved but has not sent, and Flox sends them if you turn telemetry back on.
 
     `FLOX_DISABLE_METRICS=true` sets `disable_metrics` to `true`.
-    To turn telemetry off before Flox sends anything, add `export FLOX_DISABLE_METRICS=true` to your shell profile before you run Flox.
+    `DO_NOT_TRACK=true` also does, and overrides `disable_metrics = false` from every source.
+    To turn telemetry off before Flox sends anything, add `export FLOX_DISABLE_METRICS=true` or `export DO_NOT_TRACK=true` to your shell profile before you run Flox.
     Flox creates the device ID when it prints the first-run notice.
     To turn it off for every user on a machine, set `disable_metrics = true` in `/etc/flox.toml`.
     Environment variables and your user config file override `/etc/flox.toml`.
@@ -230,4 +233,14 @@ flox config --set 'trusted_environments."owner/name"' trust
     This variable overrides `disable_metrics` in every config file.
     It accepts only `true` or `false`, in any letter case.
     Any other value, `1` included, makes Flox commands fail with a configuration error.
+    `DO_NOT_TRACK=true` overrides `FLOX_DISABLE_METRICS=false`.
+    See `disable_metrics` for what telemetry is and what turning it off does not stop.
+
+`$DO_NOT_TRACK`
+:   Set to `true` to turn off telemetry.
+    Flox treats every value except an empty value, `0` and `false` as `true`.
+    Flox ignores letter case and surrounding whitespace in the value.
+    `DO_NOT_TRACK` turns off everything that `disable_metrics = true` turns off.
+    It overrides `FLOX_DISABLE_METRICS=false` and `disable_metrics = false` in every config file.
+    The install script at `get.flox.dev` does not read `DO_NOT_TRACK`.
     See `disable_metrics` for what telemetry is and what turning it off does not stop.

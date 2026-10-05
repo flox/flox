@@ -3,6 +3,8 @@
 //! Resolution order (lowest to highest precedence):
 //! defaults, system config (`/etc/flox/flox.toml`), user config
 //! (`$XDG_CONFIG_HOME/flox/flox.toml`), `FLOX_*` environment variables.
+//! A `DO_NOT_TRACK` value other than empty, `0` or `false` then forces
+//! `disable_metrics = true`.
 
 mod config;
 mod load;
