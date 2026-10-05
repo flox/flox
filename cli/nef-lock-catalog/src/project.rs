@@ -227,4 +227,139 @@ mod tests {
         }
         assert_eq!(std::fs::read_to_string(path).unwrap(), "unchanged");
     }
+
+    /// An HTTP 200 whose group reports unresolvable references is an
+    /// incomplete lock: the committed file is not overwritten.
+    #[tokio::test]
+    async fn incomplete_http_200_does_not_replace_the_committed_lock() {
+        let server = httpmock::MockServer::start_async().await;
+        let mock = server.mock(|when, then| {
+            when.method("POST")
+                .path("/api/v1/catalog/build-inputs/lookup");
+            then.status(200).json_body(
+                serde_json::from_str::<serde_json::Value>(include_str!(
+                    "../test_data/build_inputs_lookup/partial.json"
+                ))
+                .unwrap(),
+            );
+        });
+        let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        let (_project, dot_flox, pkgs_dir) =
+            project_with_expression("{ catalogs }: catalogs.myorg.hello");
+        let path = catalog_lockfile_path(&dot_flox);
+        std::fs::write(&path, "unchanged").unwrap();
+
+        let error = lock_project_catalog(&client, &pkgs_dir, ["hello.nix"], &path)
+            .await
+            .unwrap_err();
+
+        mock.assert();
+        assert!(
+            matches!(error, CatalogLockError::Unresolvable(_)),
+            "{error}"
+        );
+        assert_eq!(std::fs::read_to_string(path).unwrap(), "unchanged");
+    }
+
+    #[tokio::test]
+    async fn uncovered_lookup_references_never_write_a_lock() {
+        for existing in [false, true] {
+            let server = httpmock::MockServer::start_async().await;
+            let mock = server.mock(|when, then| {
+                when.method("POST")
+                    .path("/api/v1/catalog/build-inputs/lookup");
+                then.status(200).json_body(serde_json::json!({
+                    "version": 1,
+                    "groups": {"default": {
+                        "lock": {}, "matched": {}, "unresolvable": [],
+                        "not_lockable": {"myorg.advised": {"kind": "future_kind"}}
+                    }}
+                }));
+            });
+            let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+            let (_project, dot_flox, pkgs_dir) = project_with_expression(
+                "{ catalogs }: [ catalogs.myorg.advised catalogs.other.missing ]",
+            );
+            let path = catalog_lockfile_path(&dot_flox);
+            if existing {
+                std::fs::write(&path, "unchanged").unwrap();
+            }
+            let error = lock_project_catalog(&client, &pkgs_dir, ["hello.nix"], &path)
+                .await
+                .expect_err("uncovered references must fail before writing")
+                .to_string();
+            mock.assert();
+            for expected in [
+                "catalogs.myorg.advised",
+                "future_kind",
+                "catalogs.other.missing",
+            ] {
+                assert!(error.contains(expected), "{error}");
+            }
+            assert_eq!(
+                std::fs::read_to_string(path).ok(),
+                existing.then(|| "unchanged".to_string()),
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn base_only_lookup_writes_an_empty_lock() {
+        let server = httpmock::MockServer::start_async().await;
+        let mock = server.mock(|when, then| {
+            when.method("POST")
+                .path("/api/v1/catalog/build-inputs/lookup");
+            then.status(200).json_body(serde_json::json!({
+                "version": 1,
+                "groups": {"default": {
+                    "lock": {}, "matched": {}, "unresolvable": [],
+                    "not_lockable": {"nixpkgs.hello": {"kind": "base_catalog"}}
+                }}
+            }));
+        });
+        let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        let (_project, dot_flox, pkgs_dir) =
+            project_with_expression("{ catalogs }: catalogs.\"nixpkgs\".hello");
+        let path = catalog_lockfile_path(&dot_flox);
+        lock_project_catalog(&client, &pkgs_dir, ["hello.nix"], &path)
+            .await
+            .unwrap();
+        mock.assert();
+        assert_eq!(
+            std::fs::read_to_string(path).unwrap(),
+            "{\n  \"version\": 2,\n  \"locked_inputs\": {},\n  \"direct_inputs\": []\n}\n",
+        );
+    }
+
+    #[tokio::test]
+    async fn advisory_on_a_covered_reference_does_not_prevent_writing() {
+        let server = httpmock::MockServer::start_async().await;
+        let mock = server.mock(|when, then| {
+            when.method("POST")
+                .path("/api/v1/catalog/build-inputs/lookup");
+            let mut response: serde_json::Value = serde_json::from_str(include_str!(
+                "../test_data/build_inputs_lookup/success.json"
+            ))
+            .unwrap();
+            response["groups"]["default"]["not_lockable"] =
+                serde_json::json!({"myorg.hello": {"kind": "future_kind"}});
+            response["groups"]["default"]["lock"]["myorg/hello"]["inputs"] =
+                serde_json::Value::Null;
+            then.status(200).json_body(response);
+        });
+        let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        let (_project, dot_flox, pkgs_dir) =
+            project_with_expression("{ catalogs }: catalogs.myorg.hello");
+        let path = catalog_lockfile_path(&dot_flox);
+        lock_project_catalog(&client, &pkgs_dir, ["hello.nix"], &path)
+            .await
+            .unwrap();
+        mock.assert();
+        let lock = crate::read_lock(path).unwrap();
+        assert_eq!(
+            lock.direct_inputs(),
+            &BTreeSet::from(["myorg/hello".to_string()])
+        );
+        assert_eq!(lock.locked_inputs()["myorg/hello"].inputs, None);
+    }
 }
