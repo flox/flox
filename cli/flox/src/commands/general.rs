@@ -5,6 +5,7 @@ use std::str::FromStr;
 use anyhow::{Context, Result};
 use bpaf::Bpaf;
 use flox_config::{Config, FLOX_CONFIG_FILE, ReadWriteError};
+use flox_core::vars::do_not_track_from_env;
 use flox_events::{EventsBuffer, EventsHub};
 use flox_rust_sdk::flox::Flox;
 use fslock::LockFile;
@@ -50,6 +51,7 @@ impl ResetMetrics {
             To turn telemetry off, do one of the following:
 
               add 'export FLOX_DISABLE_METRICS=true' to your shell profile
+              add 'export DO_NOT_TRACK=true' to your shell profile
               run 'flox config --set disable_metrics true'
         "};
 
@@ -141,7 +143,16 @@ impl ConfigArgs {
                     },
                 };
 
-                update_config(&flox.config_dir, key, Some(parsed_value))?
+                let enables_metrics =
+                    key == "disable_metrics" && parsed_value == Value::Bool(false);
+                update_config(&flox.config_dir, key, Some(parsed_value))?;
+
+                if enables_metrics && do_not_track_from_env() {
+                    message::info(indoc! {"
+                        DO_NOT_TRACK still disables telemetry.
+                        Flox ignores 'disable_metrics = false' while DO_NOT_TRACK is set.
+                    "});
+                }
             },
             ConfigArgs::Delete(ConfigDelete { key, .. }) => {
                 update_config::<()>(&flox.config_dir, key, None)?

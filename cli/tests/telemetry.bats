@@ -244,3 +244,114 @@ refute_telemetry_files() {
   run grep -rlF "$old_uuid" "$FLOX_DATA_DIR" "$FLOX_CACHE_DIR"
   assert_failure 1
 }
+
+# ---------------------------------------------------------------------------- #
+
+# `setup` exports `FLOX_DISABLE_METRICS=false`, so every DO_NOT_TRACK test below
+# also checks that DO_NOT_TRACK wins over an explicit opt-in.
+
+@test "DO_NOT_TRACK disables telemetry over FLOX_DISABLE_METRICS=false" {
+  export DO_NOT_TRACK=true
+  export _FLOX_FORCE_FLUSH_METRICS=true
+  run --separate-stderr "$FLOX_BIN" envs --active
+  assert_success
+  # The command's own message and no first-run notice.
+  assert_equal "$stderr" "No active environments"
+  refute [ -e "$FLOX_DATA_DIR/metrics-uuid" ]
+  refute [ -e "$FLOX_DATA_DIR/events-v2.json" ]
+  refute [ -e "$FLOX_CACHE_DIR/metrics-events-v2.json" ]
+  refute [ -e "$FLOX_CACHE_DIR/log/send-telemetry.log" ]
+
+  run "$FLOX_BIN" config
+  assert_success
+  assert_line "disable_metrics = true"
+}
+
+@test "DO_NOT_TRACK=0 leaves telemetry on" {
+  export DO_NOT_TRACK=0
+  run "$FLOX_BIN" envs --active
+  assert_success
+  assert [ -s "$FLOX_DATA_DIR/metrics-uuid" ]
+  assert [ -s "$FLOX_DATA_DIR/events-v2.json" ]
+}
+
+@test "DO_NOT_TRACK disables Sentry" {
+  export FLOX_SENTRY_DSN="http://public@127.0.0.1:1/1"
+
+  export DO_NOT_TRACK=false
+  run "$FLOX_BIN" -vv envs --active
+  assert_success
+  assert_output --partial "Initializing Sentry"
+
+  export DO_NOT_TRACK=true
+  run "$FLOX_BIN" -vv envs --active
+  assert_success
+  refute_output --partial "Initializing Sentry"
+}
+
+@test "DO_NOT_TRACK disables Sentry in the activation executive" {
+  # Keep the background upgrade check off the network.
+  export _FLOX_TESTING_DISABLE_BG_SIDE_EFFECTS=true
+  export FLOX_SENTRY_DSN="http://public@127.0.0.1:1/1"
+
+  # The suite sets `_FLOX_EXECUTIVE_VERBOSITY=3`, which logs Sentry setup.
+  export DO_NOT_TRACK=false
+  "$FLOX_BIN" init -d tracked
+  run "$FLOX_BIN" activate -d tracked -- true
+  assert_success
+  wait_for_activations tracked || return 1
+  run cat tracked/.flox/log/executive.*
+  assert_success
+  assert_output --partial "Initializing Sentry"
+
+  export DO_NOT_TRACK=true
+  "$FLOX_BIN" init -d untracked
+  run "$FLOX_BIN" activate -d untracked -- true
+  assert_success
+  wait_for_activations untracked || return 1
+  run cat untracked/.flox/log/executive.*
+  assert_success
+  refute_output --partial "Initializing Sentry"
+}
+
+@test "DO_NOT_TRACK reaches activations as FLOX_DISABLE_METRICS=true" {
+  # Keep the background upgrade check off the network.
+  export _FLOX_TESTING_DISABLE_BG_SIDE_EFFECTS=true
+  export DO_NOT_TRACK=true
+  "$FLOX_BIN" init -d project
+
+  run --separate-stderr "$FLOX_BIN" activate -d project -c 'printenv FLOX_DISABLE_METRICS'
+  assert_success
+  assert_output "true"
+  refute [ -e "$FLOX_DATA_DIR/metrics-uuid" ]
+}
+
+# A config that fails to parse turns telemetry off until Flox reports the
+# error (see config-errors.bats). DO_NOT_TRACK must not change that.
+@test "DO_NOT_TRACK with a setting that fails to parse creates no device ID" {
+  export DO_NOT_TRACK=true
+  export FLOX_SEARCH_LIMIT=abc
+  export _FLOX_FORCE_FLUSH_METRICS=true
+  mkdir "$BATS_TEST_TMPDIR/cwd"
+  cd "$BATS_TEST_TMPDIR/cwd"
+  run "$FLOX_BIN" envs --active
+  assert_failure
+  assert_output --partial "Could not parse config"
+  refute_output --partial "disable_metrics"
+  refute_telemetry_files
+
+  run ls -A
+  assert_success
+  assert_output ""
+}
+
+@test "config --set disable_metrics false notes that DO_NOT_TRACK still applies" {
+  export DO_NOT_TRACK=true
+  run "$FLOX_BIN" config --set disable_metrics false
+  assert_success
+  assert_output --partial "DO_NOT_TRACK still disables telemetry."
+
+  run "$FLOX_BIN" config
+  assert_success
+  assert_line "disable_metrics = true"
+}
