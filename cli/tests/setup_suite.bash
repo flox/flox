@@ -184,6 +184,8 @@ misc_vars_setup() {
 flox_cli_vars_setup() {
   unset FLOX_PROMPT_ENVIRONMENTS _FLOX_ACTIVE_ENVIRONMENTS
   export FLOX_DISABLE_METRICS='true'
+  # A developer's `DO_NOT_TRACK` overrides the tests that turn telemetry on.
+  unset DO_NOT_TRACK
   export _FLOX_TESTING_DISABLE_BG_SIDE_EFFECTS='true'
   # Keep tests off the developer's global OS keyring (keyed by FloxHub URL, not
   # isolated by FLOX_CONFIG_DIR), so e.g. auth logout / invalid-token migration

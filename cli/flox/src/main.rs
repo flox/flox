@@ -196,7 +196,10 @@ fn main() -> ExitCode {
         let beta_enabled = config.features.unwrap_or_default().beta;
         if beta_enabled
             && !matches!(parse_err, bpaf::ParseFailure::Completion(_))
-            && let Some(exit) = beta::extensions::try_dispatch_external(&config.flox.data_dir)
+            && let Some(exit) = beta::extensions::try_dispatch_external(
+                &config.flox.data_dir,
+                config.flox.disable_metrics,
+            )
         {
             return exit;
         }

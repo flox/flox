@@ -2,7 +2,8 @@
 //!
 //! [`try_dispatch_external`] is the whole `flox <name>` fallback: resolve
 //! `<name>` to a `flox-<name>` executable and replace the current process
-//! with it. The extension inherits the caller's environment untouched.
+//! with it. The extension inherits the caller's environment, plus
+//! `FLOX_DISABLE_METRICS=true` when Flox's telemetry is turned off.
 //!
 //! Resolution ([`find`]) searches the managed extensions directory first,
 //! then `$PATH`. The managed-dir-first order is intentional: the managed
@@ -14,6 +15,7 @@ use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 
+use flox_core::vars::FLOX_DISABLE_METRICS_VAR;
 use thiserror::Error;
 use tracing::{debug, warn};
 
@@ -138,7 +140,12 @@ fn split_argv(argv: impl IntoIterator<Item = OsString>) -> Split {
 /// `data_dir` is the caller's resolved `flox.data_dir`; the managed
 /// extensions live under `data_dir/extensions`, matching
 /// [`super::layout::extensions_root`].
-pub fn try_dispatch_external(data_dir: &Path) -> Option<ExitCode> {
+///
+/// `disable_metrics` is the resolved `disable_metrics` setting, which also
+/// covers `DO_NOT_TRACK` and the config files. Dispatch runs before
+/// `FloxArgs::handle` exports `FLOX_DISABLE_METRICS=true` for the commands
+/// that Flox runs itself, so it exports the opt-out to the extension here.
+pub fn try_dispatch_external(data_dir: &Path, disable_metrics: bool) -> Option<ExitCode> {
     let Split { name, rest, .. } = split_argv(std::env::args_os().skip(1));
     let name = name?;
     let name_str = name.to_str()?;
@@ -187,10 +194,19 @@ pub fn try_dispatch_external(data_dir: &Path) -> Option<ExitCode> {
         .env("FLOX_EXTENSION_NAME", &extension_name)
         .env("FLOX_EXTENSION_PATH", &extension_path)
         .env("FLOX_BIN", &flox_bin);
+    export_telemetry_opt_out(&mut command, disable_metrics);
 
     let err = replace_process(&mut command);
     eprintln!("flox: failed to execute '{}': {}", path.display(), err);
     Some(ExitCode::from(1))
+}
+
+/// Tell the extension that telemetry is off, the way Flox tells the
+/// processes it starts. When telemetry is on the environment is left as is.
+fn export_telemetry_opt_out(command: &mut Command, disable_metrics: bool) {
+    if disable_metrics {
+        command.env(FLOX_DISABLE_METRICS_VAR, "true");
+    }
 }
 
 /// Wrapper around `<Command as CommandExt>::exec` — replaces the current
@@ -221,6 +237,26 @@ fn load_installed_state(install_dir: &Path) -> Option<InstalledState> {
             warn!(path = %path.display(), error = %e, "failed to parse extension installed state");
             None
         },
+    }
+}
+
+#[cfg(test)]
+mod telemetry_opt_out_tests {
+    use super::*;
+
+    fn exported_value(disable_metrics: bool) -> Option<OsString> {
+        let mut command = Command::new("flox-hello");
+        export_telemetry_opt_out(&mut command, disable_metrics);
+        command
+            .get_envs()
+            .find(|(key, _)| *key == FLOX_DISABLE_METRICS_VAR)
+            .and_then(|(_, value)| value.map(OsString::from))
+    }
+
+    #[test]
+    fn opt_out_is_exported_only_when_telemetry_is_disabled() {
+        assert_eq!(exported_value(true), Some(OsString::from("true")));
+        assert_eq!(exported_value(false), None);
     }
 }
 

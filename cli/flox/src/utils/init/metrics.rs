@@ -85,6 +85,7 @@ const TELEMETRY_NOTICE: &str = indoc! {"
     To turn telemetry off, do one of the following:
 
       add 'export FLOX_DISABLE_METRICS=true' to your shell profile
+      add 'export DO_NOT_TRACK=true' to your shell profile
       run 'flox config --set disable_metrics true'
 
     For every field, how long Flox keeps it, and what turning telemetry off
@@ -265,6 +266,7 @@ mod tests {
         assert!(TELEMETRY_NOTICE.contains("flox config --set disable_metrics true"));
         // A bare assignment in a shell profile is not exported to `flox`.
         assert!(TELEMETRY_NOTICE.contains("'export FLOX_DISABLE_METRICS=true'"));
+        assert!(TELEMETRY_NOTICE.contains("'export DO_NOT_TRACK=true'"));
     }
 
     #[test]
