@@ -1,70 +1,76 @@
 //! Transform the flat locked-input map returned by the catalog
-//! `/build-inputs/lookup` endpoint into the hierarchical [BuildLock] consumed
-//! by the NEF.
+//! `/build-inputs/lookup` endpoint into a persisted [BuildLock], then
+//! materialize the derived hierarchy for the NEF when it is needed.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use anyhow::{Context, Result};
 use floxhub_client::LockedInputEntry;
 use tracing::instrument;
 
 use crate::CatalogId;
-use crate::lock::build_lock::{BuildLock, CatalogLock};
+use crate::lock::build_lock::{BuildLock, CatalogLock, LockedInput};
 use crate::lock::tree::PackageTreeBuilder;
 
-/// Build a hierarchical [BuildLock] from the flat locked-input map (the merged
-/// `lock` maps of one or more `/build-inputs/lookup` groups).
-///
-/// Entries are grouped by their [`LockedInputEntry::catalog`]; each catalog's
-/// packages are assembled into a [`crate::lock::tree::PackageTreeNode`] via
-/// [`crate::lock::tree::PackageTreeBuilder`], keyed by
-/// [`LockedInputEntry::attr_path`]. The wire `source` is stored **verbatim** —
-/// no nix invocation.
+/// Build the on-disk lock from resolved entries and the lookup's direct keys.
+/// A direct key without a resolved entry makes the response invalid; reject
+/// it before it can become a committed lock.
 #[instrument(skip(locked, direct_keys), fields(packages = locked.len()))]
 pub fn build_lock_from_locked_inputs<'d>(
     locked: HashMap<String, LockedInputEntry>,
     direct_keys: impl IntoIterator<Item = &'d String>,
 ) -> Result<BuildLock> {
-    let mut builders: BTreeMap<CatalogId, PackageTreeBuilder> = BTreeMap::new();
+    let mut locked_inputs: BTreeMap<String, LockedInput> = BTreeMap::new();
 
-    let direct_locks = direct_keys
-        .into_iter()
-        .map(|key| {
-            let entry = locked.get(key).cloned().with_context(|| {
-                format!("Direct dependency '{key}' does not appear to be locked")
-            })?;
-            Ok((key.clone(), entry))
-        })
-        .collect::<Result<BTreeMap<String, LockedInputEntry>>>()?;
-
-    for entry in locked.into_values() {
-        let LockedInputEntry {
-            attr_path,
-            build_type,
-            catalog,
-            inputs: _,
-            locked_inputs_hash: _,
-            source,
-            deep_overrides,
-            version: _,
-            build: _,
-        } = entry;
-
-        // Widening conversion: a `DeepOverridesItemItem` is already a
-        // validated non-empty string, so this cannot fail.
-        let deep_overrides = deep_overrides
-            .unwrap_or_default()
-            .into_iter()
-            .map(|path| path.into_iter().map(String::from).collect())
-            .collect();
-
-        builders
-            .entry(CatalogId(catalog))
-            .or_insert_with(PackageTreeBuilder::new)
-            .add_package_source(attr_path, build_type, source.into(), deep_overrides)?;
+    for (key, entry) in locked {
+        locked_inputs.insert(key, LockedInput::from(entry));
     }
 
-    let catalogs = builders
+    let direct_inputs: BTreeSet<String> = direct_keys
+        .into_iter()
+        .map(|key| {
+            locked_inputs
+                .contains_key(key)
+                .then(|| key.clone())
+                .with_context(|| format!("Direct dependency '{key}' does not appear to be locked"))
+        })
+        .collect::<Result<BTreeSet<String>>>()?;
+
+    Ok(BuildLock {
+        locked_inputs,
+        direct_inputs,
+        ..Default::default()
+    })
+}
+
+/// Derive the NEF package trees from the persisted, server-provided inputs.
+/// The same tree builder used by the original combined transform is retained.
+pub fn materialize_catalogs(lock: &BuildLock) -> Result<serde_json::Value> {
+    materialize_entries(lock.locked_inputs.iter())
+}
+
+fn materialize_entries<'a>(
+    entries: impl IntoIterator<Item = (&'a String, &'a LockedInput)>,
+) -> Result<serde_json::Value> {
+    let mut builders: BTreeMap<CatalogId, PackageTreeBuilder> = BTreeMap::new();
+    for (key, entry) in entries {
+        builders
+            .entry(CatalogId(entry.catalog.clone()))
+            .or_insert_with(PackageTreeBuilder::new)
+            .add_package_source(
+                entry.attr_path.clone(),
+                entry.build_type.into(),
+                (&entry.source).into(),
+                Vec::new(),
+            )
+            .with_context(|| {
+                format!(
+                    "Could not materialize catalog input '{key}' in catalog '{}'",
+                    entry.catalog
+                )
+            })?;
+    }
+    let catalogs: BTreeMap<_, _> = builders
         .into_iter()
         .map(|(id, builder)| {
             (id, CatalogLock::FloxHub {
@@ -72,16 +78,20 @@ pub fn build_lock_from_locked_inputs<'d>(
             })
         })
         .collect();
+    Ok(serde_json::to_value(catalogs)?)
+}
 
-    Ok(BuildLock {
-        catalogs,
-        direct_catalog_inputs: direct_locks,
-        ..Default::default()
-    })
+/// Render the temporary builder-facing lock, including the derived catalogs.
+pub fn render_builder_lock(lock: &BuildLock) -> Result<String> {
+    let mut value = serde_json::to_value(lock)?;
+    value["catalogs"] = materialize_catalogs(lock)?;
+    Ok(format!("{}\n", serde_json::to_string_pretty(&value)?))
 }
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use floxhub_client::{BuildType, LockedGitSource};
     use serde_json::json;
 
@@ -110,12 +120,12 @@ mod tests {
             attr_path: attr_path.iter().map(|s| s.to_string()).collect(),
             build_type,
             catalog: catalog.to_string(),
-            inputs: None,
+            inputs: Some(vec![]),
             locked_inputs_hash: "sha256-test".to_string(),
-            source,
             deep_overrides: None,
             version: None,
             build: None,
+            source,
         }
     }
 
@@ -123,27 +133,32 @@ mod tests {
     fn single_package_single_catalog() {
         let source = git_source("https://example.com/repo", "abc");
         let expected_source = serde_json::to_value(&source).unwrap();
-        let locked = HashMap::from([(
-            "myorg.hello".to_string(),
-            entry("myorg", &["hello"], BuildType::Nef, source),
-        )]);
+        let mut input = entry("myorg", &["hello"], BuildType::Nef, source);
+        input.version = Some("1.2.3".to_string());
+        input.build = Some("build-42".to_string());
+        let locked = HashMap::from([("myorg/hello".to_string(), input)]);
 
-        let lock = build_lock_from_locked_inputs(locked, [&"myorg.hello".to_string()])
+        let lock = build_lock_from_locked_inputs(locked, [&"myorg/hello".to_string()])
             .expect("transform succeeds");
 
         assert_eq!(
-            serde_json::to_value(&lock).unwrap(),
+            serde_json::from_str::<serde_json::Value>(&render_builder_lock(&lock).unwrap())
+                .unwrap(),
             json!({
-                "version": 1,
-                "direct_catalog_inputs": {
-                    "myorg.hello": {
+                "version": 2,
+                "locked_inputs": {
+                    "myorg/hello": {
                         "attr_path": ["hello"],
                         "build_type": "nef",
                         "catalog": "myorg",
+                        "inputs": [],
                         "locked_inputs_hash": "sha256-test",
+                        "version": "1.2.3",
+                        "build": "build-42",
                         "source": expected_source.clone(),
                     }
                 },
+                "direct_inputs": ["myorg/hello"],
                 "catalogs": {
                     "myorg": {
                         "type": "floxhub",
@@ -161,6 +176,15 @@ mod tests {
                 }
             })
         );
+
+        let closure = lock
+            .project_package(&BTreeSet::from([crate::CatalogRef::new_unchecked(
+                "catalogs.myorg.hello",
+            )]))
+            .unwrap();
+        let wire_entry = serde_json::to_value(&closure.locked_inputs["myorg/hello"]).unwrap();
+        assert_eq!(wire_entry["version"], json!("1.2.3"));
+        assert_eq!(wire_entry["build"], json!("build-42"));
     }
 
     #[test]
@@ -168,7 +192,7 @@ mod tests {
         let source = git_source("https://example.com/repo", "abc");
         let expected_source = serde_json::to_value(&source).unwrap();
         let locked = HashMap::from([(
-            "myorg.python3Packages.boolex".to_string(),
+            "myorg/python3Packages.boolex".to_string(),
             entry(
                 "myorg",
                 &["python3Packages", "boolex"],
@@ -178,38 +202,23 @@ mod tests {
         )]);
 
         let lock =
-            build_lock_from_locked_inputs(locked, [&"myorg.python3Packages.boolex".to_string()])
+            build_lock_from_locked_inputs(locked, [&"myorg/python3Packages.boolex".to_string()])
                 .expect("transform succeeds");
 
+        let value: serde_json::Value =
+            serde_json::from_str(&render_builder_lock(&lock).unwrap()).unwrap();
         assert_eq!(
-            serde_json::to_value(&lock).unwrap(),
+            value["catalogs"]["myorg"]["packages"],
             json!({
-                "version": 1,
-                "direct_catalog_inputs": {
-                    "myorg.python3Packages.boolex": {
-                        "attr_path": ["python3Packages", "boolex"],
-                        "build_type": "manifest",
-                        "catalog": "myorg",
-                        "locked_inputs_hash": "sha256-test",
-                        "source": expected_source.clone(),
-                    }
-                },
-                "catalogs": {
-                    "myorg": {
-                        "type": "floxhub",
-                        "packages": {
-                            "type": "package_set",
-                            "entries": {
-                                "python3Packages": {
-                                    "type": "package_set",
-                                    "entries": {
-                                        "boolex": {
-                                            "type": "package",
-                                            "build_type": "manifest",
-                                            "source": expected_source,
-                                        }
-                                    }
-                                }
+                "type": "package_set",
+                "entries": {
+                    "python3Packages": {
+                        "type": "package_set",
+                        "entries": {
+                            "boolex": {
+                                "type": "package",
+                                "build_type": "manifest",
+                                "source": expected_source,
                             }
                         }
                     }
@@ -226,18 +235,21 @@ mod tests {
         let expected_b = serde_json::to_value(&src_b).unwrap();
         let locked = HashMap::from([
             (
-                "a.foo".to_string(),
+                "alpha/foo".to_string(),
                 entry("alpha", &["foo"], BuildType::Nef, src_a),
             ),
             (
-                "b.bar".to_string(),
+                "beta/bar".to_string(),
                 entry("beta", &["bar"], BuildType::Nef, src_b),
             ),
         ]);
 
-        let value = serde_json::to_value(
-            build_lock_from_locked_inputs(locked, [&"a.foo".to_string()])
-                .expect("transform succeeds"),
+        let value: serde_json::Value = serde_json::from_str(
+            &render_builder_lock(
+                &build_lock_from_locked_inputs(locked, [&"alpha/foo".to_string()])
+                    .expect("transform succeeds"),
+            )
+            .unwrap(),
         )
         .unwrap();
 
@@ -262,11 +274,10 @@ mod tests {
         wire_entry.deep_overrides = Some(vec![vec!["openssl".try_into().unwrap()]]);
         let locked = HashMap::from([("myorg.hello".to_string(), wire_entry)]);
 
-        let value = serde_json::to_value(
-            build_lock_from_locked_inputs(locked, [&"myorg.hello".to_string()])
-                .expect("transform succeeds"),
-        )
-        .unwrap();
+        let lock = build_lock_from_locked_inputs(locked, [&"myorg.hello".to_string()])
+            .expect("transform succeeds");
+        let value: serde_json::Value =
+            serde_json::from_str(&render_builder_lock(&lock).unwrap()).unwrap();
 
         assert_eq!(
             value["catalogs"]["myorg"]["packages"]["entries"]["hello"]["deep_overrides"],
@@ -286,11 +297,10 @@ mod tests {
         ]]);
         let locked = HashMap::from([("myorg.hello".to_string(), wire_entry)]);
 
-        let value = serde_json::to_value(
-            build_lock_from_locked_inputs(locked, [&"myorg.hello".to_string()])
-                .expect("transform succeeds"),
-        )
-        .unwrap();
+        let lock = build_lock_from_locked_inputs(locked, [&"myorg.hello".to_string()])
+            .expect("transform succeeds");
+        let value: serde_json::Value =
+            serde_json::from_str(&render_builder_lock(&lock).unwrap()).unwrap();
 
         assert_eq!(
             value["catalogs"]["myorg"]["packages"]["entries"]["hello"]["deep_overrides"],
