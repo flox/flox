@@ -757,6 +757,7 @@ where
             // empty server-side (floxhub#1791). The wire type is a HashMap;
             // ordering on the wire is meaningless.
             locked_inputs: Some(locked_inputs.clone().into_iter().collect()),
+            direct_inputs: None,
             base_catalog_rev_count: None,
             base_catalog_rev_date: None,
             url: self.env_metadata.build_repo_meta.url.to_string(),

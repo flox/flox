@@ -230,8 +230,11 @@ mod tests {
                 rev: "abc".to_string(),
                 type_: "git".to_string(),
                 url: "https://example.com/repo".to_string(),
+                extra: BTreeMap::new(),
             },
             deep_overrides: None,
+            version: None,
+            build: None,
         }
     }
 

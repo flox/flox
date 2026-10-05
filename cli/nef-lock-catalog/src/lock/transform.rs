@@ -46,6 +46,8 @@ pub fn build_lock_from_locked_inputs<'d>(
             locked_inputs_hash: _,
             source,
             deep_overrides,
+            version: _,
+            build: _,
         } = entry;
 
         // Widening conversion: a `DeepOverridesItemItem` is already a
@@ -94,6 +96,7 @@ mod tests {
             rev: rev.to_string(),
             type_: "git".to_string(),
             url: url.to_string(),
+            extra: BTreeMap::new(),
         }
     }
 
@@ -111,6 +114,8 @@ mod tests {
             locked_inputs_hash: "sha256-test".to_string(),
             source,
             deep_overrides: None,
+            version: None,
+            build: None,
         }
     }
 

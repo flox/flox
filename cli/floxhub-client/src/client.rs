@@ -746,6 +746,9 @@ impl CatalogClientTrait for FloxhubClient {
             nixpkgs_rev: query.nixpkgs_rev.to_string(),
             system: query.system,
             locked_inputs: Some(query.locked_inputs.clone()),
+            direct_inputs: None,
+            source_ref: None,
+            dot_flox_dir: None,
         };
         self.catalog
             .check_build_api_v1_catalog_catalogs_catalog_name_packages_package_name_check_build_post(
@@ -1683,10 +1686,13 @@ pub mod tests {
                 rev: "abc123".to_string(),
                 ref_: "main".to_string(),
                 dir: ".".to_string(),
+                extra: BTreeMap::new(),
             },
             inputs: None,
             locked_inputs_hash: "sha256:aabbcc".to_string(),
             deep_overrides: None,
+            version: None,
+            build: None,
         };
         let mut locked_inputs = HashMap::new();
         locked_inputs.insert("dep-key".to_string(), entry);
@@ -1856,6 +1862,7 @@ pub mod tests {
                 unfree: None,
                 version: None,
             },
+            direct_inputs: None,
             dot_flox_dir: ".flox".to_string(),
             factory_build_token: factory_build_token.map(str::to_string),
             locked_base_catalog_url: None,
