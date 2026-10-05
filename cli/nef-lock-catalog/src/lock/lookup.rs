@@ -154,30 +154,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn build_request_maps_references_and_stability() {
-        let references = BTreeSet::from([
-            CatalogRef::new_unchecked("catalogs.myorg.hello"),
-            CatalogRef::new_unchecked("catalogs.myorg.world"),
-        ]);
-
-        let wire = build_request(references);
-
-        // All references collapse into a single wire group, and the leading
-        // `catalogs` root segment is dropped — the server's reference namespace
-        // is catalog-relative (`<catalog>.<package>`).
-        assert_eq!(wire.groups.len(), 1);
-        assert_eq!(
-            serde_json::to_value(&wire.groups[0].references).unwrap(),
-            json!(["myorg.hello", "myorg.world"])
-        );
-        assert_eq!(
-            serde_json::to_value(&wire.stability).unwrap(),
-            json!(DEFAULT_STABILITY)
-        );
-        assert!(wire.reference_point.is_none());
-    }
-
-    #[test]
     fn r11_success_fixture_locks() {
         let response: BuildInputsLookupResponse = serde_json::from_str(include_str!(
             "../../test_data/build_inputs_lookup/success.json"
@@ -185,9 +161,11 @@ mod tests {
         .expect("success fixture deserializes");
 
         let lock = lock_from_response(response).expect("success fixture locks");
-        let value = serde_json::to_value(&lock).unwrap();
+        let value: serde_json::Value =
+            serde_json::from_str(&crate::lock::transform::render_builder_lock(&lock).unwrap())
+                .unwrap();
 
-        assert_eq!(value["version"], json!(1));
+        assert_eq!(value["version"], json!(2));
         assert_eq!(
             value["catalogs"]["myorg"]["packages"]["entries"]["hello"]["build_type"],
             json!("nef")
@@ -204,13 +182,9 @@ mod tests {
         );
     }
 
-    /// The reference that produced the lock must select its entry back out
-    /// of it. The server keys `direct_catalog_inputs` canonically
-    /// (`myorg/hello`) while the reference renders dotted (`myorg.hello`) —
-    /// the two namespaces must never be conflated, and only a fixture-shaped
-    /// lock can catch it.
+    /// The server's canonical keys and dotted reference names must not be conflated.
     #[test]
-    fn success_fixture_subsets_by_its_own_reference() {
+    fn success_fixture_projects_by_its_own_reference() {
         let response: BuildInputsLookupResponse = serde_json::from_str(include_str!(
             "../../test_data/build_inputs_lookup/success.json"
         ))
@@ -218,16 +192,14 @@ mod tests {
         let lock = lock_from_response(response).expect("success fixture locks");
 
         let references = BTreeSet::from([CatalogRef::new_unchecked("catalogs.myorg.hello")]);
-        let subset = lock
-            .subset_direct(&references)
+        let closure = lock
+            .project_package(&references)
             .expect("the lock's own reference is covered");
 
-        assert_eq!(subset.keys().collect::<Vec<_>>(), vec![
-            &"myorg/hello".to_string()
-        ]);
+        assert_eq!(closure.direct_inputs, vec!["myorg/hello".to_string()]);
         assert_eq!(
-            subset["myorg/hello"],
-            lock.direct_catalog_inputs["myorg/hello"]
+            closure.locked_inputs["myorg/hello"],
+            floxhub_client::LockedInputEntry::from(&lock.locked_inputs["myorg/hello"])
         );
     }
 

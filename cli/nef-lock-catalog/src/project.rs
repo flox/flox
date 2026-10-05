@@ -7,12 +7,11 @@
 //! dependency conflicts between packages of the same project.
 //!
 //! This module resolves and writes that lock; the CLI owns its lifecycle
-//! and hands the package builder the file to pass through to the NEF evals.
+//! and hands the package builder a temporary, materialized file for NEF evals.
 //! The committed lock is created explicitly by [lock_project_catalog],
 //! locking the union of every expression's references, and is consumed by
-//! builds exactly as found — deliberately including one that no longer
-//! covers the expressions' references, in which case the NEF eval fails and
-//! the user recreates the lock explicitly.
+//! builds through that temporary file. A stale committed lock is not
+//! silently refreshed; the user recreates it explicitly.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -36,6 +35,10 @@ use crate::{
 
 /// File name of the project catalog lock, relative to the `.flox` directory.
 pub const CATALOG_LOCKFILE_NAME: &str = "catalog.lock";
+
+/// The relock remedy shared by the reader and CLI. Keep its spelling in one
+/// place while the command's final name remains under discussion.
+pub const UPDATE_CATALOGS_COMMAND: &str = "flox build update-catalogs";
 
 /// The location of the project catalog lock within `dot_flox_path`.
 pub fn catalog_lockfile_path(dot_flox_path: impl AsRef<Path>) -> PathBuf {
@@ -122,7 +125,8 @@ pub async fn lock_project_catalog(
 
 #[cfg(test)]
 mod tests {
-    use floxhub_client::client::test_helpers::new_noop;
+    use floxhub_client::FloxhubClient;
+    use floxhub_client::client::test_helpers::{client_config, new_noop};
     use tempfile::tempdir;
 
     use super::*;
@@ -164,7 +168,7 @@ mod tests {
         assert_eq!(references, BTreeSet::new());
         assert_eq!(
             std::fs::read_to_string(&lockfile_path).unwrap(),
-            "{\n  \"version\": 1,\n  \"direct_catalog_inputs\": {},\n  \"catalogs\": {}\n}\n"
+            "{\n  \"version\": 2,\n  \"locked_inputs\": {},\n  \"direct_inputs\": []\n}\n"
         );
     }
 }

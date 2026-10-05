@@ -138,8 +138,19 @@ impl RawNixFlakerefAttrs {
     }
 }
 
-impl From<floxhub_client::LockedGitSource> for RawNixFlakerefAttrs {
-    fn from(value: floxhub_client::LockedGitSource) -> Self {
-        Self::new_unchecked(serde_json::to_value(value).expect("deserialized from json body"))
+/// Keep unknown git attributes out of the derived `catalogs` tree.
+/// The NEF passes this value to `builtins.fetchTree` and
+/// `builtins.flakeRefToString` (`package-builder/nef/lib/instantiate.nix`),
+/// which reject attributes they do not recognize. The lock and API payloads
+/// retain those attributes separately.
+impl From<&crate::lock::build_lock::GitSource> for RawNixFlakerefAttrs {
+    fn from(value: &crate::lock::build_lock::GitSource) -> Self {
+        Self::new_unchecked(json!({
+            "type": value.type_,
+            "url": value.url,
+            "rev": value.rev,
+            "ref": value.ref_,
+            "dir": value.dir,
+        }))
     }
 }
