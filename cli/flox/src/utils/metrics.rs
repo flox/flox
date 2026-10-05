@@ -12,7 +12,6 @@ use flox_config::Config;
 use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::utils::INVOCATION_SOURCES;
 use fslock::LockFile;
-use indoc::indoc;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use time::format_description::well_known::Iso8601;
@@ -21,10 +20,8 @@ use tracing::debug;
 use uuid::Uuid;
 
 use super::TRAILING_NETWORK_CALL_TIMEOUT;
+use crate::utils::init::{METRICS_EVENTS_FILE_NAME, METRICS_LOCK_FILE_NAME, read_metrics_uuid};
 
-pub const METRICS_EVENTS_FILE_NAME: &str = "metrics-events-v2.json";
-pub const METRICS_UUID_FILE_NAME: &str = "metrics-uuid";
-pub const METRICS_LOCK_FILE_NAME: &str = "metrics-lock";
 const DEFAULT_BUFFER_EXPIRY: Duration = Duration::minutes(2);
 const MAX_BUFFER_SIZE: usize = 1000;
 const BATCH_SIZE: usize = 100;
@@ -382,24 +379,6 @@ impl MetricsBuffer {
     pub fn blocking_read_for_lock_test(cache_dir: &Path) -> Result<Self> {
         Self::read(cache_dir)
     }
-}
-
-pub(crate) fn read_metrics_uuid(config: &Config) -> Result<Uuid> {
-    let data_dir = &config.flox.data_dir;
-    let uuid_path = data_dir.join(METRICS_UUID_FILE_NAME);
-
-    File::open(uuid_path)
-        .context("Could not read metrics UUID file")
-        .and_then(|mut f| {
-            let mut uuid_str = String::new();
-            f.read_to_string(&mut uuid_str)?;
-            let uuid_str_trimmed = uuid_str.trim();
-            Uuid::try_parse(uuid_str_trimmed).with_context(|| {
-                indoc! {"
-                Could not parse the metrics UUID of this installation in {uuid_path}
-            "}
-            })
-        })
 }
 
 static METRICS_HUB: LazyLock<Hub> = LazyLock::new(|| Hub {
@@ -811,7 +790,11 @@ pub mod tests {
     use tracing_subscriber::layer::SubscriberExt;
 
     use super::*;
-    use crate::utils::init::{create_registry_and_filter_reload_handle, update_filters};
+    use crate::utils::init::{
+        METRICS_UUID_FILE_NAME,
+        create_registry_and_filter_reload_handle,
+        update_filters,
+    };
 
     #[derive(Debug, Default)]
     pub struct TestConnection {

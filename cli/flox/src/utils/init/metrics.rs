@@ -1,16 +1,25 @@
 use std::ffi::OsString;
-use std::fs;
+use std::fs::{self, File};
+use std::io::Read;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
+use flox_config::Config;
 use fslock::LockFile;
 use indoc::indoc;
 use tracing::debug;
+use uuid::Uuid;
 
 use crate::commands::is_detached_side_effect_command;
 use crate::utils::message;
-use crate::utils::metrics::{METRICS_LOCK_FILE_NAME, METRICS_UUID_FILE_NAME};
+
+/// Buffer of the legacy telemetry stream, in the cache dir.
+pub const METRICS_EVENTS_FILE_NAME: &str = "metrics-events-v2.json";
+/// Device ID of this installation, in the data dir.
+pub const METRICS_UUID_FILE_NAME: &str = "metrics-uuid";
+/// Lock guarding the device ID and the legacy buffer, in the cache dir.
+pub const METRICS_LOCK_FILE_NAME: &str = "metrics-lock";
 
 /// Set when [init_telemetry_uuid] deferred telemetry for this process.
 static TELEMETRY_DEFERRED: AtomicBool = AtomicBool::new(false);
@@ -150,8 +159,30 @@ fn defer_telemetry() -> bool {
     false
 }
 
+/// Read the device ID that [`init_telemetry_uuid`] created.
+pub(crate) fn read_metrics_uuid(config: &Config) -> Result<Uuid> {
+    let uuid_path = config.flox.data_dir.join(METRICS_UUID_FILE_NAME);
+
+    let mut uuid_str = String::new();
+    File::open(&uuid_path)
+        .and_then(|mut f| f.read_to_string(&mut uuid_str))
+        .with_context(|| {
+            format!(
+                "Could not read the metrics UUID of this installation in {}",
+                uuid_path.display()
+            )
+        })?;
+    Uuid::try_parse(uuid_str.trim()).with_context(|| {
+        format!(
+            "Could not parse the metrics UUID of this installation in {}",
+            uuid_path.display()
+        )
+    })
+}
+
 #[cfg(test)]
 mod tests {
+    use flox_config::FloxConfig;
     use tempfile::TempDir;
 
     use super::*;
@@ -288,5 +319,45 @@ mod tests {
                 "notice contains {phrase:?}: {TELEMETRY_NOTICE}"
             );
         }
+    }
+
+    fn config_with_data_dir(data_dir: &Path) -> Config {
+        Config {
+            flox: FloxConfig {
+                data_dir: data_dir.to_path_buf(),
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn read_metrics_uuid_reads_the_initialized_uuid() {
+        let tempdir = TempDir::new().unwrap();
+        let data_dir = tempdir.path().join("data");
+        init_telemetry_uuid(&data_dir, tempdir.path().join("cache"), || true).unwrap();
+        let written = fs::read_to_string(data_dir.join(METRICS_UUID_FILE_NAME)).unwrap();
+
+        let uuid = read_metrics_uuid(&config_with_data_dir(&data_dir)).unwrap();
+
+        assert_eq!(uuid.to_string(), written);
+    }
+
+    /// The error names the file, so a user can find and remove it.
+    #[test]
+    fn read_metrics_uuid_error_names_the_unparseable_file() {
+        let tempdir = TempDir::new().unwrap();
+        let uuid_path = tempdir.path().join(METRICS_UUID_FILE_NAME);
+        fs::write(&uuid_path, "").unwrap();
+
+        let err = read_metrics_uuid(&config_with_data_dir(tempdir.path())).unwrap_err();
+
+        assert_eq!(
+            err.to_string(),
+            format!(
+                "Could not parse the metrics UUID of this installation in {}",
+                uuid_path.display()
+            )
+        );
     }
 }

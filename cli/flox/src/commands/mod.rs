@@ -84,8 +84,8 @@ use crate::utils::credential_store::{CredentialMigration, CredentialStores};
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::errors::display_chain;
 use crate::utils::events::{build_events_client, resolve_invocation_id};
-use crate::utils::init::{init_floxhub_client, telemetry_deferred};
-use crate::utils::metrics::{AWSDatalakeConnection, Client, Hub, read_metrics_uuid};
+use crate::utils::init::{init_floxhub_client, read_metrics_uuid, telemetry_deferred};
+use crate::utils::metrics::{AWSDatalakeConnection, Client, Hub};
 use crate::utils::update_notifications::UpdateNotification;
 use crate::utils::{auth_warning, message};
 
