@@ -185,4 +185,45 @@ mod tests {
             "{\n  \"version\": 2,\n  \"locked_inputs\": {},\n  \"direct_inputs\": []\n}\n"
         );
     }
+
+    #[tokio::test]
+    async fn colliding_lookup_does_not_replace_the_committed_lock() {
+        let server = httpmock::MockServer::start_async().await;
+        let mock = server.mock(|when, then| {
+            when.method("POST").path("/api/v1/catalog/build-inputs/lookup");
+            let source = serde_json::json!({
+                "type": "git", "url": "https://example.com/repo",
+                "rev": "abc123", "ref": "refs/heads/main", "dir": "."
+            });
+            then.status(200).json_body(serde_json::json!({
+                "version": 1,
+                "groups": {"default": {
+                    "lock": {
+                        "myorg/a": {"attr_path": ["a"], "build_type": "nef", "catalog": "myorg", "inputs": [], "locked_inputs_hash": "h1", "source": source},
+                        "myorg/a.b": {"attr_path": ["a", "b"], "build_type": "nef", "catalog": "myorg", "inputs": [], "locked_inputs_hash": "h2", "source": source}
+                    },
+                    "matched": {"myorg/a": ["myorg.a"], "myorg/a.b": ["myorg.a.b"]}
+                }}
+            }));
+        });
+        let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        let (_project, dot_flox, pkgs_dir) =
+            project_with_expression("{ catalogs }: [ catalogs.myorg.a catalogs.myorg.a.b ]");
+        let path = catalog_lockfile_path(&dot_flox);
+        std::fs::write(&path, "unchanged").unwrap();
+        let error = lock_project_catalog(&client, &pkgs_dir, ["hello.nix"], &path)
+            .await
+            .unwrap_err()
+            .to_string();
+        mock.assert();
+        for expected in [
+            "myorg/a",
+            "myorg/a.b",
+            "catalogs.myorg.a",
+            "catalogs.myorg.a.b",
+        ] {
+            assert!(error.contains(expected), "{error}");
+        }
+        assert_eq!(std::fs::read_to_string(path).unwrap(), "unchanged");
+    }
 }

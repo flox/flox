@@ -1780,6 +1780,31 @@ pub mod tests {
     }
 
     #[test]
+    fn status_on_detached_head_has_no_branch_ref() {
+        let (repo, _tempdir_handle) = init_temp_repo(false);
+        repo.checkout("main", true).unwrap();
+        commit_file(&repo, "init.txt");
+        let current = repo.status().unwrap();
+
+        GitCommandProvider::run_command(repo.new_command().args(["tag", "v1"])).unwrap();
+        GitCommandProvider::run_command(repo.new_command().args(["checkout", "--detach", "v1"]))
+            .unwrap();
+        assert_eq!(repo.status().unwrap(), StatusInfo {
+            ref_: None,
+            ..current.clone()
+        });
+
+        repo.checkout("main", false).unwrap();
+        GitCommandProvider::run_command(repo.new_command().args(["checkout", "--detach", "HEAD"]))
+            .unwrap();
+
+        assert_eq!(repo.status().unwrap(), StatusInfo {
+            ref_: None,
+            ..current
+        });
+    }
+
+    #[test]
     fn test_rev_count() {
         let (repo, _tempdir_handle) = init_temp_repo(false);
         repo.checkout("branch_1", true).unwrap();
@@ -2164,6 +2189,153 @@ pub mod tests {
     }
 
     #[test]
+    fn verifies_containment_on_the_fetched_branch_instead_of_any_remote_ref() {
+        let (repo, _repo_dir) = init_temp_repo(false);
+        let _remotes = create_remotes(&repo, &["origin"]);
+        commit_file(&repo, "base");
+        let base = repo.status().unwrap().rev;
+        repo.create_branch("main", &base).unwrap();
+        repo.checkout("main", false).unwrap();
+        commit_file(&repo, "main_tip");
+        repo.push_ref("origin", "main", false).unwrap();
+
+        repo.create_branch("sibling", &base).unwrap();
+        repo.checkout("sibling", false).unwrap();
+        commit_file(&repo, "sibling_tip");
+        let sibling = repo.status().unwrap().rev;
+        repo.push_ref("origin", "sibling", false).unwrap();
+
+        assert!(
+            repo.rev_is_on_remote_branch(&base, "origin", "refs/heads/main")
+                .unwrap()
+        );
+        assert!(
+            !repo
+                .rev_is_on_remote_branch(&sibling, "origin", "refs/heads/main")
+                .unwrap()
+        );
+        assert!(
+            repo.rev_is_on_remote_branch(&sibling, "origin", "refs/heads/sibling")
+                .unwrap()
+        );
+
+        // Deliberately poison the cached tracking ref: FETCH_HEAD must still
+        // identify the branch as it exists on the remote now.
+        GitCommandProvider::run_command(repo.new_command().args([
+            "update-ref",
+            "refs/remotes/origin/main",
+            &sibling,
+        ]))
+        .unwrap();
+        assert!(
+            repo.rev_is_on_remote_branch(&base, "origin", "refs/heads/main")
+                .unwrap()
+        );
+        assert!(
+            !repo
+                .rev_is_on_remote_branch(&sibling, "origin", "refs/heads/main")
+                .unwrap()
+        );
+    }
+
+    #[test]
+    fn unshallows_before_testing_remote_branch_ancestry() {
+        let (repo, _repo_dir) = init_temp_repo(false);
+        let remotes = create_remotes(&repo, &["origin"]);
+        commit_file(&repo, "base");
+        let base = repo.status().unwrap().rev;
+        repo.create_branch("main", &base).unwrap();
+        repo.checkout("main", false).unwrap();
+        commit_file(&repo, "tip");
+        repo.push_ref("origin", "main", false).unwrap();
+
+        let clone_dir = tempfile::tempdir().unwrap();
+        let remote_url = repo_local_url(&remotes.get("origin").unwrap().0);
+        GitCommandProvider::run_command(test_git_options().new_command().args([
+            "clone",
+            "--depth",
+            "1",
+            "--branch",
+            "main",
+            &remote_url,
+            clone_dir.path().to_str().unwrap(),
+        ]))
+        .unwrap();
+        let shallow = GitCommandProvider::open(clone_dir.path()).unwrap();
+        assert!(
+            shallow
+                .rev_is_on_remote_branch(&base, "origin", "refs/heads/main")
+                .unwrap()
+        );
+        assert_eq!(
+            GitCommandProvider::run_command(
+                shallow
+                    .new_command()
+                    .args(["rev-parse", "--is-shallow-repository"]),
+            )
+            .unwrap()
+            .to_string_lossy()
+            .trim(),
+            "false"
+        );
+    }
+
+    #[test]
+    fn shallow_tip_is_accepted_without_unshallowing() {
+        let (repo, _repo_dir) = init_temp_repo(false);
+        let remotes = create_remotes(&repo, &["origin"]);
+        commit_file(&repo, "base");
+        let base = repo.status().unwrap().rev;
+        repo.create_branch("main", &base).unwrap();
+        repo.checkout("main", false).unwrap();
+        commit_file(&repo, "tip");
+        repo.push_ref("origin", "main", false).unwrap();
+
+        let clone_dir = tempfile::tempdir().unwrap();
+        let remote_url = repo_local_url(&remotes.get("origin").unwrap().0);
+        GitCommandProvider::run_command(test_git_options().new_command().args([
+            "clone",
+            "--depth",
+            "1",
+            "--branch",
+            "main",
+            &remote_url,
+            clone_dir.path().to_str().unwrap(),
+        ]))
+        .unwrap();
+        let shallow = GitCommandProvider::open(clone_dir.path()).unwrap();
+        let tip = shallow.status().unwrap().rev;
+        assert!(
+            shallow
+                .rev_is_on_remote_branch(&tip, "origin", "refs/heads/main")
+                .unwrap()
+        );
+        assert_eq!(
+            GitCommandProvider::run_command(
+                shallow
+                    .new_command()
+                    .args(["rev-parse", "--is-shallow-repository"])
+            )
+            .unwrap()
+            .to_string_lossy()
+            .trim(),
+            "true"
+        );
+    }
+
+    #[test]
+    fn missing_remote_branch_is_classified() {
+        let (repo, _repo_dir) = init_temp_repo(false);
+        let _remotes = create_remotes(&repo, &["origin"]);
+        commit_file(&repo, "base");
+        let rev = repo.status().unwrap().rev;
+        assert!(matches!(
+            repo.rev_is_on_remote_branch(&rev, "origin", "refs/heads/deleted"),
+            Err(GitCommandError::MissingRemoteBranch { .. })
+        ));
+    }
+
+    #[test]
     fn is_access_denied() {
         let denied = GitCommandError::BadExit(
             128,
@@ -2189,5 +2361,106 @@ pub mod tests {
         let other =
             GitCommandError::BadExit(1, String::new(), "fatal: not a git repository".to_string());
         assert!(!other.is_access_denied());
+    }
+
+    #[test]
+    fn remote_named_with_a_slash_is_not_mis_split() {
+        let (remote, _remote_tempdir) = init_temp_repo(true);
+        let (git, _tempdir) = init_temp_repo(false);
+        git.checkout("main", true).unwrap();
+        commit_file(&git, "init.txt");
+        git.add_remote("a/b", &repo_local_url(&remote)).unwrap();
+        git.push_ref("a/b", "main", false).unwrap();
+        GitCommandProvider::run_command(
+            git.new_command()
+                .args(["branch", "--set-upstream-to=a/b/main"]),
+        )
+        .unwrap();
+
+        let info = git
+            .get_current_branch_remote_info("refs/heads/main")
+            .expect("upstream is configured");
+        assert_eq!(info.name, "a/b");
+        assert_eq!(info.reference, "refs/heads/main");
+        assert_eq!(info.short_branch(), "main");
+    }
+
+    #[test]
+    fn branch_name_with_slashes_reports_the_full_ref() {
+        let (remote, _remote_tempdir) = init_temp_repo(true);
+        let (git, _tempdir) = init_temp_repo(false);
+        git.checkout("feature/foo", true).unwrap();
+        commit_file(&git, "init.txt");
+        git.add_remote("origin", &repo_local_url(&remote)).unwrap();
+        git.push_ref("origin", "feature/foo", false).unwrap();
+        GitCommandProvider::run_command(
+            git.new_command()
+                .args(["branch", "--set-upstream-to=origin/feature/foo"]),
+        )
+        .unwrap();
+
+        let info = git
+            .get_current_branch_remote_info("refs/heads/feature/foo")
+            .expect("upstream is configured");
+        assert_eq!(info.name, "origin");
+        assert_eq!(info.reference, "refs/heads/feature/foo");
+        assert_eq!(info.short_branch(), "feature/foo");
+    }
+
+    #[test]
+    fn local_and_upstream_branch_names_may_differ() {
+        let (remote, _remote_tempdir) = init_temp_repo(true);
+        let (git, _tempdir) = init_temp_repo(false);
+        git.checkout("local-name", true).unwrap();
+        commit_file(&git, "init.txt");
+        git.add_remote("origin", &repo_local_url(&remote)).unwrap();
+        git.push_ref("origin", "local-name:remote-name", false)
+            .unwrap();
+        GitCommandProvider::run_command(
+            git.new_command()
+                .args(["branch", "--set-upstream-to=origin/remote-name"]),
+        )
+        .unwrap();
+
+        let info = git
+            .get_current_branch_remote_info("refs/heads/local-name")
+            .expect("upstream is configured");
+        assert_eq!(info.reference, "refs/heads/remote-name");
+    }
+
+    #[test]
+    fn no_upstream_configured_errors() {
+        let (git, _tempdir) = init_temp_repo(false);
+        git.checkout("main", true).unwrap();
+        commit_file(&git, "init.txt");
+
+        let err = git
+            .get_current_branch_remote_info("refs/heads/main")
+            .expect_err("no upstream is configured");
+        assert!(matches!(err, GitCommandGetOriginError::NoUpstream));
+    }
+
+    /// An absent ref can still match a deeper ref in `for-each-ref`'s prefix search.
+    #[test]
+    fn a_query_for_an_absent_ref_does_not_match_a_deeper_namesake() {
+        let (remote, _remote_tempdir) = init_temp_repo(true);
+        let (git, _tempdir) = init_temp_repo(false);
+        git.checkout("main", true).unwrap();
+        commit_file(&git, "init.txt");
+        let status = git.status().unwrap();
+        git.create_branch("release/1.0", &status.rev).unwrap();
+        git.add_remote("origin", &repo_local_url(&remote)).unwrap();
+        git.push_ref("origin", "release/1.0", false).unwrap();
+        GitCommandProvider::run_command(git.new_command().args([
+            "branch",
+            "--set-upstream-to=origin/release/1.0",
+            "release/1.0",
+        ]))
+        .unwrap();
+
+        let err = git
+            .get_current_branch_remote_info("refs/heads/release")
+            .expect_err("refs/heads/release does not exist as its own ref");
+        assert!(matches!(err, GitCommandGetOriginError::NoUpstream));
     }
 }

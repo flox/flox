@@ -242,6 +242,48 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn committed_lock_projects_base_references_without_a_base_root() {
+        let (_project, dot_flox, pkgs_dir) =
+            project_with_expression("{ catalogs }: catalogs.nixpkgs.writeText \"base\" \"hello\"");
+        std::fs::write(catalog_lockfile_path(&dot_flox), COMMITTED_LOCK).unwrap();
+        let lock = BuildLockGuard::new_existing_or_ephemeral(&new_noop(), &dot_flox, ["hello.nix"])
+            .await
+            .unwrap();
+        let references = scan_package(&pkgs_dir, "hello.nix").unwrap();
+        let closure = lock.build_lock().project_package(&references).unwrap();
+
+        // Both check-build and publish serialize these closure fields.
+        assert!(closure.direct_inputs.is_empty());
+        assert!(closure.locked_inputs.is_empty());
+
+        std::fs::write(
+            pkgs_dir.join("hello.nix"),
+            "{ catalogs }: [ catalogs.nixpkgs.writeText catalogs.myorg.hello ]",
+        )
+        .unwrap();
+        let references = scan_package(&pkgs_dir, "hello.nix").unwrap();
+        let mixed = lock.build_lock().project_package(&references).unwrap();
+        assert_eq!(mixed.direct_inputs, vec!["myorg/hello".to_string()]);
+        assert_eq!(mixed.locked_inputs.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn committed_v1_lock_is_refused() {
+        let (_project, dot_flox, _pkgs_dir) =
+            project_with_expression("{ catalogs }: catalogs.myorg.hello");
+        std::fs::write(catalog_lockfile_path(&dot_flox), COMMITTED_V1_LOCK).unwrap();
+
+        let err = BuildLockGuard::new_existing_or_ephemeral(&new_noop(), &dot_flox, ["hello.nix"])
+            .await
+            .expect_err("a v1 lock must be refused, not read as v2");
+        let message = format!("{err:#}");
+        assert!(
+            message.contains(nef_lock_catalog::UPDATE_CATALOGS_COMMAND),
+            "the refusal must name the relock command, got: {message}"
+        );
+    }
+
     /// A committed lock that does not cover a scanned reference is still
     /// consumed as found; the staleness surfaces from the subset, naming
     /// the uncovered reference.
