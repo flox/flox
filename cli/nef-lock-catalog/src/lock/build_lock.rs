@@ -3,7 +3,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use flox_core::{Version, WriteError, write_atomically};
-use floxhub_client::LockedInputEntry;
+use floxhub_client::{
+    BuildType as ApiBuildType,
+    LockedGitSource as ApiLockedGitSource,
+    LockedInputEntry,
+    LockedInputEntry as ApiLockedInputEntry,
+};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, instrument};
 
@@ -21,6 +26,126 @@ pub(crate) enum CatalogLock {
         /// Tree structure of locked packages from FloxHub
         packages: PackageTreeNode,
     },
+}
+
+/// A locked git source, as persisted in the on-disk lock.
+///
+/// Separate from the API type so regenerating the client cannot change the
+/// persisted format. The API boundary preserves unknown git attributes
+/// before deserialization would discard them.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GitSource {
+    pub dir: String,
+    #[serde(rename = "ref")]
+    pub ref_: String,
+    pub rev: String,
+    #[serde(rename = "type")]
+    pub type_: String,
+    pub url: String,
+    #[serde(flatten)]
+    pub extra: BTreeMap<String, serde_json::Value>,
+}
+
+impl From<ApiLockedGitSource> for GitSource {
+    fn from(value: ApiLockedGitSource) -> Self {
+        Self {
+            dir: value.dir,
+            ref_: value.ref_,
+            rev: value.rev,
+            type_: value.type_,
+            url: value.url,
+            extra: value.extra,
+        }
+    }
+}
+
+impl From<&GitSource> for ApiLockedGitSource {
+    fn from(value: &GitSource) -> Self {
+        Self {
+            dir: value.dir.clone(),
+            ref_: value.ref_.clone(),
+            rev: value.rev.clone(),
+            type_: value.type_.clone(),
+            url: value.url.clone(),
+            extra: value.extra.clone(),
+        }
+    }
+}
+
+/// Persist a catalog input independently of the generated API client.
+/// Regenerating the client must not change the on-disk lock format.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BuildType {
+    Manifest,
+    Nef,
+}
+
+impl From<ApiBuildType> for BuildType {
+    fn from(value: ApiBuildType) -> Self {
+        match value {
+            ApiBuildType::Manifest => Self::Manifest,
+            ApiBuildType::Nef => Self::Nef,
+        }
+    }
+}
+
+impl From<BuildType> for ApiBuildType {
+    fn from(value: BuildType) -> Self {
+        match value {
+            BuildType::Manifest => Self::Manifest,
+            BuildType::Nef => Self::Nef,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LockedInput {
+    pub attr_path: Vec<String>,
+    pub build_type: BuildType,
+    pub catalog: String,
+    /// `None` means the server left dependencies unstated, not that this is
+    /// a leaf. Preserve it and refuse only a projection that reaches it.
+    pub inputs: Option<Vec<String>>,
+    pub locked_inputs_hash: String,
+    /// Informational fields supplied by lookup. Keep nulls on disk and
+    /// carry values through to check and publish without using them locally.
+    #[serde(default)]
+    pub version: Option<String>,
+    #[serde(default)]
+    pub build: Option<String>,
+    pub source: GitSource,
+}
+
+impl From<ApiLockedInputEntry> for LockedInput {
+    fn from(entry: ApiLockedInputEntry) -> Self {
+        Self {
+            attr_path: entry.attr_path,
+            build_type: entry.build_type.into(),
+            catalog: entry.catalog,
+            inputs: entry.inputs,
+            locked_inputs_hash: entry.locked_inputs_hash,
+            version: entry.version,
+            build: entry.build,
+            source: entry.source.into(),
+        }
+    }
+}
+
+impl From<&LockedInput> for ApiLockedInputEntry {
+    fn from(value: &LockedInput) -> Self {
+        Self {
+            attr_path: value.attr_path.clone(),
+            build_type: value.build_type.into(),
+            catalog: value.catalog.clone(),
+            inputs: value.inputs.clone(),
+            locked_inputs_hash: value.locked_inputs_hash.clone(),
+            version: value.version.clone(),
+            build: value.build.clone(),
+            source: (&value.source).into(),
+            deep_overrides: None,
+        }
+    }
 }
 
 /// A `BuildLock` is a collection of locked sources for each catalog.
@@ -332,6 +457,27 @@ mod tests {
             subset,
             lock.subset_direct(&references(&["catalogs.other.tool"]))
                 .unwrap()
+        );
+    }
+
+    #[test]
+    fn build_type_accepts_only_manifest_and_nef() {
+        assert_eq!(
+            serde_json::from_str::<super::BuildType>(r#""nef""#).unwrap(),
+            super::BuildType::Nef
+        );
+        assert_eq!(
+            serde_json::from_str::<super::BuildType>(r#""manifest""#).unwrap(),
+            super::BuildType::Manifest
+        );
+        assert!(serde_json::from_str::<super::BuildType>(r#""other""#).is_err());
+        assert_eq!(
+            serde_json::to_string(&super::BuildType::Nef).unwrap(),
+            r#""nef""#
+        );
+        assert_eq!(
+            serde_json::to_string(&super::BuildType::Manifest).unwrap(),
+            r#""manifest""#
         );
     }
 }
