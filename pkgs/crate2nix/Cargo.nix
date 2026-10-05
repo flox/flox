@@ -5483,6 +5483,10 @@ rec {
             features = [ "tests" ];
           }
           {
+            name = "http";
+            packageId = "http 1.4.0";
+          }
+          {
             name = "httpmock";
             packageId = "httpmock";
             usesDefaultFeatures = false;
