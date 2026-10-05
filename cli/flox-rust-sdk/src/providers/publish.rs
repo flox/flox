@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::str::FromStr;
@@ -15,7 +15,6 @@ use floxhub_client::{
     CatalogStoreConfigNixCopy,
     DeepOverridesItemItem,
     FloxhubClientError,
-    LockedInputEntry,
     NarInfos,
     PackageOutput,
     PackageOutputs,
@@ -29,7 +28,7 @@ use git_url_parse::GitUrl;
 use indexmap::IndexSet;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
-use nef_lock_catalog::NixFlakeref;
+use nef_lock_catalog::{NixFlakeref, PackageClosure};
 use thiserror::Error;
 use tracing::{debug, instrument};
 use url::Url;
@@ -140,8 +139,8 @@ pub trait Publisher {
     ) -> Result<PackageCreatedGuard, PublishError>;
     /// Publish a built package.
     ///
-    /// `locked_inputs` is the subset of the project catalog lock the
-    /// package's expression selects, computed at publish time; empty for
+    /// `closure` is this package's selected roots and transitive closure,
+    /// projected from the project catalog lock at publish time; empty for
     /// builds that resolve no catalog inputs.
     ///
     /// `factory_build_token` is forwarded, uninterpreted, from the caller's
@@ -166,7 +165,7 @@ pub trait Publisher {
         catalog_name: &str,
         package_created: PackageCreatedGuard,
         build_metadata: &CheckedBuildMetadata,
-        locked_inputs: &BTreeMap<String, LockedInputEntry>,
+        closure: &PackageClosure,
         key_file: Option<PathBuf>,
         metadata_only: bool,
         factory_build_token: Option<&str>,
@@ -696,7 +695,7 @@ where
         catalog_name: &str,
         _package_created: PackageCreatedGuard,
         build_metadata: &CheckedBuildMetadata,
-        locked_inputs: &BTreeMap<String, LockedInputEntry>,
+        closure: &PackageClosure,
         key_file: Option<PathBuf>,
         metadata_only: bool,
         factory_build_token: Option<&str>,
@@ -751,13 +750,9 @@ where
                 version: build_metadata.version.clone(),
             },
             locked_base_catalog_url: Some(self.package_metadata.base_catalog_ref.to_string()),
-            // Record the subset of the project catalog lock this package's
-            // expression selects. Always sent: an empty map when the build
-            // resolved none. Older CLIs that omit the field are coalesced to
-            // empty server-side (floxhub#1791). The wire type is a HashMap;
-            // ordering on the wire is meaningless.
-            locked_inputs: Some(locked_inputs.clone().into_iter().collect()),
-            direct_inputs: None,
+            // Send empty roots too: the server uses their presence to select v2.
+            locked_inputs: Some(closure.locked_inputs.clone().into_iter().collect()),
+            direct_inputs: Some(closure.direct_inputs.clone()),
             base_catalog_rev_count: None,
             base_catalog_rev_date: None,
             url: self.env_metadata.build_repo_meta.url.to_string(),
@@ -2167,7 +2162,7 @@ pub mod tests {
                 &catalog_name,
                 package_created,
                 &build_metadata,
-                &BTreeMap::new(),
+                &PackageClosure::default(),
                 None,
                 false,
                 None,
@@ -2239,7 +2234,7 @@ pub mod tests {
                 &catalog_name,
                 package_created,
                 &build_metadata,
-                &BTreeMap::new(),
+                &PackageClosure::default(),
                 None,
                 false,
                 Some("factory:abc123"),
@@ -2517,7 +2512,7 @@ pub mod tests {
                 &catalog_name,
                 package_created,
                 &build_metadata,
-                &BTreeMap::new(),
+                &PackageClosure::default(),
                 None,
                 false,
                 None,
@@ -2673,7 +2668,7 @@ pub mod tests {
                 &catalog_name,
                 package_created,
                 &build_metadata,
-                &BTreeMap::new(),
+                &PackageClosure::default(),
                 cache.local_signing_key_path(),
                 false,
                 None,
@@ -2958,7 +2953,7 @@ pub mod tests {
                 &user_handle,
                 packaged_created_guard,
                 &build_meta,
-                &BTreeMap::new(),
+                &PackageClosure::default(),
                 None,
                 // Server returns meta-only store config; narinfo collected
                 // from FIXED_TEST_STORE_PATH in the local daemon store.
@@ -3002,7 +2997,7 @@ pub mod tests {
                 TEST_READ_WRITE_CATALOG_NAME,
                 packaged_created_guard,
                 &build_meta,
-                &BTreeMap::new(),
+                &PackageClosure::default(),
                 None,
                 // Server returns meta-only store config; narinfo collected
                 // from FIXED_TEST_STORE_PATH in the local daemon store.
@@ -3073,7 +3068,7 @@ pub mod tests {
                 TEST_READ_WRITE_CATALOG_NAME,
                 packaged_created_guard,
                 &build_meta,
-                &BTreeMap::new(),
+                &PackageClosure::default(),
                 None,
                 // Server returns meta-only store config; narinfo collected
                 // from FIXED_TEST_STORE_PATH in the local daemon store.
@@ -3092,7 +3087,7 @@ pub mod tests {
                 // a new one.
                 PackageCreatedGuard { _private: () },
                 &build_meta,
-                &BTreeMap::new(),
+                &PackageClosure::default(),
                 None,
                 // Server returns meta-only store config; narinfo collected
                 // from FIXED_TEST_STORE_PATH in the local daemon store.
@@ -3136,7 +3131,7 @@ pub mod tests {
                 &user_handle,
                 PackageCreatedGuard { _private: () },
                 &build_meta,
-                &BTreeMap::new(),
+                &PackageClosure::default(),
                 None,
                 // Server returns meta-only store config; narinfo collected
                 // from FIXED_TEST_STORE_PATH in the local daemon store.
@@ -3724,5 +3719,137 @@ pub mod tests {
             msg.contains("dirty"),
             "Expected 'dirty' in message, got: {msg}"
         );
+    }
+    #[tokio::test]
+    async fn publish_keeps_source_declarations_separate_from_the_input_closure() {
+        // An empty closure must still reach the request as empty collections,
+        // not as absent fields.
+        for (declare_own_overrides, populated_closure) in
+            [(false, true), (true, true), (false, false)]
+        {
+            let (mut flox, _temp_dir_handle) = flox_instance();
+            let (_tempdir_handle, _remote_repo, remote_uri) = example_git_remote_repo();
+            let (env, build_repo) = example_path_environment(&flox, Some(&remote_uri));
+
+            let own_paths = if declare_own_overrides {
+                vec![vec!["nested", "wheel"], vec!["zlib"]]
+            } else {
+                vec![]
+            };
+            for path in &own_paths {
+                let directory = path
+                    .iter()
+                    .fold(env.dot_flox_path().join("pkgs"), |p, name| p.join(name));
+                std::fs::create_dir_all(&directory).unwrap();
+                std::fs::write(directory.join("default.nix"), "{ }: null").unwrap();
+                std::fs::write(directory.join("deep-override"), "").unwrap();
+            }
+            if declare_own_overrides {
+                build_repo
+                    .add(&[&env.dot_flox_path().join("pkgs")])
+                    .unwrap();
+                build_repo.commit("Declare source overrides").unwrap();
+                build_repo.push("origin", false).unwrap();
+            }
+            let closure = PackageClosure {
+            direct_inputs: vec!["dep/root".to_string()],
+            locked_inputs: serde_json::from_value(serde_json::json!({
+                "dep/root": {
+                    "attr_path": ["root"], "build_type": "nef", "catalog": "dep",
+                    "inputs": ["dep/child"], "locked_inputs_hash": "sha256-root",
+                    "source": {"type": "git", "url": "https://example.com/dependency",
+                               "rev": "dependency-revision", "ref": "refs/heads/main", "dir": "."},
+                    "deep_overrides": []
+                },
+                "dep/child": {
+                    "attr_path": ["child"], "build_type": "nef", "catalog": "dep",
+                    "inputs": [], "locked_inputs_hash": "sha256-child",
+                    "source": {"type": "git", "url": "https://example.com/transitive",
+                               "rev": "transitive-revision", "ref": "refs/heads/main", "dir": "."},
+                    "deep_overrides": [["openssl"]]
+                }
+        })).unwrap(),
+        };
+            let closure = if populated_closure {
+                closure
+            } else {
+                PackageClosure::default()
+            };
+
+            set_test_auth(&mut flox, "test");
+            let catalog_name = "test".to_string();
+
+            let env_metadata = check_environment_metadata(&flox, &env).unwrap();
+            let package_metadata = check_package_metadata(
+                Some(&mock_base_catalog_url()),
+                env_metadata.toplevel_catalog_ref.as_ref(),
+                EXAMPLE_MANIFEST_PACKAGE_TARGET.clone(),
+            )
+            .unwrap();
+
+            let build_metadata = check_build_metadata(
+                &flox,
+                env_metadata.toplevel_catalog_ref.as_ref().unwrap(),
+                None,
+                &env_metadata,
+                &package_metadata.package,
+                None,
+            )
+            .unwrap();
+
+            let auth = NixAuth::from_flox(&flox).unwrap();
+            let publish_provider = PublishProvider::new(env_metadata, package_metadata, auth);
+
+            let mut catalog = MockClient::new();
+            reset_mocks(&mut catalog, vec![
+                Response::CreatePackage,
+                Response::Publish(PublishResponse {
+                    ingress_uri: None,
+                    ingress_auth: None,
+                    catalog_store_config: CatalogStoreConfig::MetaOnly,
+                }),
+                Response::PublishBuild,
+            ]);
+
+            let package_created = publish_provider
+                .create_package_and_possibly_user_catalog(&catalog, &catalog_name)
+                .await
+                .unwrap();
+            publish_provider
+                .publish(
+                    &catalog,
+                    &catalog_name,
+                    package_created,
+                    &build_metadata,
+                    &closure,
+                    None,
+                    false,
+                    None,
+                    false,
+                    async |_| Ok(false),
+                )
+                .await
+                .expect("expected publish to succeed");
+
+            let sent = catalog
+                .last_publish_build_info
+                .lock()
+                .expect("couldn't acquire mock lock")
+                .clone()
+                .expect("publish_build was called");
+            let body = serde_json::to_value(sent).unwrap();
+            assert_eq!(
+                (
+                    body["deep_overrides"].clone(),
+                    body["locked_inputs"].clone(),
+                    body["direct_inputs"].clone()
+                ),
+                (
+                    serde_json::json!(own_paths),
+                    serde_json::to_value(&closure.locked_inputs).unwrap(),
+                    serde_json::to_value(&closure.direct_inputs).unwrap()
+                ),
+            );
+        }
     }
 }

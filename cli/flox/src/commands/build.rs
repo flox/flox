@@ -45,14 +45,6 @@ use crate::utils::events::duration_to_ms;
 use crate::utils::message;
 use crate::{environment_subcommand_metric, subcommand_metric};
 
-/// How the user invokes the catalog-lock update, for messages that name it.
-///
-/// NAMING: provisional — the command is expected to be renamed (or folded
-/// into a flag such as `flox build --lock-catalog`) once the UX discussion
-/// settles. Keep the user-visible name confined to this constant and the
-/// `UpdateCatalogs` bpaf declaration so the rename stays a two-line change.
-pub(crate) const UPDATE_CATALOGS_COMMAND: &str = "flox build update-catalogs";
-
 #[derive(Debug, Clone, Bpaf)]
 pub enum BaseCatalogUrlSelect {
     NixpkgsUrl(#[bpaf(long("nixpkgs-url"), argument("url"), hide)] Url),
@@ -134,7 +126,7 @@ enum SubcommandOrBuildTargets {
     /// locks them to '.flox/catalog.lock', the single set of pinned catalog
     /// inputs every build of the project evaluates against.
     //
-    // NAMING: provisional; see the note at [UPDATE_CATALOGS_COMMAND] before
+    // NAMING: provisional; see the note at [nef_lock_catalog::UPDATE_CATALOGS_COMMAND] before
     // renaming.
     #[bpaf(
         command,
@@ -336,9 +328,9 @@ impl Build {
             "has_manifest_build" = has_manifest_build
         );
 
-        // The catalog lock the NEF evals consume, created by the CLI: the
-        // committed .flox/catalog.lock exactly as found, or a fresh
-        // ephemeral lock living only for this invocation. Scanning is
+        // The catalog lock the NEF evals consume, created by the CLI: a
+        // temporary builder file materialized from the committed lock, or
+        // from fresh resolution when no committed lock exists. Scanning is
         // scoped to the expressions being built — the scanner follows
         // imports, so their references are exactly what the evals look up —
         // except when a manifest build is among the targets, whose `${pkg}`
@@ -379,17 +371,12 @@ impl Build {
             None => None,
         };
 
-        let catalog_lock = match &*expression_lock_rel_paths {
-            [] => None,
-            expression_lock_rel_paths => Some(
-                BuildLockGuard::new_existing_or_ephemeral(
-                    &flox.floxhub_client,
-                    env.dot_flox_path(),
-                    expression_lock_rel_paths,
-                )
-                .await?,
-            ),
-        };
+        let catalog_lock = BuildLockGuard::for_expression_builds(
+            &flox.floxhub_client,
+            env.dot_flox_path(),
+            &expression_lock_rel_paths,
+        )
+        .await?;
 
         let cache_path = env.cache_path()?;
         let builder = FloxBuildMk::new(

@@ -17,6 +17,9 @@ pub use attr_path::InvalidAttrPath;
 pub use error::{ImportSite, ScanError};
 use graph::PackageGraph;
 
+// Must match the pinned base in package-builder/nef/lib/instantiate.nix.
+const BASE_CATALOG_NAME: &str = "nixpkgs";
+
 /// A single catalog attribute-path reference discovered by the scanner,
 /// e.g. `catalogs.myorg.toolkit.readVersion`. Where the walker could not
 /// resolve a path further it names everything under it instead, rendered with
@@ -56,18 +59,20 @@ pub(crate) enum InvalidCatalogRefKind {
 }
 
 impl CatalogRef {
+    /// Whether this reference names the base catalog supplied by the builder.
+    pub fn is_base(&self) -> bool {
+        self.0.attribute_names()[1] == BASE_CATALOG_NAME
+    }
+
     /// The path this reference locks. Crate-internal: a reference is a
     /// [Display] value to consumers, and the wire form is built from it here.
     pub(crate) fn path(&self) -> &AttrPath {
         &self.0
     }
 
-    /// The catalog-relative rendering of this reference: the path with its
-    /// root dropped, dot-joined — the form the catalog server's lookup
-    /// request takes. NOTE: this is not how a lock's `direct_catalog_inputs`
-    /// is keyed; the server keys results canonically as
-    /// `<catalog>/<attr-path>` (see the `matched` map, which relates the two
-    /// namespaces).
+    /// Render a reference for lookup as `<catalog>.<attr-path>`.
+    /// Lock keys instead use `<catalog>/<attr-path>`; the response's `matched`
+    /// map relates the two namespaces.
     pub(crate) fn wire_key(&self) -> String {
         // A reference always has a root to drop; that is what makes it one.
         self.0
