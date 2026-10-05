@@ -433,11 +433,8 @@ impl Publish {
         let auth = NixAuth::from_flox(&flox)?;
         let publish_provider = PublishProvider::new(env_metadata, package_metadata, auth);
 
-        // Check that we can publish before building.
+        // Prepare the local lock before creating any server package record.
         let catalog = &flox.floxhub_client;
-        let package_created = publish_provider
-            .create_package_and_possibly_user_catalog(catalog, &catalog_name)
-            .await?;
 
         let has_expression_build = publish_provider
             .package_metadata
@@ -514,6 +511,9 @@ impl Publish {
             Some(lock) => project_for_publish(lock, &references)?,
             None => PackageClosure::default(),
         };
+        let package_created = publish_provider
+            .create_package_and_possibly_user_catalog(catalog, &catalog_name)
+            .await?;
 
         // Dedup: ask the catalog server if this exact build has already been
         // published before paying for the upload — and, when the closure
