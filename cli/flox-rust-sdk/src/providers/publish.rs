@@ -1663,6 +1663,39 @@ pub mod tests {
     }
 
     #[tokio::test]
+    async fn publish_sends_empty_closure_when_given_one() {
+        let server = httpmock::MockServer::start_async().await;
+        let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        let mock = server.mock(|when, then| {
+            when.method(httpmock::Method::POST)
+                .path("/api/v1/catalog/catalogs/test/packages/hello/builds")
+                .json_body_includes(
+                    serde_json::json!({"locked_inputs": {}, "direct_inputs": []}).to_string(),
+                );
+            then.status(200).json_body(serde_json::json!({}));
+        });
+        let build: UserBuildPublish = serde_json::from_value(serde_json::json!({
+            "derivation": {
+                "drv_path": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-hello.drv",
+                "name": "hello", "outputs": [], "system": "x86_64-linux"
+            },
+            "url": "https://github.com/org/repo", "ref": "main", "rev": "abc123",
+            "rev_count": 1, "rev_date": "2026-01-01T00:00:00Z",
+            "narinfos": {},
+            "locked_inputs": {}, "direct_inputs": [],
+            "locked_base_catalog_url": "https://github.com/flox/nixpkgs?rev=abc123"
+        }))
+        .unwrap();
+
+        publish_build_with_confirmation(&client, "test", "hello", build, async |_| {
+            panic!("a successful base-only publish needs no confirmation")
+        })
+        .await
+        .unwrap();
+        mock.assert();
+    }
+
+    #[tokio::test]
     async fn publish_lineage_confirmation_retries_only_when_accepted() {
         let accepted =
             exercise_lineage_publish(409, LINEAGE_CHANGE_DETAIL, false, true, 200, true).await;
@@ -1689,6 +1722,15 @@ pub mod tests {
     #[tokio::test]
     async fn publish_lineage_flag_sends_override_without_confirmation() {
         let outcome = exercise_lineage_publish(200, "", true, false, 200, true).await;
+        assert_eq!(
+            outcome,
+            (0, 1, 0, Ok(vec![INPUT_LINEAGE_WARNING.to_owned()]))
+        );
+    }
+
+    #[tokio::test]
+    async fn publish_success_carries_input_lineage_warning_without_a_conflict() {
+        let outcome = exercise_lineage_publish(200, "", false, false, 200, true).await;
         assert_eq!(
             outcome,
             (0, 1, 0, Ok(vec![INPUT_LINEAGE_WARNING.to_owned()]))
@@ -3516,6 +3558,61 @@ pub mod tests {
         assert!(
             msg.contains("git push origin HEAD:main"),
             "Expected an explicit upstream branch in the push suggestion, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn gather_repo_meta_reports_deleted_remote_branch() {
+        let (git, _tempdir) = init_temp_repo(false);
+        let _remotes = create_remotes(&git, &["origin"]);
+        git.checkout("main", true).unwrap();
+        commit_file(&git, "base.txt");
+        git.push_ref("origin", "main", false).unwrap();
+        GitCommandProvider::run_command(git.new_command().args(["fetch", "origin", "main"]))
+            .unwrap();
+        GitCommandProvider::run_command(git.new_command().args([
+            "branch",
+            "--set-upstream-to=origin/main",
+            "main",
+        ]))
+        .unwrap();
+        GitCommandProvider::run_command(git.new_command().args([
+            "push",
+            "origin",
+            ":refs/heads/main",
+        ]))
+        .unwrap();
+        let error = gather_build_repo_meta(&git).unwrap_err().to_string();
+        assert!(error.contains("no longer exists"), "{error}");
+        assert!(!error.contains("full history"), "{error}");
+    }
+
+    #[test]
+    fn gather_repo_meta_refuses_a_revision_only_on_a_sibling_branch() {
+        let (git, _tempdir) = init_temp_repo(false);
+        let _remotes = create_remotes(&git, &["origin"]);
+        git.checkout("main", true).unwrap();
+        commit_file(&git, "base.txt");
+        let base = git.status().unwrap().rev;
+        git.push_ref("origin", "main", false).unwrap();
+        git.create_branch("sibling", &base).unwrap();
+        git.checkout("sibling", false).unwrap();
+        commit_file(&git, "sibling.txt");
+        git.push_ref("origin", "sibling", false).unwrap();
+        GitCommandProvider::run_command(git.new_command().args(["fetch", "origin", "main"]))
+            .unwrap();
+        GitCommandProvider::run_command(git.new_command().args([
+            "branch",
+            "--set-upstream-to=origin/main",
+            "sibling",
+        ]))
+        .unwrap();
+
+        let err = gather_build_repo_meta(&git).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("not contained in remote branch 'origin/main'"),
+            "{msg}"
         );
     }
 

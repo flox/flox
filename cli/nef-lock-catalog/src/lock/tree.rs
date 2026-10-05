@@ -359,6 +359,29 @@ mod tests {
     }
 
     #[test]
+    fn duplicate_exact_path_is_rejected() {
+        let mut builder = PackageTreeBuilder::new();
+        for first in [true, false] {
+            let result = builder.add_package_source(
+                vec!["a".into()],
+                BuildType::Nef,
+                RawNixFlakerefAttrs::new_unchecked(test_source()),
+                Vec::new(),
+            );
+            if first {
+                result.unwrap();
+            } else {
+                assert!(
+                    result
+                        .unwrap_err()
+                        .to_string()
+                        .contains("duplicate package path 'a'")
+                );
+            }
+        }
+    }
+
+    #[test]
     fn serialization_preserved() {
         let mut builder = PackageTreeBuilder::new();
         let source = test_source();

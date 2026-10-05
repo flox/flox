@@ -1060,6 +1060,58 @@ pub mod tests {
     const SENTRY_TRACE_HEADER: &str = "sentry-trace";
 
     #[tokio::test]
+    async fn lookup_reads_not_lockable_from_http_response() {
+        let server = MockServer::start_async().await;
+        let mock = server.mock(|when, then| {
+            when.method("POST")
+                .path("/api/v1/catalog/build-inputs/lookup")
+                .json_body(
+                    json!({"groups": [{"key": "default", "references": ["nixpkgs.hello"]}]}),
+                );
+            then.status(200).json_body(json!({
+                "version": 1,
+                "groups": {"default": {
+                    "lock": {}, "matched": {}, "unresolvable": [],
+                    "not_lockable": {"nixpkgs.hello": {"kind": "base_catalog"}}
+                }}
+            }));
+        });
+        let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
+        let request: BuildInputsLookupRequest = serde_json::from_value(json!({
+            "groups": [{"key": "default", "references": ["nixpkgs.hello"]}],
+        }))
+        .unwrap();
+
+        let response = client.build_inputs_lookup(request).await.unwrap();
+        mock.assert();
+        assert_eq!(response.version, 1);
+        assert_eq!(
+            response.groups["default"].not_lockable["nixpkgs.hello"].kind,
+            "base_catalog"
+        );
+    }
+
+    #[tokio::test]
+    async fn lookup_defaults_absent_envelope_version() {
+        let server = MockServer::start_async().await;
+        let mock = server.mock(|when, then| {
+            when.method("POST")
+                .path("/api/v1/catalog/build-inputs/lookup");
+            then.status(200).json_body(json!({"groups": {"default": {
+                "lock": {}, "matched": {}, "unresolvable": [], "not_lockable": {}
+            }}}));
+        });
+        let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
+        let request: BuildInputsLookupRequest = serde_json::from_value(json!({
+            "groups": [{"key": "default", "references": ["nixpkgs.hello"]}],
+        }))
+        .unwrap();
+        let response = client.build_inputs_lookup(request).await.unwrap();
+        assert_eq!(response.version, 1);
+        mock.assert();
+    }
+
+    #[tokio::test]
     async fn resolve_response_with_new_message_type() {
         let user_message = "User consumable Message";
         let user_message_type = "willnevereverexist_ihope";

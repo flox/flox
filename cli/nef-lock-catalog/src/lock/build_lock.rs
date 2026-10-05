@@ -569,6 +569,29 @@ mod tests {
         );
     }
 
+    #[test]
+    fn base_references_and_wildcards_do_not_select_lock_roots() {
+        let lock = lock_with(&["myorg/hello"]);
+        let base_only = lock
+            .project_package(&references(&[
+                "catalogs.nixpkgs.hello",
+                "catalogs.nixpkgs.python3Packages.*",
+                "catalogs.nixpkgs.*",
+            ]))
+            .expect("base references need no lock root");
+        assert!(base_only.direct_inputs.is_empty());
+        assert!(base_only.locked_inputs.is_empty());
+
+        let mixed = lock
+            .project_package(&references(&[
+                "catalogs.nixpkgs.python3Packages.*",
+                "catalogs.myorg.hello",
+            ]))
+            .expect("only the custom reference selects a lock root");
+        assert_eq!(mixed.direct_inputs, vec!["myorg/hello".to_string()]);
+        assert_eq!(mixed.locked_inputs.len(), 1);
+    }
+
     /// A reference may select a member of the package it resolved to
     /// (`catalogs.myorg.toolkit.readVersion` → entry `myorg/toolkit`); the
     /// most specific entry wins when entries nest.
@@ -615,6 +638,119 @@ mod tests {
     }
 
     #[test]
+    fn project_package_includes_a_shared_diamond_child_once() {
+        let mut locked = HashMap::new();
+        locked.insert("myorg/app".to_string(), {
+            let mut e = entry("myorg", &["app"]);
+            e.inputs = Some(vec!["myorg/left".to_string(), "myorg/right".to_string()]);
+            e
+        });
+        locked.insert("myorg/left".to_string(), {
+            let mut e = entry("myorg", &["left"]);
+            e.inputs = Some(vec!["myorg/shared".to_string()]);
+            e
+        });
+        locked.insert("myorg/right".to_string(), {
+            let mut e = entry("myorg", &["right"]);
+            e.inputs = Some(vec!["myorg/shared".to_string()]);
+            e
+        });
+        locked.insert("myorg/shared".to_string(), entry("myorg", &["shared"]));
+
+        let lock = build_lock_from_locked_inputs(locked, [&"myorg/app".to_string()])
+            .expect("transform succeeds");
+
+        let closure = lock
+            .project_package(&references(&["catalogs.myorg.app"]))
+            .expect("references are covered");
+
+        assert_eq!(closure.direct_inputs, vec!["myorg/app".to_string()]);
+        assert_eq!(closure.locked_inputs.len(), 4);
+        assert!(closure.locked_inputs.contains_key("myorg/shared"));
+    }
+
+    #[test]
+    fn project_package_reports_a_cycle() {
+        let mut locked = HashMap::new();
+        locked.insert("myorg/a".to_string(), {
+            let mut e = entry("myorg", &["a"]);
+            e.inputs = Some(vec!["myorg/b".to_string()]);
+            e
+        });
+        locked.insert("myorg/b".to_string(), {
+            let mut e = entry("myorg", &["b"]);
+            e.inputs = Some(vec!["myorg/a".to_string()]);
+            e
+        });
+
+        let lock = build_lock_from_locked_inputs(locked, [&"myorg/a".to_string()])
+            .expect("transform succeeds");
+
+        let err = lock
+            .project_package(&references(&["catalogs.myorg.a"]))
+            .expect_err("a cycle is refused");
+        assert!(matches!(err, ProjectionError::Cycle { .. }), "{err:?}");
+    }
+
+    #[test]
+    fn project_package_reports_unstated_inputs_only_when_reached() {
+        let mut locked = HashMap::new();
+        let mut unstated = entry("myorg", &["hello"]);
+        unstated.inputs = None;
+        locked.insert("myorg/hello".to_string(), unstated);
+        locked.insert("myorg/world".to_string(), entry("myorg", &["world"]));
+
+        let lock = build_lock_from_locked_inputs(locked, [
+            &"myorg/hello".to_string(),
+            &"myorg/world".to_string(),
+        ])
+        .expect("transform succeeds: the anomaly is only refused when walked");
+
+        let closure = lock
+            .project_package(&references(&["catalogs.myorg.world"]))
+            .expect("unrelated entries are unaffected");
+        assert_eq!(closure.direct_inputs, vec!["myorg/world".to_string()]);
+
+        let err = lock
+            .project_package(&references(&["catalogs.myorg.hello"]))
+            .expect_err("unstated inputs are refused once selected");
+        assert!(
+            matches!(err, ProjectionError::UnstatedInputs { .. }),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn project_package_reports_a_missing_root() {
+        let mut lock = lock_with(&["myorg/hello"]);
+        lock.direct_inputs.insert("myorg/dangling".to_string());
+
+        let err = lock
+            .project_package(&references(&["catalogs.myorg.hello"]))
+            .expect_err("an unselected dangling direct input is refused");
+        assert!(
+            matches!(err, ProjectionError::MissingRoot { .. }),
+            "{err:?}"
+        );
+        assert_eq!(
+            err.to_string(),
+            "direct input 'myorg/dangling' does not appear in the lock's locked_inputs"
+        );
+    }
+
+    #[test]
+    fn leaf_and_manifest_publish_send_empty_closures() {
+        let lock = lock_with(&["myorg/hello"]);
+
+        let closure = lock
+            .project_package(&BTreeSet::new())
+            .expect("no references selects nothing");
+
+        assert!(closure.direct_inputs.is_empty());
+        assert!(closure.locked_inputs.is_empty());
+    }
+
+    #[test]
     fn rendered_lock_reads_back_and_projects() {
         let lock = lock_with(&["myorg/hello", "other/tool"]);
         let rendered = render_lock(&lock).expect("lock renders");
@@ -629,5 +765,201 @@ mod tests {
             lock.project_package(&references(&["catalogs.other.tool"]))
                 .unwrap()
         );
+    }
+
+    #[test]
+    fn empty_lock_serializes_to_the_required_bytes() {
+        assert_eq!(
+            serde_json::to_value(BuildLock::default()).unwrap(),
+            serde_json::json!({
+                "version": 2,
+                "locked_inputs": {},
+                "direct_inputs": [],
+            })
+        );
+    }
+
+    #[test]
+    fn old_unreleased_v2_catalogs_are_ignored_on_read() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("catalog.lock");
+        fs::write(
+            &path,
+            r#"{"version":2,"locked_inputs":{},"direct_inputs":[],"catalogs":{"stale":{}}}"#,
+        )
+        .unwrap();
+        let lock = read_lock(&path).unwrap();
+        assert_eq!(
+            serde_json::to_value(&lock).unwrap(),
+            serde_json::json!({
+                "version":2,"locked_inputs":{},"direct_inputs":[]
+            })
+        );
+        assert_eq!(
+            crate::lock::transform::materialize_catalogs(&lock).unwrap(),
+            serde_json::json!({})
+        );
+    }
+
+    #[test]
+    fn read_lock_distinguishes_every_read_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("catalog.lock");
+        assert!(matches!(read_lock(&path), Err(LockfileError::Read { .. })));
+        for (body, variant) in [
+            ("{", "parse"),
+            (r#"{"version":2}"#, "parse"),
+            (r#"{"version":1}"#, "legacy"),
+            (r#"{"version":3}"#, "unsupported"),
+            (r#"{}"#, "missing"),
+            (r#"{"version":0}"#, "invalid"),
+            (r#"{"version":"2"}"#, "invalid"),
+            (r#"{"version":null}"#, "invalid"),
+            (r#"{"version":-1}"#, "invalid"),
+            (r#"{"version":[]}"#, "invalid"),
+        ] {
+            fs::write(&path, body).unwrap();
+            let error = read_lock(&path).unwrap_err();
+            let actual = match &error {
+                LockfileError::Parse { .. } => "parse",
+                LockfileError::LegacyVersion { .. } => "legacy",
+                LockfileError::UnsupportedVersion { .. } => "unsupported",
+                LockfileError::MissingVersion { .. } => "missing",
+                LockfileError::InvalidVersion { .. } => "invalid",
+                other => panic!("unexpected error: {other:?}"),
+            };
+            assert_eq!(actual, variant, "{body}");
+            if matches!(actual, "missing" | "invalid" | "legacy") {
+                assert!(error.to_string().contains(UPDATE_CATALOGS_COMMAND));
+            }
+        }
+    }
+
+    #[test]
+    fn default_lock_compact_json_matches_documented_field_order() {
+        assert_eq!(
+            serde_json::to_string(&BuildLock::default()).unwrap(),
+            r#"{"version":2,"locked_inputs":{},"direct_inputs":[]}"#
+        );
+    }
+
+    #[test]
+    fn write_default_lock_matches_empty_v2_bytes() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("catalog.lock");
+        write_lock(&BuildLock::default(), &path).unwrap();
+
+        assert_eq!(
+            fs::read(&path).unwrap(),
+            b"{\n  \"version\": 2,\n  \"locked_inputs\": {},\n  \"direct_inputs\": []\n}\n"
+        );
+    }
+
+    #[test]
+    fn build_type_accepts_only_manifest_and_nef() {
+        assert_eq!(
+            serde_json::from_str::<super::BuildType>(r#""nef""#).unwrap(),
+            super::BuildType::Nef
+        );
+        assert_eq!(
+            serde_json::from_str::<super::BuildType>(r#""manifest""#).unwrap(),
+            super::BuildType::Manifest
+        );
+        assert!(serde_json::from_str::<super::BuildType>(r#""other""#).is_err());
+        assert_eq!(
+            serde_json::to_string(&super::BuildType::Nef).unwrap(),
+            r#""nef""#
+        );
+        assert_eq!(
+            serde_json::to_string(&super::BuildType::Manifest).unwrap(),
+            r#""manifest""#
+        );
+    }
+
+    #[test]
+    fn write_populated_lock_matches_literal_bytes() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("catalog.lock");
+        let lock = lock_with(&["myorg/hello"]);
+        write_lock(&lock, &path).unwrap();
+        let original = fs::read(&path).unwrap();
+        let golden = r#"{
+  "version": 2,
+  "locked_inputs": {
+    "myorg/hello": {
+      "attr_path": [
+        "hello"
+      ],
+      "build_type": "nef",
+      "catalog": "myorg",
+      "inputs": [],
+      "locked_inputs_hash": "sha256-test",
+      "version": null,
+      "build": null,
+      "source": {
+        "dir": ".",
+        "ref": "refs/heads/main",
+        "rev": "abc",
+        "type": "git",
+        "url": "https://example.com/repo"
+      }
+    }
+  },
+  "direct_inputs": [
+    "myorg/hello"
+  ]
+}
+"#;
+        assert_eq!(original, golden.as_bytes());
+        write_lock(&read_lock(&path).unwrap(), &path).unwrap();
+        assert_eq!(fs::read(&path).unwrap(), original);
+        assert!(
+            String::from_utf8(original)
+                .unwrap()
+                .contains("\"build_type\": \"nef\"")
+        );
+    }
+
+    #[test]
+    fn source_extras_survive_into_the_projected_closure() {
+        let mut with_extra = entry("myorg", &["hello"]);
+        with_extra
+            .source
+            .extra
+            .insert("narHash".to_string(), serde_json::json!("sha256-abc123"));
+        let locked = HashMap::from([("myorg/hello".to_string(), with_extra)]);
+
+        let lock = build_lock_from_locked_inputs(locked, [&"myorg/hello".to_string()])
+            .expect("transform succeeds");
+        let closure = lock
+            .project_package(&references(&["catalogs.myorg.hello"]))
+            .expect("references are covered");
+
+        assert_eq!(
+            closure.locked_inputs["myorg/hello"].source.extra["narHash"],
+            serde_json::json!("sha256-abc123")
+        );
+    }
+
+    #[test]
+    fn deep_chain_near_the_server_cap_does_not_exhaust_the_stack() {
+        const DEPTH: usize = 16_384;
+        let mut locked = HashMap::new();
+        for i in 0..DEPTH {
+            let name = format!("pkg{i}");
+            let mut e = entry("myorg", &[&name]);
+            if i + 1 < DEPTH {
+                e.inputs = Some(vec![format!("myorg/pkg{}", i + 1)]);
+            }
+            locked.insert(format!("myorg/pkg{i}"), e);
+        }
+
+        let lock = build_lock_from_locked_inputs(locked, [&"myorg/pkg0".to_string()])
+            .expect("transform succeeds");
+        let closure = lock
+            .project_package(&references(&["catalogs.myorg.pkg0"]))
+            .expect("the whole chain resolves");
+
+        assert_eq!(closure.locked_inputs.len(), DEPTH);
     }
 }
