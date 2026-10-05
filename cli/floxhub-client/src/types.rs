@@ -104,14 +104,31 @@ pub use api_types::{
     MessageLevel,
     NarInfo,
     NarInfos,
+    PackageBuildResponse,
     PackageBuildWithNarInfo as UserBuildPublish,
     PackageDerivation as UserDerivationInfo,
     PublishInfoResponseCatalog as PublishResponse,
+    PublishWarning,
     StoreInfo,
     StoreInfoRequest,
     StoreInfoResponse,
     StorepathStatusResponse,
 };
+
+/// Give callers a stable warning list without exposing the generated response.
+/// An absent list is treated as empty.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct PublishReceipt {
+    pub warnings: Vec<PublishWarning>,
+}
+
+impl From<PackageBuildResponse> for PublishReceipt {
+    fn from(value: PackageBuildResponse) -> Self {
+        Self {
+            warnings: value.warnings,
+        }
+    }
+}
 
 /// The content of a generic message.
 #[derive(Debug, Clone, Serialize, Deserialize)]
