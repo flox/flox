@@ -33,6 +33,7 @@ use flox_rust_sdk::utils::{CommandExt, FLOX_INTERPRETER};
 use floxhub_client::{BaseCatalogUrl, CatalogClientTrait, FloxhubClientError};
 use indoc::formatdoc;
 use itertools::Itertools;
+pub(crate) use nef_lock_catalog::UPDATE_CATALOGS_COMMAND;
 use nef_lock_catalog::{NixFlakeref, catalog_lockfile_path, lock_project_catalog};
 use thiserror::Error;
 use tracing::{debug, instrument, trace};
@@ -43,14 +44,6 @@ use crate::utils::catalog_lock::BuildLockGuard;
 use crate::utils::events::duration_to_ms;
 use crate::utils::message;
 use crate::{environment_subcommand_metric, subcommand_metric};
-
-/// How the user invokes the catalog-lock update, for messages that name it.
-///
-/// NAMING: provisional — the command is expected to be renamed (or folded
-/// into a flag such as `flox build --lock-catalog`) once the UX discussion
-/// settles. Keep the user-visible name confined to this constant and the
-/// `UpdateCatalogs` bpaf declaration so the rename stays a two-line change.
-pub(crate) const UPDATE_CATALOGS_COMMAND: &str = "flox build update-catalogs";
 
 #[derive(Debug, Clone, Bpaf)]
 pub enum BaseCatalogUrlSelect {

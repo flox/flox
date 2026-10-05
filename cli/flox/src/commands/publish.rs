@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -31,12 +31,17 @@ use floxhub_client::{
     CheckBuildQuery,
     CheckBuildResponse,
     FloxhubClientError,
-    LockedInputEntry,
     PackageSystem,
     SourceLineageChange,
 };
 use indoc::formatdoc;
-use nef_lock_catalog::{CatalogRef, NixFlakeref, scan_package};
+use nef_lock_catalog::{
+    CatalogRef,
+    NixFlakeref,
+    PackageClosure,
+    catalog_lockfile_path,
+    scan_package,
+};
 use tracing::{debug, info_span, instrument, warn};
 
 use super::{DirEnvironmentSelect, dir_environment_select};
@@ -190,16 +195,16 @@ async fn dedup_short_circuit(client: &impl CatalogClientTrait, query: CheckBuild
     }
 }
 
-/// The locked-input subset a publish submits, projected from the lock its
+/// This package's roots and transitive closure, projected from the lock its
 /// build consumes, with a stale committed lock translated into an
 /// actionable error. Only the committed lock can be stale: an ephemeral
 /// lock is resolved from the same expressions the references were scanned
 /// from.
-fn subset_for_publish(
+fn project_for_publish(
     lock: &BuildLockGuard,
     references: &BTreeSet<CatalogRef>,
-) -> Result<BTreeMap<String, LockedInputEntry>> {
-    lock.build_lock().subset_direct(references).map_err(|err| {
+) -> Result<PackageClosure> {
+    lock.build_lock().project_package(references).map_err(|err| {
         if lock.is_existing() {
             anyhow!(formatdoc! {"
                 {err}
@@ -404,7 +409,7 @@ impl Publish {
         let auth = NixAuth::from_flox(&flox)?;
         let publish_provider = PublishProvider::new(env_metadata, package_metadata, auth);
 
-        // Check that we can publish before building.
+        // Prepare the local lock before creating any server package record.
         let catalog = &flox.floxhub_client;
         let package_created = publish_provider
             .create_package_and_possibly_user_catalog(catalog, &catalog_name)
@@ -452,9 +457,9 @@ impl Publish {
         };
 
         // The lock this publish's build consumes, created up front by the
-        // CLI: the committed .flox/catalog.lock exactly as found, or a fresh
-        // ephemeral lock the package builder only passes through to the NEF
-        // evals. Scanning is scoped to the published expression — the
+        // CLI: a temporary builder file materialized from the committed
+        // lock, or from fresh resolution for the NEF evals. Scanning is scoped
+        // to the published expression — the
         // scanner follows imports, so its references are exactly what its
         // eval looks up — except for a manifest build, whose `${pkg}`
         // references can pull in any of the project's expressions, so all of
@@ -471,7 +476,10 @@ impl Publish {
                 )
             },
         };
-        let catalog_lock = match lock_rel_paths.is_empty() {
+        // A committed v1 lock needs an explicit relock even without expressions.
+        let catalog_lock = match lock_rel_paths.is_empty()
+            && !catalog_lockfile_path(path_env.dot_flox_path()).exists()
+        {
             true => None,
             false => Some(
                 BuildLockGuard::new_existing_or_ephemeral(
@@ -483,12 +491,12 @@ impl Publish {
             ),
         };
 
-        // The locked-input subset this publish submits, projected from the
-        // lock the build consumes. Knowable before any build runs, so a true
+        // This package's roots and closure, projected from the lock the
+        // build consumes. Knowable before any build runs, so a true
         // duplicate skips the build entirely.
-        let locked_inputs = match &catalog_lock {
-            Some(lock) => subset_for_publish(lock, &references)?,
-            None => BTreeMap::new(),
+        let closure = match &catalog_lock {
+            Some(lock) => project_for_publish(lock, &references)?,
+            None => PackageClosure::default(),
         };
 
         // Dedup: ask the catalog server if this exact build has already been
@@ -526,7 +534,11 @@ impl Publish {
         if let Some(system) = dedup_system
             && !publish_config.allow_lineage_change
         {
-            let locked_inputs_query: HashMap<_, _> = locked_inputs.clone().into_iter().collect();
+            // Check the target's own identity; dependency metadata cannot stand in.
+            let dot_flox_dir = publish_provider
+                .env_metadata
+                .rel_expression_build_base_dir
+                .to_string_lossy();
             let query = CheckBuildQuery {
                 catalog_name: &catalog_name,
                 package_name: publish_provider.package_metadata.package.name().as_ref(),
@@ -534,8 +546,11 @@ impl Publish {
                 source_rev: &publish_provider.env_metadata.build_repo_meta.rev,
                 nixpkgs_rev,
                 system,
-                locked_inputs: &locked_inputs_query,
+                locked_inputs: &closure.locked_inputs,
                 factory_build_token: factory_build_token.as_deref(),
+                direct_inputs: &closure.direct_inputs,
+                source_ref: &publish_provider.env_metadata.build_repo_meta.ref_,
+                dot_flox_dir: &dot_flox_dir,
             };
             if dedup_short_circuit(&flox.floxhub_client, query).await {
                 return Ok(());
@@ -569,7 +584,7 @@ impl Publish {
                 &catalog_name,
                 package_created,
                 &build_metadata,
-                &locked_inputs,
+                &closure,
                 key_file,
                 publish_config.metadata_only,
                 factory_build_token.as_deref(),
@@ -643,7 +658,7 @@ mod tests {
             nef_lock_catalog::BuildLock::default(),
             true,
         );
-        let err = subset_for_publish(&lock, &references)
+        let err = project_for_publish(&lock, &references)
             .expect_err("an empty committed lock cannot cover the reference");
         let message = format!("{err:#}");
         assert!(

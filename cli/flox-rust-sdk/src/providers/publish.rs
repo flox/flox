@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::str::FromStr;
@@ -15,7 +15,6 @@ use floxhub_client::{
     CatalogStoreConfigNixCopy,
     DeepOverridesItemItem,
     FloxhubClientError,
-    LockedInputEntry,
     NarInfos,
     PackageOutput,
     PackageOutputs,
@@ -29,7 +28,7 @@ use git_url_parse::GitUrl;
 use indexmap::IndexSet;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
-use nef_lock_catalog::NixFlakeref;
+use nef_lock_catalog::{NixFlakeref, PackageClosure};
 use thiserror::Error;
 use tracing::{debug, instrument};
 use url::Url;
@@ -166,7 +165,7 @@ pub trait Publisher {
         catalog_name: &str,
         package_created: PackageCreatedGuard,
         build_metadata: &CheckedBuildMetadata,
-        locked_inputs: &BTreeMap<String, LockedInputEntry>,
+        closure: &PackageClosure,
         key_file: Option<PathBuf>,
         metadata_only: bool,
         factory_build_token: Option<&str>,
@@ -696,7 +695,7 @@ where
         catalog_name: &str,
         _package_created: PackageCreatedGuard,
         build_metadata: &CheckedBuildMetadata,
-        locked_inputs: &BTreeMap<String, LockedInputEntry>,
+        closure: &PackageClosure,
         key_file: Option<PathBuf>,
         metadata_only: bool,
         factory_build_token: Option<&str>,
@@ -756,8 +755,8 @@ where
             // resolved none. Older CLIs that omit the field are coalesced to
             // empty server-side (floxhub#1791). The wire type is a HashMap;
             // ordering on the wire is meaningless.
-            locked_inputs: Some(locked_inputs.clone().into_iter().collect()),
-            direct_inputs: None,
+            locked_inputs: Some(closure.locked_inputs.clone().into_iter().collect()),
+            direct_inputs: Some(closure.direct_inputs.clone()),
             base_catalog_rev_count: None,
             base_catalog_rev_date: None,
             url: self.env_metadata.build_repo_meta.url.to_string(),
@@ -2137,7 +2136,7 @@ pub mod tests {
                 &catalog_name,
                 package_created,
                 &build_metadata,
-                &BTreeMap::new(),
+                &PackageClosure::default(),
                 None,
                 false,
                 None,
@@ -2209,7 +2208,7 @@ pub mod tests {
                 &catalog_name,
                 package_created,
                 &build_metadata,
-                &BTreeMap::new(),
+                &PackageClosure::default(),
                 None,
                 false,
                 Some("factory:abc123"),
@@ -2487,7 +2486,7 @@ pub mod tests {
                 &catalog_name,
                 package_created,
                 &build_metadata,
-                &BTreeMap::new(),
+                &PackageClosure::default(),
                 None,
                 false,
                 None,
@@ -2643,7 +2642,7 @@ pub mod tests {
                 &catalog_name,
                 package_created,
                 &build_metadata,
-                &BTreeMap::new(),
+                &PackageClosure::default(),
                 cache.local_signing_key_path(),
                 false,
                 None,
@@ -2928,7 +2927,7 @@ pub mod tests {
                 &user_handle,
                 packaged_created_guard,
                 &build_meta,
-                &BTreeMap::new(),
+                &PackageClosure::default(),
                 None,
                 // Server returns meta-only store config; narinfo collected
                 // from FIXED_TEST_STORE_PATH in the local daemon store.
@@ -2972,7 +2971,7 @@ pub mod tests {
                 TEST_READ_WRITE_CATALOG_NAME,
                 packaged_created_guard,
                 &build_meta,
-                &BTreeMap::new(),
+                &PackageClosure::default(),
                 None,
                 // Server returns meta-only store config; narinfo collected
                 // from FIXED_TEST_STORE_PATH in the local daemon store.
@@ -3043,7 +3042,7 @@ pub mod tests {
                 TEST_READ_WRITE_CATALOG_NAME,
                 packaged_created_guard,
                 &build_meta,
-                &BTreeMap::new(),
+                &PackageClosure::default(),
                 None,
                 // Server returns meta-only store config; narinfo collected
                 // from FIXED_TEST_STORE_PATH in the local daemon store.
@@ -3062,7 +3061,7 @@ pub mod tests {
                 // a new one.
                 PackageCreatedGuard { _private: () },
                 &build_meta,
-                &BTreeMap::new(),
+                &PackageClosure::default(),
                 None,
                 // Server returns meta-only store config; narinfo collected
                 // from FIXED_TEST_STORE_PATH in the local daemon store.
@@ -3106,7 +3105,7 @@ pub mod tests {
                 &user_handle,
                 PackageCreatedGuard { _private: () },
                 &build_meta,
-                &BTreeMap::new(),
+                &PackageClosure::default(),
                 None,
                 // Server returns meta-only store config; narinfo collected
                 // from FIXED_TEST_STORE_PATH in the local daemon store.

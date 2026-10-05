@@ -184,11 +184,9 @@ const RESPONSE_PAGE_SIZE: NonZeroU32 = NonZeroU32::new(1000).unwrap();
 /// Query describing a build to check for prior recording/publication via
 /// [`CatalogClientTrait::check_build_already_recorded`].
 ///
-/// Mirrors the server-side `CheckBuildRequest` API type field-by-field
-/// (except `locked_inputs`, which is optional on the wire but always sent),
-/// plus the catalog/package name path segments. Adding a new server-side
-/// field is then a struct-field change here, not a signature change across
-/// the trait, the [`FloxhubClient`] impl, and the mock implementation.
+/// Check the target package against its selected v2 closure and identity.
+/// The ref and directory must describe the target, not one of its inputs
+/// (see flox/floxhub#2609).
 #[derive(Debug, Clone, Copy)]
 pub struct CheckBuildQuery<'a> {
     pub catalog_name: &'a str,
@@ -197,11 +195,19 @@ pub struct CheckBuildQuery<'a> {
     pub source_rev: &'a str,
     pub nixpkgs_rev: &'a str,
     pub system: api_types::PackageSystem,
-    pub locked_inputs: &'a HashMap<String, api_types::LockedInputEntry>,
+    pub locked_inputs: &'a BTreeMap<String, api_types::LockedInputEntry>,
     /// Forwarded, uninterpreted, from the caller's process environment.
-    /// `None` for an ordinary `flox publish`, which is the normal case
-    /// rather than a gap.
+    /// `None` for an ordinary `flox publish`.
     pub factory_build_token: Option<&'a str>,
+    /// This package's selected root keys, identical to publish's roots.
+    pub direct_inputs: &'a [String],
+    /// The target's full upstream ref, e.g.
+    /// `refs/heads/main`; publish records this as `UserBuildPublish.ref_`.
+    pub source_ref: &'a str,
+    /// Repository-relative path to `.flox`, e.g. `.flox` or `nested/.flox`;
+    /// publish records this as
+    /// `UserBuildPublish.dot_flox_dir`.
+    pub dot_flox_dir: &'a str,
 }
 
 /// The complete catalog API interface.
@@ -739,16 +745,18 @@ impl CatalogClientTrait for FloxhubClient {
     ) -> Result<CheckBuildResponse, FloxhubClientError> {
         let catalog = str_to_catalog_name(query.catalog_name)?;
         let package = str_to_package_name(query.package_name)?;
+        // Keep the public query ordered for deterministic projections; only
+        // the generated wire request needs the server's HashMap.
         let body = api_types::CheckBuildRequest {
             factory_build_token: query.factory_build_token.map(str::to_string),
             source_url: query.source_url.to_string(),
             source_rev: query.source_rev.to_string(),
             nixpkgs_rev: query.nixpkgs_rev.to_string(),
             system: query.system,
-            locked_inputs: Some(query.locked_inputs.clone()),
-            direct_inputs: None,
-            source_ref: None,
-            dot_flox_dir: None,
+            locked_inputs: Some(query.locked_inputs.clone().into_iter().collect()),
+            direct_inputs: Some(query.direct_inputs.to_vec()),
+            source_ref: Some(query.source_ref.to_string()),
+            dot_flox_dir: Some(query.dot_flox_dir.to_string()),
         };
         self.catalog
             .check_build_api_v1_catalog_catalogs_catalog_name_packages_package_name_check_build_post(
@@ -1644,16 +1652,32 @@ pub mod tests {
 
     const CHECK_BUILD_PATH: &str = "/api/v1/catalog/catalogs/myorg/packages/mypkg/check-build";
 
-    /// locked_inputs (non-empty map) is serialised into the check-build request
-    /// body so the server can perform a closure-aware dedup match.
+    fn check_build_query<'a>(
+        source_url: &'a Url,
+        locked_inputs: &'a BTreeMap<String, api_types::LockedInputEntry>,
+        direct_inputs: &'a [String],
+    ) -> CheckBuildQuery<'a> {
+        CheckBuildQuery {
+            catalog_name: "myorg",
+            package_name: "mypkg",
+            source_url,
+            source_rev: "deadbeef",
+            nixpkgs_rev: "cafebabe",
+            system: api_types::PackageSystem::X8664Linux,
+            locked_inputs,
+            factory_build_token: None,
+            direct_inputs,
+            source_ref: "refs/heads/main",
+            dot_flox_dir: ".flox",
+        }
+    }
+
     #[tokio::test]
-    async fn check_build_sends_locked_inputs() {
+    async fn check_build_sends_closure_and_target_identity() {
         use catalog_api_v1::types as api_types;
 
         let server = MockServer::start_async().await;
         let mock = server.mock(|when, then| {
-            // Verify key fields are present; inputs=null is omitted by
-            // skip_serializing_if so we don't assert on it here.
             when.method("POST")
                 .path(CHECK_BUILD_PATH)
                 .json_body_includes(
@@ -1663,9 +1687,14 @@ pub mod tests {
                                 "catalog": "nixpkgs",
                                 "attr_path": ["hello"],
                                 "build_type": "manifest",
-                                "locked_inputs_hash": "sha256:aabbcc"
+                                "locked_inputs_hash": "sha256:aabbcc",
+                                "version": null,
+                                "build": null
                             }
-                        }
+                        },
+                        "direct_inputs": ["dep-key"],
+                        "source_ref": "refs/heads/release",
+                        "dot_flox_dir": "nested/.flox"
                     })
                     .to_string(),
                 );
@@ -1694,21 +1723,15 @@ pub mod tests {
             version: None,
             build: None,
         };
-        let mut locked_inputs = HashMap::new();
+        let mut locked_inputs = BTreeMap::new();
         locked_inputs.insert("dep-key".to_string(), entry);
+        let direct_inputs = vec!["dep-key".to_string()];
+        let source_url: Url = "https://example.com/repo".parse().unwrap();
 
-        let result = client
-            .check_build_already_recorded(CheckBuildQuery {
-                catalog_name: "myorg",
-                package_name: "mypkg",
-                source_url: &"https://example.com/repo".parse().unwrap(),
-                source_rev: "deadbeef",
-                nixpkgs_rev: "cafebabe",
-                system: api_types::PackageSystem::X8664Linux,
-                locked_inputs: &locked_inputs,
-                factory_build_token: None,
-            })
-            .await;
+        let mut query = check_build_query(&source_url, &locked_inputs, &direct_inputs);
+        query.source_ref = "refs/heads/release";
+        query.dot_flox_dir = "nested/.flox";
+        let result = client.check_build_already_recorded(query).await;
 
         mock.assert();
         assert_eq!(result.expect("expected Ok"), CheckBuildResponse {
@@ -1719,34 +1742,26 @@ pub mod tests {
         });
     }
 
-    /// An empty locked_inputs map serialises as `{}` (not omitted).
+    /// Empty roots must still be present to select v2 on the server.
     #[tokio::test]
-    async fn check_build_sends_empty_locked_inputs_as_object() {
-        use catalog_api_v1::types as api_types;
-
+    async fn check_build_sends_empty_locked_inputs_and_direct_inputs() {
         let server = MockServer::start_async().await;
         let mock = server.mock(|when, then| {
             when.method("POST")
                 .path(CHECK_BUILD_PATH)
-                .json_body_includes(json!({ "locked_inputs": {} }).to_string());
+                .json_body_includes(
+                    json!({ "locked_inputs": {}, "direct_inputs": [] }).to_string(),
+                );
             then.status(200).json_body(json!({
                 "already_published": false
             }));
         });
 
         let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
+        let source_url: Url = "https://example.com/repo".parse().unwrap();
 
         let result = client
-            .check_build_already_recorded(CheckBuildQuery {
-                catalog_name: "myorg",
-                package_name: "mypkg",
-                source_url: &"https://example.com/repo".parse().unwrap(),
-                source_rev: "deadbeef",
-                nixpkgs_rev: "cafebabe",
-                system: api_types::PackageSystem::X8664Linux,
-                locked_inputs: &HashMap::new(),
-                factory_build_token: None,
-            })
+            .check_build_already_recorded(check_build_query(&source_url, &BTreeMap::new(), &[]))
             .await;
 
         mock.assert();
@@ -1761,8 +1776,6 @@ pub mod tests {
     /// already_published=true → Ok with all provenance fields populated.
     #[tokio::test]
     async fn check_build_returns_already_published_true() {
-        use catalog_api_v1::types as api_types;
-
         let server = MockServer::start_async().await;
         let mock = server.mock(|when, then| {
             when.method("POST").path(CHECK_BUILD_PATH);
@@ -1774,18 +1787,10 @@ pub mod tests {
         });
 
         let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
+        let source_url: Url = "https://example.com/repo".parse().unwrap();
 
         let result = client
-            .check_build_already_recorded(CheckBuildQuery {
-                catalog_name: "myorg",
-                package_name: "mypkg",
-                source_url: &"https://example.com/repo".parse().unwrap(),
-                source_rev: "deadbeef",
-                nixpkgs_rev: "cafebabe",
-                system: api_types::PackageSystem::X8664Linux,
-                locked_inputs: &HashMap::new(),
-                factory_build_token: None,
-            })
+            .check_build_already_recorded(check_build_query(&source_url, &BTreeMap::new(), &[]))
             .await;
 
         mock.assert();
@@ -1801,8 +1806,6 @@ pub mod tests {
     /// A 5xx error from the server is returned as Err, not panicked or swallowed.
     #[tokio::test]
     async fn check_build_server_error_returns_err() {
-        use catalog_api_v1::types as api_types;
-
         let server = MockServer::start_async().await;
         let mock = server.mock(|when, then| {
             when.method("POST").path(CHECK_BUILD_PATH);
@@ -1810,18 +1813,10 @@ pub mod tests {
         });
 
         let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
+        let source_url: Url = "https://example.com/repo".parse().unwrap();
 
         let result = client
-            .check_build_already_recorded(CheckBuildQuery {
-                catalog_name: "myorg",
-                package_name: "mypkg",
-                source_url: &"https://example.com/repo".parse().unwrap(),
-                source_rev: "deadbeef",
-                nixpkgs_rev: "cafebabe",
-                system: api_types::PackageSystem::X8664Linux,
-                locked_inputs: &HashMap::new(),
-                factory_build_token: None,
-            })
+            .check_build_already_recorded(check_build_query(&source_url, &BTreeMap::new(), &[]))
             .await;
 
         mock.assert();
