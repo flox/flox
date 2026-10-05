@@ -324,4 +324,141 @@ mod tests {
             json!([["setMakeScope", "makeScopeDependency"]])
         );
     }
+
+    #[test]
+    fn source_extras_survive_the_transform() {
+        let mut source = git_source("https://example.com/repo", "abc");
+        source
+            .extra
+            .insert("narHash".to_string(), json!("sha256-abc123"));
+        let locked = HashMap::from([(
+            "myorg/hello".to_string(),
+            entry("myorg", &["hello"], BuildType::Nef, source),
+        )]);
+
+        let lock = build_lock_from_locked_inputs(locked, [&"myorg/hello".to_string()])
+            .expect("transform succeeds");
+
+        assert_eq!(
+            lock.locked_inputs["myorg/hello"].source.extra["narHash"],
+            json!("sha256-abc123")
+        );
+        assert!(
+            materialize_catalogs(&lock).unwrap()["myorg"]["packages"]["entries"]["hello"]["source"]
+                .get("narHash")
+                .is_none()
+        );
+        // PJ-2: compare the entire tree's serialized bytes with the v1 shape.
+        let expected = json!({"myorg": {"type": "floxhub", "packages": {
+            "type": "package_set", "entries": {"hello": {
+                "type": "package", "build_type": "nef", "source": {
+                    "type": "git", "url": "https://example.com/repo",
+                    "rev": "abc", "ref": "refs/heads/main", "dir": "."
+                }
+            }}
+        }}});
+        assert_eq!(
+            serde_json::to_vec(&materialize_catalogs(&lock).unwrap()).unwrap(),
+            serde_json::to_vec(&expected).unwrap()
+        );
+    }
+
+    #[test]
+    fn a_direct_key_absent_from_the_lookup_map_is_refused() {
+        let locked = HashMap::new();
+
+        let err = build_lock_from_locked_inputs(locked, [&"myorg/dangling".to_string()])
+            .expect_err("a dangling direct key is refused");
+        assert!(err.to_string().contains("myorg/dangling"));
+    }
+
+    #[test]
+    fn materialization_rejects_prefix_collisions_in_both_orders() {
+        let source = git_source("https://example.com/repo", "abc");
+        let locked = HashMap::from([
+            (
+                "myorg/a".to_string(),
+                entry("myorg", &["a"], BuildType::Nef, source.clone()),
+            ),
+            (
+                "myorg/a.b".to_string(),
+                entry("myorg", &["a", "b"], BuildType::Nef, source),
+            ),
+        ]);
+        let lock = build_lock_from_locked_inputs(locked, [&"myorg/a".to_string()]).unwrap();
+        for entries in [
+            lock.locked_inputs.iter().collect::<Vec<_>>(),
+            lock.locked_inputs.iter().rev().collect::<Vec<_>>(),
+        ] {
+            let err = materialize_entries(entries).unwrap_err();
+            let message = format!("{err:#}");
+            for expected in [
+                "myorg/a",
+                "myorg/a.b",
+                "catalogs.myorg.a",
+                "catalogs.myorg.a.b",
+            ] {
+                assert!(message.contains(expected), "{message}");
+            }
+        }
+    }
+
+    #[test]
+    fn materialization_rejects_two_keys_for_one_exact_path() {
+        let source = git_source("https://example.com/repo", "abc");
+        let locked = HashMap::from([
+            (
+                "myorg/alias-one".to_string(),
+                entry("myorg", &["a"], BuildType::Nef, source.clone()),
+            ),
+            (
+                "myorg/alias-two".to_string(),
+                entry("myorg", &["a"], BuildType::Nef, source),
+            ),
+        ]);
+        let lock = build_lock_from_locked_inputs(locked, [&"myorg/alias-one".to_string()]).unwrap();
+        let error = materialize_catalogs(&lock).unwrap_err().to_string();
+        assert!(error.contains("myorg/alias-one"), "{error}");
+        assert!(error.contains("myorg/alias-two"), "{error}");
+    }
+
+    #[test]
+    fn multiple_catalogs_and_levels_match_the_original_tree_shape() {
+        let source = git_source("https://example.com/repo", "abc");
+        let locked = HashMap::from([
+            (
+                "alpha/a.b.c".to_string(),
+                entry("alpha", &["a", "b", "c"], BuildType::Nef, source.clone()),
+            ),
+            (
+                "alpha/a.d".to_string(),
+                entry("alpha", &["a", "d"], BuildType::Manifest, source.clone()),
+            ),
+            (
+                "beta/x".to_string(),
+                entry("beta", &["x"], BuildType::Nef, source.clone()),
+            ),
+        ]);
+        let lock = build_lock_from_locked_inputs(locked, [&"alpha/a.b.c".to_string()]).unwrap();
+        let package =
+            |build_type| json!({"type":"package", "build_type":build_type, "source":source});
+        assert_eq!(
+            materialize_catalogs(&lock).unwrap(),
+            json!({
+                "alpha": {"type":"floxhub", "packages":{"type":"package_set", "entries":{
+                    "a":{"type":"package_set", "entries":{
+                        "b":{"type":"package_set", "entries":{"c":package("nef")}},
+                        "d":package("manifest")
+                    }}
+                }}},
+                "beta": {"type":"floxhub", "packages":{"type":"package_set", "entries":{"x":package("nef")}}}
+            })
+        );
+        assert!(
+            serde_json::to_value(&lock)
+                .unwrap()
+                .get("catalogs")
+                .is_none()
+        );
+    }
 }

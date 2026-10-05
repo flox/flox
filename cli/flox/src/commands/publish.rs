@@ -652,6 +652,54 @@ mod tests {
     use super::*;
     use crate::utils::catalog_lock::test_helpers::build_lock_guard_from_parts;
 
+    #[test]
+    fn accepted_publish_displays_advisory_input_warning() {
+        let outcome = PublishOutcome {
+            needs_publisher_wait: false,
+            warnings: vec![PublishWarning {
+                code: "input_lineage_changed".to_owned(),
+                input: "dependency".to_owned(),
+                message: "dependency moved to a newer source lineage".to_owned(),
+            }],
+        };
+        let mut displayed = Vec::new();
+        emit_publish_warnings(&outcome, |message| displayed.push(message.to_owned()));
+        assert_eq!(displayed, [
+            "dependency: dependency moved to a newer source lineage"
+        ]);
+    }
+
+    #[tokio::test]
+    async fn manifest_only_publish_refuses_v1_and_projects_v2() {
+        use floxhub_client::client::test_helpers::new_noop;
+
+        let project = tempfile::tempdir().unwrap();
+        let dot_flox = project.path().join(".flox");
+        std::fs::create_dir(&dot_flox).unwrap();
+        let lock_path = catalog_lockfile_path(&dot_flox);
+        std::fs::write(&lock_path, r#"{"version":1}"#).unwrap();
+        let error = BuildLockGuard::new_existing_or_ephemeral(
+            &new_noop(),
+            &dot_flox,
+            Vec::<PathBuf>::new(),
+        )
+        .await
+        .unwrap_err();
+        assert!(error.to_string().contains(UPDATE_CATALOGS_COMMAND));
+
+        nef_lock_catalog::write_lock(&nef_lock_catalog::BuildLock::default(), &lock_path).unwrap();
+        let guard = BuildLockGuard::new_existing_or_ephemeral(
+            &new_noop(),
+            &dot_flox,
+            Vec::<PathBuf>::new(),
+        )
+        .await
+        .unwrap();
+        let closure = project_for_publish(&guard, &BTreeSet::new()).unwrap();
+        assert!(closure.direct_inputs.is_empty());
+        assert!(closure.locked_inputs.is_empty());
+    }
+
     /// A stale committed lock fails a publish naming both the uncovered
     /// reference and the recovery command.
     #[test]

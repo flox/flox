@@ -201,4 +201,81 @@ build failed: 2 inputs could not be resolved.
 
         assert_eq!(render_unresolvable(&entries), expected);
     }
+
+    #[test]
+    fn readable_legacy_unindexed_seed_shows_the_remedy() {
+        let mut readable = entry("acme.tool", &["acme.tool"]);
+        readable.leaf.unresolvable.insert(
+            "legacy_unindexed".to_string(),
+            serde_json::json!({"detail": "irrelevant to rendering"}),
+        );
+        let entries = [readable];
+
+        let expected = "\
+'catalogs.acme.tool' is unresolvable in this context.
+
+  Dependency path:
+    catalogs.acme.tool (unresolvable)
+
+  Publish a new commit of 'catalogs.acme.tool' with an upgraded CLI and a version 2 catalog lock.";
+
+        assert_eq!(render_unresolvable(&entries), expected);
+    }
+
+    #[test]
+    fn readable_legacy_unindexed_transitive_shows_the_remedy() {
+        let mut readable = entry("acme.app", &["acme.app", "acme.tool"]);
+        readable
+            .leaf
+            .unresolvable
+            .insert("legacy_unindexed".to_string(), serde_json::json!(true));
+        let entries = [readable];
+
+        assert!(
+            render_unresolvable(&entries).ends_with(
+                "Publish a new commit of 'catalogs.acme.tool' with an upgraded CLI and a version 2 catalog lock."
+            )
+        );
+    }
+
+    #[test]
+    fn unknown_cause_key_falls_through_to_generic_rendering() {
+        let mut unknown = entry("acme.tool", &["acme.tool"]);
+        unknown
+            .leaf
+            .unresolvable
+            .insert("some_other_cause".to_string(), serde_json::json!({}));
+        let entries = [unknown];
+
+        assert!(render_unresolvable(&entries).contains("Possible causes:"));
+    }
+
+    #[test]
+    fn mixed_readable_and_private_preserves_privacy() {
+        let mut readable = entry("acme.tool", &["acme.tool"]);
+        readable
+            .leaf
+            .unresolvable
+            .insert("legacy_unindexed".to_string(), serde_json::json!(true));
+        let private = entry("acme.secret", &["acme.secret"]);
+        let entries = [readable, private];
+
+        let rendered = render_unresolvable(&entries);
+        let expected = "\
+build failed: 2 inputs could not be resolved.
+
+  1. 'catalogs.acme.tool' is unresolvable in this context.
+     Dependency path:
+       catalogs.acme.tool (unresolvable)
+     Publish a new commit of 'catalogs.acme.tool' with an upgraded CLI and a version 2 catalog lock.
+
+  2. 'catalogs.acme.secret' is unresolvable in this context.
+     Dependency path:
+       catalogs.acme.secret (unresolvable)
+
+  Possible causes (each independently): an input may not be visible to
+  you, may have no published revision, or may have aged out of retention.
+  Verify availability with the owner of the relevant catalog.";
+        assert_eq!(rendered, expected);
+    }
 }
