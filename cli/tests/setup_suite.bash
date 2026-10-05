@@ -352,9 +352,9 @@ xdg_tmp_setup() {
 # This helper should be run after setting `FLOX_TEST_HOME'.
 flox_vars_setup() {
   xdg_vars_setup
-  # We store sockets in FLOX_CACHE_DIR,
-  # so create cache in /tmp since TMPDIR may result in too long of a path.
-  FLOX_CACHE_DIR="$(mktemp -d /tmp/flox.tests.XXXXXX)"
+  # We store sockets in FLOX_CACHE_DIR, so normally use short /tmp paths.
+  # An isolated runner can select another short cache root explicitly.
+  FLOX_CACHE_DIR="$(mktemp -d "${FLOX_TEST_CACHE_ROOT:-/tmp}/flox.tests.XXXXXX")"
   export FLOX_CACHE_DIR
   export FLOX_CONFIG_DIR="$XDG_CONFIG_HOME/flox"
   export FLOX_DATA_HOME="$XDG_DATA_HOME/flox"
