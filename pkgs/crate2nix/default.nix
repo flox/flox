@@ -95,9 +95,7 @@ let
     flox = {
       GLOW_BIN = "${glow}/bin/glow";
       INTERACTIVE_BASH_BIN = "${bash}/bin/bash";
-      METRICS_EVENTS_URL = "https://z7qixlmjr3.execute-api.eu-north-1." + "amazonaws.com/prod/capture";
       METRICS_EVENTS_URL_V2 = "https://api.flox.dev/events";
-      METRICS_EVENTS_API_KEY = "5pAQnBqz5Q7dpqVD9BEXQ4Kdc3D2fGTd3ZgP0XXK";
       METRICS_EVENTS_API_KEY_V2 = "pdCUpFGHGL5ytsYSdPJWP6MyUMnmUwN47mgsTIuX";
       NIX_TARGET_SYSTEM = stdenv.targetPlatform.system;
       OAUTH_CLIENT_ID = "fGrotHBfQr9X1PHGbFoifEWaDPyWZDmc";

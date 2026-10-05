@@ -18,7 +18,6 @@ use interim::{Dialect, Interval, parse_date_string, parse_duration};
 use tracing::instrument;
 
 use super::{effective_status, effective_updated_at, trigger_label};
-use crate::subcommand_metric;
 use crate::utils::message::page_output;
 use crate::utils::table::{table_string, table_writer};
 
@@ -67,8 +66,6 @@ pub struct List {
 impl List {
     #[instrument(name = "list", skip_all)]
     pub async fn handle(self, client: &impl FactoryClientTrait) -> Result<()> {
-        subcommand_metric!("factory::list");
-
         let filters = BuildFilters {
             status: self.status,
             system: self.system,

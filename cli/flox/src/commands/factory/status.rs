@@ -5,7 +5,6 @@ use indoc::formatdoc;
 use tracing::instrument;
 
 use super::{effective_status, trigger_label};
-use crate::subcommand_metric;
 
 /// Show the status of a single Flox Factory build.
 #[derive(Debug, Clone, PartialEq, Bpaf)]
@@ -22,8 +21,6 @@ pub struct Status {
 impl Status {
     #[instrument(name = "status", skip_all)]
     pub async fn handle(self, client: &impl FactoryClientTrait) -> Result<()> {
-        subcommand_metric!("factory::status");
-
         let not_found = formatdoc! {"
             No Flox Factory build found with ID {id}.
             Use 'flox factory list' to see existing builds.",

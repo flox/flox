@@ -22,7 +22,6 @@ use indoc::formatdoc;
 use tracing::{debug, instrument};
 
 use crate::commands::{EnvironmentSelect, ensure_auth, environment_select};
-use crate::environment_subcommand_metric;
 use crate::utils::errors::format_core_error;
 use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message;
@@ -82,8 +81,6 @@ impl Push {
             .environment
             .detect_concrete_environment(&mut flox, "Push")
             .await?;
-
-        environment_subcommand_metric!("push", env);
 
         if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentPush(
             CliEnvironmentPayload::new(env_detail_from_concrete(&flox, &env)),

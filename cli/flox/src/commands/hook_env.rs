@@ -33,7 +33,6 @@ use tracing::debug;
 use super::activate::write_auto_activation_preference;
 use super::activated_environments;
 use super::deactivate::{deactivation_target, emit_deactivate_script, flox_activate_tracelevel};
-use crate::subcommand_metric;
 use crate::utils::active_environments::ActiveEnvironment;
 use crate::utils::dialog::{Confirm, Dialog};
 use crate::utils::message;
@@ -274,28 +273,6 @@ impl HookEnv {
         } else {
             prompt_for_auto_activation(&plan.prompt).await?
         };
-
-        // Only record a metric when this run actually does something;
-        // `hook-env` runs on every shell prompt, and recording the common
-        // nothing-to-do case would be noise. Gate the prompt case on the
-        // consent answer, not `plan.prompt`: a non-interactive shell has no
-        // controlling terminal, so it yields `NoTerminal` and does nothing —
-        // counting it would fire the metric on every prompt.
-        if !actions.is_empty()
-            || !plan.deactivate.is_empty()
-            || !plan.activate.is_empty()
-            || !plan.reactivate.is_empty()
-            || plan.reinsert.is_some()
-            || matches!(
-                consent,
-                AutoActivateConsent::Allow
-                    | AutoActivateConsent::Deny
-                    | AutoActivateConsent::Suppress
-            )
-            || !plan.abandoned.is_empty()
-        {
-            subcommand_metric!("hook-env");
-        }
 
         // Walk discovered directories outermost-first so activations stack in
         // the right order. Allowed environments activate directly; unregistered

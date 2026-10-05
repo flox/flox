@@ -38,7 +38,7 @@ impl Default for EventsGuard {
 }
 
 /// Whether `_FLOX_FORCE_FLUSH_METRICS` requests an immediate send regardless
-/// of buffer expiry — the same test/dev hook the legacy `MetricGuard` honors.
+/// of buffer expiry (a test/dev hook).
 pub fn force_flush_requested() -> bool {
     std::env::var("_FLOX_FORCE_FLUSH_METRICS")
         .unwrap_or_default()

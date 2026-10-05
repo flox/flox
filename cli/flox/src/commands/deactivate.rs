@@ -31,7 +31,6 @@ use shell_gen::ShellWithPath;
 use tracing::debug;
 
 use super::activated_environments;
-use crate::subcommand_metric;
 use crate::utils::active_environments::ActiveEnvironment;
 use crate::utils::detect_shell::detect_shell_for_in_place;
 use crate::utils::{FLOX_ACTIVATIONS_BIN, message};
@@ -62,8 +61,6 @@ pub struct Deactivate {
 
 impl Deactivate {
     pub fn handle(self, config: Config, flox: Flox) -> Result<()> {
-        subcommand_metric!("deactivate");
-
         if self.print_script_from_env {
             if self.print_script.is_some() {
                 bail!("--print-script and --print-script-from-env are mutually exclusive");

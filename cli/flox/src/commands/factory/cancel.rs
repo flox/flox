@@ -10,8 +10,8 @@ use floxhub_client::{
 use indoc::{formatdoc, indoc};
 use tracing::instrument;
 
+use crate::Exit;
 use crate::utils::message;
-use crate::{Exit, subcommand_metric};
 
 /// Cancel a single Flox Factory build.
 ///
@@ -31,8 +31,6 @@ pub struct Cancel {
 impl Cancel {
     #[instrument(name = "cancel", skip_all)]
     pub async fn handle(self, client: &impl FactoryClientTrait) -> Result<()> {
-        subcommand_metric!("factory::cancel");
-
         // Issue the idempotent cancel. A 200 carries the build's effective
         // status, from which the outcome (initiated vs already terminal) is
         // read; every HTTP and transport failure is classified in the client

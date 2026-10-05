@@ -22,7 +22,6 @@ use path_dedot::ParseDot;
 use tracing::{debug, info_span, instrument};
 
 use crate::commands::{SHELL_COMPLETION_DIR, ensure_auth, environment_description};
-use crate::subcommand_metric;
 use crate::utils::dialog::Dialog;
 use crate::utils::events::env_detail_from_concrete;
 use crate::utils::{local_environment_id, message};
@@ -111,8 +110,6 @@ pub struct Init {
 impl Init {
     #[instrument(name = "init", skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
-        subcommand_metric!("init");
-
         match self.type_select {
             InitEnvironmentTypeSelect::Path {
                 dir,

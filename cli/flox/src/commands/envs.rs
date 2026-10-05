@@ -14,7 +14,6 @@ use serde_json::json;
 use tracing::instrument;
 
 use super::UninitializedEnvironment;
-use crate::subcommand_metric;
 use crate::utils::active_environments::{
     ActiveEnvironment,
     ActiveEnvironments,
@@ -51,8 +50,6 @@ impl Envs {
     /// Always prints headers and formats the output.
     #[instrument(name = "envs", skip_all)]
     pub fn handle(self, flox: Flox) -> Result<()> {
-        subcommand_metric!("envs");
-
         let active = activated_environments();
 
         match self.mode {

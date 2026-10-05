@@ -70,7 +70,7 @@ use crate::utils::events::{env_detail_from_concrete, env_detail_from_concrete_wi
 use crate::utils::markdown::render_markdown_to_stderr;
 use crate::utils::upgrade_output::{count_upgrade_categories, format_upgrade_summary};
 use crate::utils::{FLOX_ACTIVATIONS_BIN, message};
-use crate::{Exit, environment_subcommand_metric, subcommand_metric, utils};
+use crate::{Exit, utils};
 
 #[derive(Debug, Clone, Bpaf)]
 pub enum CommandSelect {
@@ -105,9 +105,8 @@ pub struct Activate {
 impl Activate {
     /// Centrally-derived subcommand string for this invocation. Returns
     /// the `activate::allow` / `activate::deny` form for the auto-activate
-    /// permission-management sub-commands, preserving the join-key
-    /// continuity the legacy `environment_subcommand_metric!` stream
-    /// already used.
+    /// permission-management sub-commands, preserving the join keys the
+    /// retired legacy stream used.
     pub fn subcommand_name(&self) -> &'static str {
         match &self.subcommand_or_options {
             ActivateSubcommandOrOptions::AutoActivate { auto_activate } => match auto_activate {
@@ -220,27 +219,11 @@ impl Activate {
             Err(e) => Err(e)?,
         };
 
-        environment_subcommand_metric!(
-            "activate",
-            concrete_environment,
-            start_services = options.start_services,
-            mode = options
-                .mode
-                .clone()
-                .unwrap_or(ActivateMode::Dev)
-                .to_string()
-        );
-
-        // Both telemetry stacks emit in parallel through the dormant
-        // phase; the new-pipeline mirrors below are no-ops in production
-        // until the cutover PR installs an `EventsHub` client.
-        //
-        // This v2 emit sits at the same dispatch point as the legacy
-        // `environment_subcommand_metric!` above — before the remote-trust
-        // check below — to mirror it 1:1 (parity contract). The activation
-        // *outcome* is carried on `cli.command_completed` (exit_code), not by
-        // the presence of this dispatch-time event, so emitting before a
-        // possible trust decline is intentional, not a logged false success.
+        // This emit sits at dispatch, before the remote-trust check below.
+        // The activation *outcome* is carried on `cli.command_completed`
+        // (exit_code), not by the presence of this dispatch-time event, so
+        // emitting before a possible trust decline is intentional, not a
+        // logged false success.
         let v2_env_detail = env_detail_from_concrete_without_lineage(&concrete_environment);
         let v2_mode = options
             .mode
@@ -321,12 +304,10 @@ impl Activate {
 
         let verb = match subcommand {
             AutoActivate::Allow => {
-                environment_subcommand_metric!("activate::allow", concrete_environment);
                 allow(&config, &concrete_environment)?;
                 "allowed"
             },
             AutoActivate::Deny => {
-                environment_subcommand_metric!("activate::deny", concrete_environment);
                 deny(&config, &concrete_environment)?;
                 "denied"
             },
@@ -474,7 +455,6 @@ impl ActivateOptions {
 
         // breadcrumb metric to estimate use of composition
         let has_includes = lockfile.compose.is_some();
-        subcommand_metric!("activate", "has_includes" = has_includes);
 
         // Read env detail after locking so package_count reflects the packages
         // this activation locked — a never-locked path env has no lockfile until
@@ -510,14 +490,11 @@ impl ActivateOptions {
             other => other?,
         };
 
-        // Must not be evaluated inline with the macro or we'll leak TRACE logs
-        // for reasons unknown.
         let lockfile_version = lockfile.version();
-        subcommand_metric!("activate#version", lockfile_version = lockfile_version);
 
-        // The new pipeline drops the legacy `activate#version` pseudo-
-        // subcommand and rides `lockfile_version` on a real
-        // `cli.environment.activate` event instead.
+        // `lockfile_version` rides on a real `cli.environment.activate` event,
+        // not on the `activate#version` pseudo-subcommand of the retired
+        // legacy stream.
         if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentActivate(
             CliEnvironmentActivatePayload::new(v2_env_detail.clone())
                 .with_lockfile_version(lockfile_version.to_string())
@@ -641,11 +618,6 @@ impl ActivateOptions {
         // `InvocationType`'s Display projects through `InvocationKind`, so the
         // command behind `-c` / `--` is dropped rather than reported.
         let invocation_kind = invocation_type.to_string();
-        subcommand_metric!(
-            "activate",
-            "shell" = shell.to_string(),
-            "invocation_type" = invocation_kind.clone()
-        );
 
         // Runs before `command.exec()`, so the buffered event is flushed
         // synchronously by the pre-exec emit + flush block below

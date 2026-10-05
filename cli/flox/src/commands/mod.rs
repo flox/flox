@@ -89,9 +89,13 @@ use crate::utils::credential_store::{CredentialMigration, CredentialStores};
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::errors::display_chain;
 use crate::utils::events::{build_events_client, resolve_invocation_id};
-use crate::utils::init::{init_floxhub_client, telemetry_deferred};
+use crate::utils::init::{
+    init_floxhub_client,
+    read_metrics_uuid,
+    remove_legacy_metrics_buffer,
+    telemetry_deferred,
+};
 use crate::utils::message;
-use crate::utils::metrics::{AWSDatalakeConnection, Client, Hub, read_metrics_uuid};
 use crate::utils::update_notifications::UpdateNotification;
 
 pub(crate) const SHELL_COMPLETION_DIR: ShellComp = ShellComp::Dir { mask: None };
@@ -252,8 +256,9 @@ impl Commands {
             Commands::Admin(c) => c.subcommand_name(),
             Commands::Internal(c) => c.subcommand_name(),
             Commands::Beta(c) => c.subcommand_name(),
-            // Hidden operator command group; the legacy pipeline emitted no
-            // metric for it, so the bare parent name is sufficient here.
+            // Hidden operator command group. `FactoryCommands` has no
+            // `subcommand_name`, so events record "factory" for status,
+            // list, logs and cancel alike.
             Commands::Factory(_) => "factory",
         }
     }
@@ -298,6 +303,10 @@ impl FloxArgs {
 
         // `temp_dir` will automatically be removed from disk when the function returns
         let temp_dir = TempDir::new_in(process_dir)?;
+
+        // Regardless of `disable_metrics`: the buffer holds unsent legacy
+        // events, and only older releases send them.
+        remove_legacy_metrics_buffer(&config.flox.cache_dir);
 
         let update_channel = config.flox.installer_channel.clone();
 
@@ -348,10 +357,6 @@ impl FloxArgs {
             debug!("Metrics collection deferred until the telemetry notice is shown");
         } else if !config.flox.disable_metrics {
             debug!("Metrics collection enabled");
-
-            let connection = AWSDatalakeConnection::default();
-            let client = Client::new_with_config(&config, connection)?;
-            Hub::global().set_client(client);
         } else {
             debug!("Metrics collection disabled");
             unsafe {
@@ -1110,9 +1115,8 @@ impl AdminCommands {
 
     /// The `Auth` arm emits `"auth2"` (not `"auth"`) to preserve the
     /// downstream classifier that keys off `subcommand == "auth2"`
-    /// with `exit_code == 0`. The legacy `auth.rs:251` already wrote
-    /// `"auth2"` on the wire; mirroring it here keeps the consumer
-    /// contract intact post-cutover.
+    /// with `exit_code == 0`. The retired legacy stream wrote `"auth2"`
+    /// too; keeping it keeps that consumer contract intact.
     fn subcommand_name(&self) -> &'static str {
         match self {
             AdminCommands::Auth(_) => "auth2",
@@ -1178,15 +1182,8 @@ impl InternalCommands {
         Ok(())
     }
 
-    /// `Deactivate(_)` always maps to `"deactivate"`. The legacy
-    /// `deactivate.rs::old_exit` emits `subcommand_metric!("exit")` —
-    /// that `"exit"` pseudo-subcommand is dropped on the new path; the
-    /// centrally-derived name is always the parsed clap command's
-    /// name, never the handler method's name.
-    ///
-    /// `LockManifest(_)` maps to `"lock"` (not `"lock-manifest"`) to
-    /// preserve parity with the legacy `lock_manifest.rs:34`
-    /// `subcommand_metric!("lock")` wire string. Same shape as the
+    /// `LockManifest(_)` maps to `"lock"` (not `"lock-manifest"`), the
+    /// wire string the retired legacy stream used. Same shape as the
     /// `Auth → "auth2"` carve-out on [`AdminCommands::subcommand_name`].
     fn subcommand_name(&self) -> &'static str {
         match self {
@@ -1227,8 +1224,8 @@ pub fn is_telemetry_flush_command(name: &str) -> bool {
 /// - `FloxArgs::handle` neither records its `cli.command_run` event nor leaves
 ///   Sentry bound, because a span or event would carry the old ID.
 /// - `send_telemetry::spawn_if_due_with` does not spawn the `send-telemetry`
-///   child: the flush check recreates `metrics-lock` and the legacy buffer,
-///   and the spawn recreates the send-telemetry log.
+///   child, which would recreate the send-telemetry log that the command
+///   deleted.
 ///
 /// The `reset-metrics` handler removes the events client for everything else.
 pub fn is_telemetry_reset_command(name: &str) -> bool {
@@ -2085,19 +2082,16 @@ mod subcommand_name_tests {
         assert_eq!(command.subcommand_name(), "auth2");
     }
 
-    /// `deactivate` must derive to the literal `"deactivate"`, not the
-    /// legacy `"exit"` pseudo-subcommand that `deactivate.rs::old_exit`
-    /// emits via the legacy macro. The new path is keyed off the
-    /// parsed clap command's name, not the handler method's name.
+    /// `deactivate` must derive to the literal `"deactivate"`, keyed off
+    /// the parsed command's name, not the handler method's name.
     #[test]
     fn deactivate_command_derives_to_deactivate_not_exit() {
         let command = parse_command(&["deactivate"]);
         assert_eq!(command.subcommand_name(), "deactivate");
     }
 
-    /// `lock-manifest` must derive to the literal `"lock"` to preserve
-    /// parity with the legacy `lock_manifest.rs:34`
-    /// `subcommand_metric!("lock")` wire string. Removing the
+    /// `lock-manifest` must derive to the literal `"lock"`, the wire
+    /// string the retired legacy stream used. Removing the
     /// carve-out changes the wire string silently and breaks any
     /// downstream classifier keyed off `subcommand == "lock"`. Same
     /// shape as the `auth → "auth2"` test above.
@@ -2108,10 +2102,9 @@ mod subcommand_name_tests {
     }
 
     /// Nested `services <sub>` commands must use the `parent::child`
-    /// join convention so the wire string matches the legacy
-    /// `environment_subcommand_metric!("services::start", …)` value
-    /// — the consumer's join-key continuity on `cli.telemetry`
-    /// depends on it.
+    /// join convention so the wire string matches the `services::start`
+    /// value of the retired legacy stream; downstream join keys depend
+    /// on it.
     #[test]
     fn services_start_uses_parent_child_join_encoding() {
         let command = parse_command(&["services", "start"]);
@@ -2136,11 +2129,10 @@ mod subcommand_name_tests {
 
     /// `activate allow` / `activate deny` are bpaf-parsed sub-commands
     /// of `flox activate` (auto-activation permission management). The
-    /// legacy stream stamps `activate::allow` / `activate::deny` at
-    /// `cli/flox/src/commands/activate.rs:323,328`; without the
-    /// `Activate::subcommand_name` carve-out the central derivation
-    /// collapses both to bare `"activate"` and silently drops two
-    /// downstream join keys.
+    /// retired legacy stream stamped `activate::allow` /
+    /// `activate::deny`; without the `Activate::subcommand_name`
+    /// carve-out the central derivation collapses both to bare
+    /// `"activate"` and silently drops two downstream join keys.
     #[test]
     fn activate_allow_uses_parent_child_join_encoding() {
         let command = parse_command(&["activate", "allow"]);
@@ -2154,10 +2146,9 @@ mod subcommand_name_tests {
     }
 
     /// `flox build` has three pseudo-subcommands — `clean`,
-    /// `import-nixpkgs`, and `update-catalogs` — that the legacy
-    /// stream stamps as `build::clean` / `build::import-nixpkgs` /
-    /// `build::update-catalogs` at
-    /// `cli/flox/src/commands/build.rs:146,154,162`. Without the
+    /// `import-nixpkgs`, and `update-catalogs` — that the retired legacy
+    /// stream stamped as `build::clean` / `build::import-nixpkgs` /
+    /// `build::update-catalogs`. Without the
     /// `Build::subcommand_name` carve-out the central derivation
     /// collapses all three to bare `"build"`, silently dropping
     /// three downstream join keys.

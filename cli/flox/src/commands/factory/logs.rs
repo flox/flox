@@ -7,8 +7,8 @@ use floxhub_client::{BuildId, FactoryClientError, FactoryClientTrait};
 use futures::StreamExt;
 use tracing::instrument;
 
+use crate::Exit;
 use crate::utils::message;
-use crate::{Exit, subcommand_metric};
 
 /// Print the logs for a single Flox Factory build.
 #[derive(Debug, Clone, PartialEq, Bpaf)]
@@ -25,8 +25,6 @@ pub struct Logs {
 impl Logs {
     #[instrument(name = "logs", skip_all)]
     pub async fn handle(self, client: &impl FactoryClientTrait) -> Result<()> {
-        subcommand_metric!("factory::logs");
-
         let mut stream = match client.get_build_logs(self.id).await {
             Ok(stream) => stream,
             Err(FactoryClientError::NotFound) => {

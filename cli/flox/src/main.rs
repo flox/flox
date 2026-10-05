@@ -37,8 +37,7 @@ use crate::utils::errors::{
     format_remote_error,
 };
 use crate::utils::events::duration_to_ms;
-use crate::utils::init::{defer_telemetry, init_telemetry_uuid};
-use crate::utils::metrics::{Hub, read_metrics_uuid};
+use crate::utils::init::{defer_telemetry, init_telemetry_uuid, read_metrics_uuid};
 
 mod beta;
 mod commands;
@@ -151,7 +150,6 @@ fn main() -> ExitCode {
     // Sentry client must be initialized before starting an async runtime or spawning threads
     // https://docs.sentry.io/platforms/rust/#async-main-function
     let _sentry_guard = metrics_uuid.map(|uuid| init_sentry("flox-cli", uuid));
-    let _metrics_guard = Hub::global().try_guard().ok();
     let _v2_events_guard = EventsHub::global().try_guard().ok();
 
     // Pass down the verbosity level to all sub-processes. Subsystems have no
@@ -278,12 +276,11 @@ fn main() -> ExitCode {
         debug!(error = %err, "Failed to record v2 cli.command_completed event");
     }
 
-    // Flush both telemetry pipelines from their on-disk buffers in a detached
-    // child, so no network I/O blocks the shell prompt.
+    // Flush the telemetry buffer in a detached child, so no network I/O
+    // blocks the shell prompt.
     commands::spawn_telemetry_if_due(&config, v2_subcommand);
 
     drop(_v2_events_guard);
-    drop(_metrics_guard);
     drop(_sentry_guard);
 
     ExitCode::from(code)

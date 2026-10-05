@@ -20,7 +20,6 @@ use crate::commands::{
 use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message;
 use crate::utils::tracing::sentry_set_tag;
-use crate::{environment_subcommand_metric, subcommand_metric};
 
 // Uninstall installed packages from an environment
 #[derive(Bpaf, Clone)]
@@ -37,9 +36,6 @@ pub struct Uninstall {
 impl Uninstall {
     #[instrument(name = "uninstall", skip_all)]
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
-        // Record subcommand metric prior to environment_subcommand_metric below in case we error
-        subcommand_metric!("uninstall");
-
         sentry_set_tag("packages", self.packages.iter().join(","));
 
         debug!(
@@ -70,7 +66,6 @@ impl Uninstall {
             )?,
             Err(e) => Err(e)?,
         };
-        environment_subcommand_metric!("uninstall", concrete_environment);
         if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentUninstall(
             CliEnvironmentPayload::new(env_detail_from_concrete(&flox, &concrete_environment)),
         )) {

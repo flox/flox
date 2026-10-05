@@ -18,10 +18,6 @@ moves, so the discipline below is the only protection.
 
 ## When not to use this skill
 
-- Adding to the legacy `subcommand_metric!` stream
-  (`cli/flox/src/utils/metrics.rs`) — don't add new instrumentation
-  there. Touch it only when an emit site you're riding already uses
-  it.
 - Server-side or non-CLI telemetry — out of scope for this repo.
 
 ## Step 0: decide the shape before writing code

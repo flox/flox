@@ -25,7 +25,6 @@ use crate::commands::services::{
     start_services_with_new_process_compose,
 };
 use crate::commands::{EnvironmentSelect, environment_select};
-use crate::environment_subcommand_metric;
 use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message;
 
@@ -44,7 +43,6 @@ impl Restart {
     pub async fn handle(self, config: Config, mut flox: Flox) -> Result<()> {
         let mut env =
             ServicesEnvironment::from_environment_selection(&mut flox, &self.environment).await?;
-        environment_subcommand_metric!("services::restart", env.environment);
         if let Err(err) =
             EventsHub::global().record_event(EventKind::CliEnvironmentServicesRestart(
                 CliEnvironmentPayload::new(env_detail_from_concrete(&flox, &env.environment)),

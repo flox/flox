@@ -50,6 +50,7 @@ use tracing::{debug, info_span, instrument, span, warn};
 
 use super::services::warn_manifest_changes_for_services;
 use super::{EnvironmentSelect, environment_select};
+use crate::Exit;
 use crate::commands::{
     ConcreteEnvironment,
     EnvironmentSelectError,
@@ -64,7 +65,6 @@ use crate::utils::errors::format_error;
 use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message::{self};
 use crate::utils::tracing::sentry_set_tag;
-use crate::{Exit, environment_subcommand_metric, subcommand_metric};
 
 // Install a package into an environment
 #[derive(Bpaf, Clone)]
@@ -125,8 +125,6 @@ struct PartitionedPackages {
 impl Install {
     #[instrument(name = "install", skip_all)]
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
-        subcommand_metric!("install");
-
         debug!(
             "attempting to install packages [{}] to {:?}",
             self.packages.as_slice().join(", "),
@@ -183,7 +181,6 @@ impl Install {
             Err(EnvironmentSelectError::Anyhow(e)) => Err(e)?,
             Err(e) => Err(e)?,
         };
-        environment_subcommand_metric!("install", concrete_environment);
         if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentInstall(
             CliEnvironmentPayload::new(env_detail_from_concrete(&flox, &concrete_environment)),
         )) {
@@ -290,11 +287,6 @@ impl Install {
             warn_manifest_changes_for_services(&flox, &concrete_environment);
         }
 
-        // Both telemetry stacks emit in parallel through the dormant
-        // phase; the new-pipeline per-package mirrors in this PR are
-        // no-ops in production until the cutover installs an
-        // `EventsHub` client. Net-new on this branch: legacy emits
-        // nothing per-package on success.
         let hub = EventsHub::global();
         for package in &packages_to_install {
             if let Err(err) = hub.record_event(EventKind::CliPackageInstall(
@@ -312,8 +304,7 @@ impl Install {
     }
 
     /// Per-package identifier emitted on `cli.package.install` events.
-    /// Same source values as [`Install::format_packages_for_tracing`]
-    /// joins into the legacy `failed_packages` string.
+    /// [`Install::format_packages_for_tracing`] joins the same values.
     fn package_identifier(p: &PackageToInstall) -> String {
         match p {
             PackageToInstall::Catalog(pkg) => pkg.pkg_path.clone(),
@@ -481,11 +472,6 @@ impl Install {
         packages: &[PackageToInstall],
     ) -> Result<InstallationAttempt> {
         debug!("install error: {:?}", err);
-
-        subcommand_metric!(
-            "install",
-            "failed_packages" = Install::format_packages_for_tracing(packages)
-        );
 
         let hub = EventsHub::global();
         for package in packages {

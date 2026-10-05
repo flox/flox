@@ -44,12 +44,9 @@ let
       X_BASH_BIN = "${bash}/bin/bash";
       COREUTILS = "${coreutils}";
 
-      # Metrics subsystem configuration
-      METRICS_EVENTS_URL = "https://z7qixlmjr3.execute-api.eu-north-1." + "amazonaws.com/prod/capture";
-      # The v2-events ingest endpoint, with its own API key
-      # (`METRICS_EVENTS_API_KEY_V2`) distinct from the legacy key.
+      # Metrics subsystem configuration: the v2-events ingest endpoint and its
+      # API key
       METRICS_EVENTS_URL_V2 = "https://api.flox.dev/events";
-      METRICS_EVENTS_API_KEY = "5pAQnBqz5Q7dpqVD9BEXQ4Kdc3D2fGTd3ZgP0XXK";
       METRICS_EVENTS_API_KEY_V2 = "pdCUpFGHGL5ytsYSdPJWP6MyUMnmUwN47mgsTIuX";
 
       # oauth client id
