@@ -9,6 +9,10 @@ use tracing::{debug, instrument};
 use crate::CatalogRef;
 use crate::project::UPDATE_CATALOGS_COMMAND;
 
+// Must match the configured base catalog's name on the catalog server and the
+// pinned instance exposed as `catalogs.nixpkgs` by the NEF builder.
+pub(crate) const BASE_CATALOG_NAME: &str = "nixpkgs";
+
 /// Locked source information for a catalog: a package attribute hierarchy with
 /// a locked source per package at its leaves, as returned by the catalog
 /// `/build-inputs/lookup` endpoint.
@@ -384,6 +388,11 @@ fn select_roots(
         // guarantees the catalog component is present.
         let names = reference.path().attribute_names();
         let (catalog, path) = (names[1], &names[2..]);
+        // Base references are evaluated from pinned nixpkgs; they have no
+        // lock root even when a wildcard names many attributes.
+        if catalog == BASE_CATALOG_NAME {
+            continue;
+        }
         let wildcard = reference.path().is_wildcard();
 
         let mut matched: Vec<&String> = candidates
