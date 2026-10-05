@@ -19,7 +19,9 @@ use floxhub_client::{
     PackageOutput,
     PackageOutputs,
     PackageSystem,
+    PublishReceipt,
     PublishResponse,
+    PublishWarning,
     SourceLineageChange,
     UserBuildPublish,
     UserDerivationInfo,
@@ -127,6 +129,18 @@ pub enum PublishError {
     InvalidDeepOverrideName(String),
 }
 
+/// Publish outcome that lets the command show warnings before polling.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct PublishOutcome {
+    /// `true` when the caller should wait for an external publisher to
+    /// confirm completion (Publisher mode); `false` when the CLI has
+    /// already populated the catalog directly and no wait is needed
+    /// (NixCopy and MetadataOnly modes).
+    pub needs_publisher_wait: bool,
+    /// Non-fatal server diagnostics to display before completion polling.
+    pub warnings: Vec<PublishWarning>,
+}
+
 /// The `Publish` trait describes the high level behavior of publishing a package to a catalog.
 /// Authentication, upload, builds etc, are implementation details of the specific provider.
 /// Modeling the behavior as a trait allows us to swap out the provider, e.g. a mock for testing.
@@ -153,11 +167,6 @@ pub trait Publisher {
     /// refusal when confirmation is unavailable. Returning
     /// `Err(PublishError::LineageChangeDeclined)` signals an explicit decline
     /// or cancellation.
-    ///
-    /// Returns `true` when the caller should wait for an external publisher
-    /// to confirm completion (Publisher mode), or `false` when the CLI has
-    /// already populated the catalog directly and no wait is needed
-    /// (NixCopy and MetadataOnly modes).
     #[allow(clippy::too_many_arguments)]
     async fn publish(
         &self,
@@ -171,7 +180,7 @@ pub trait Publisher {
         factory_build_token: Option<&str>,
         allow_lineage_change: bool,
         confirm_lineage_change: impl AsyncFnOnce(&SourceLineageChange) -> Result<bool, PublishError>,
-    ) -> Result<bool, PublishError>;
+    ) -> Result<PublishOutcome, PublishError>;
     async fn wait_for_publish_completion(
         &self,
         client: &impl CatalogClientTrait,
@@ -188,7 +197,7 @@ async fn publish_build_with_confirmation(
     package_name: &str,
     mut build_info: UserBuildPublish,
     confirm: impl AsyncFnOnce(&SourceLineageChange) -> Result<bool, PublishError>,
-) -> Result<(), PublishError> {
+) -> Result<PublishReceipt, PublishError> {
     tracing::debug!(?build_info, "Publishing build in catalog...");
     let result = client
         .publish_build(catalog_name, package_name, &build_info)
@@ -685,9 +694,6 @@ where
     /// Publish a built package.
     ///
     /// [PackageCreatedGuard] must be obtained from [Self::create_package].
-    ///
-    /// Returns `true` when the caller should poll for publisher confirmation,
-    /// `false` when the CLI already populated the catalog (NixCopy/MetadataOnly).
     #[allow(clippy::too_many_arguments)]
     async fn publish(
         &self,
@@ -701,7 +707,7 @@ where
         factory_build_token: Option<&str>,
         allow_lineage_change: bool,
         confirm_lineage_change: impl AsyncFnOnce(&SourceLineageChange) -> Result<bool, PublishError>,
-    ) -> Result<bool, PublishError> {
+    ) -> Result<PublishOutcome, PublishError> {
         // Step 2 hit /publish
         // Catalogs are configured with their "store".
         // We must request upload information for _this_ catalog to know where
@@ -792,7 +798,7 @@ where
             build_info = ?build_info,
             "Publishing build in catalog...",
         );
-        publish_build_with_confirmation(
+        let receipt = publish_build_with_confirmation(
             client,
             catalog_name,
             self.package_metadata.package.name().as_ref(),
@@ -801,7 +807,10 @@ where
         )
         .await?;
 
-        Ok(needs_publisher_wait)
+        Ok(PublishOutcome {
+            needs_publisher_wait,
+            warnings: receipt.warnings,
+        })
     }
 
     /// Waits until the narinfos for all store paths are present in the catalog,
@@ -1571,6 +1580,7 @@ pub mod tests {
 
     // Matches SourceLineageChanged.details from floxhub#2456.
     const LINEAGE_CHANGE_DETAIL: &str = "test/hello is registered to github.com/org/original (ref main); this publish is from github.com/org/moved (ref release). Retry with allow_lineage_change=true to replace the registered source.";
+    const INPUT_LINEAGE_WARNING: &str = "dependency moved to a newer source lineage";
 
     async fn exercise_lineage_publish(
         status: u16,
@@ -1578,7 +1588,8 @@ pub mod tests {
         allow_lineage_change: bool,
         confirm: bool,
         retry_status: u16,
-    ) -> (usize, usize, usize, Result<(), String>) {
+        warn_on_success: bool,
+    ) -> (usize, usize, usize, Result<Vec<String>, String>) {
         let server = httpmock::MockServer::start_async().await;
         let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
         let build: UserBuildPublish = serde_json::from_value(serde_json::json!({
@@ -1619,15 +1630,28 @@ pub mod tests {
                     }
                 }
             },
+            "direct_inputs": ["dependency"],
             "locked_base_catalog_url": "https://github.com/flox/nixpkgs?rev=abc123"
         }))
         .unwrap();
+        let response_body = if warn_on_success {
+            serde_json::json!({"warnings": [{
+                "code": "input_lineage_changed",
+                "input": "dependency",
+                "message": INPUT_LINEAGE_WARNING
+            }]})
+        } else {
+            serde_json::json!({})
+        };
         let initial = server.mock(|when, then| {
             when.method(httpmock::Method::POST)
                 .path("/api/v1/catalog/catalogs/test/packages/hello/builds")
                 .json_body_obj(&build);
-            then.status(status)
-                .json_body(serde_json::json!({"detail": detail}));
+            then.status(status).json_body(if status == 200 {
+                response_body.clone()
+            } else {
+                serde_json::json!({"detail": detail})
+            });
         });
         // With the override already set, a retry would resend the initial body,
         // so only `initial` can match and it counts every request.
@@ -1638,8 +1662,11 @@ pub mod tests {
                 when.method(httpmock::Method::POST)
                     .path("/api/v1/catalog/catalogs/test/packages/hello/builds")
                     .json_body_obj(&replacement);
-                then.status(retry_status)
-                    .json_body(serde_json::json!({"detail": detail}));
+                then.status(retry_status).json_body(if retry_status == 200 {
+                    response_body.clone()
+                } else {
+                    serde_json::json!({"detail": detail})
+                });
             })
         });
         let mut confirmations = 0;
@@ -1653,6 +1680,13 @@ pub mod tests {
                 Ok(confirm)
             })
             .await
+            .map(|receipt| {
+                receipt
+                    .warnings
+                    .into_iter()
+                    .map(|warning| warning.message)
+                    .collect()
+            })
             .map_err(|err| err.to_string());
         let retries = retry.map_or(0, |mock| mock.calls());
         (confirmations, initial.calls(), retries, result)
@@ -1660,11 +1694,15 @@ pub mod tests {
 
     #[tokio::test]
     async fn publish_lineage_confirmation_retries_only_when_accepted() {
-        let accepted = exercise_lineage_publish(409, LINEAGE_CHANGE_DETAIL, false, true, 200).await;
-        assert_eq!(accepted, (1, 1, 1, Ok(())));
+        let accepted =
+            exercise_lineage_publish(409, LINEAGE_CHANGE_DETAIL, false, true, 200, true).await;
+        assert_eq!(
+            accepted,
+            (1, 1, 1, Ok(vec![INPUT_LINEAGE_WARNING.to_owned()]))
+        );
 
         let declined =
-            exercise_lineage_publish(409, LINEAGE_CHANGE_DETAIL, false, false, 200).await;
+            exercise_lineage_publish(409, LINEAGE_CHANGE_DETAIL, false, false, 200, true).await;
         let refusal = SourceLineageChange {
             registered: "github.com/org/original (ref main)".to_owned(),
             requested: "github.com/org/moved (ref release)".to_owned(),
@@ -1674,20 +1712,32 @@ pub mod tests {
 
         // Even a second lineage refusal must terminate, not prompt or loop again.
         let refused_retry =
-            exercise_lineage_publish(409, LINEAGE_CHANGE_DETAIL, false, true, 409).await;
+            exercise_lineage_publish(409, LINEAGE_CHANGE_DETAIL, false, true, 409, true).await;
         assert_eq!(refused_retry, (1, 1, 1, Err(refusal)));
     }
 
     #[tokio::test]
     async fn publish_lineage_flag_sends_override_without_confirmation() {
-        let outcome = exercise_lineage_publish(200, "", true, false, 200).await;
-        assert_eq!(outcome, (0, 1, 0, Ok(())));
+        let outcome = exercise_lineage_publish(200, "", true, false, 200, true).await;
+        assert_eq!(
+            outcome,
+            (0, 1, 0, Ok(vec![INPUT_LINEAGE_WARNING.to_owned()]))
+        );
+    }
+
+    #[tokio::test]
+    async fn publish_success_carries_input_lineage_warning_without_a_conflict() {
+        let outcome = exercise_lineage_publish(200, "", false, false, 200, true).await;
+        assert_eq!(
+            outcome,
+            (0, 1, 0, Ok(vec![INPUT_LINEAGE_WARNING.to_owned()]))
+        );
     }
 
     #[tokio::test]
     async fn publish_lineage_confirmation_ignores_other_responses() {
-        let success = exercise_lineage_publish(200, "", false, true, 200).await;
-        assert_eq!(success, (0, 1, 0, Ok(())));
+        let success = exercise_lineage_publish(200, "", false, true, 200, false).await;
+        assert_eq!(success, (0, 1, 0, Ok(vec![])));
         for (status, detail, expected) in [
             (
                 409,
@@ -1705,7 +1755,7 @@ pub mod tests {
                 format!("400 Bad Request: {LINEAGE_CHANGE_DETAIL}"),
             ),
         ] {
-            let outcome = exercise_lineage_publish(status, detail, false, true, 200).await;
+            let outcome = exercise_lineage_publish(status, detail, false, true, 200, false).await;
             assert_eq!(outcome, (0, 1, 0, Err(expected)));
         }
     }
@@ -2174,7 +2224,7 @@ pub mod tests {
         assert!(res.is_ok(), "Expected publish to succeed, got: {:?}", res);
         // MetadataOnly submits narinfos directly — no external publisher to wait for.
         assert_eq!(
-            res.unwrap(),
+            res.unwrap().needs_publisher_wait,
             false,
             "MetadataOnly should not require publisher wait"
         );

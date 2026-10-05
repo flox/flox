@@ -18,6 +18,7 @@ use flox_rust_sdk::providers::build::{
 use flox_rust_sdk::providers::nix_auth::NixAuth;
 use flox_rust_sdk::providers::publish::{
     PublishError,
+    PublishOutcome,
     PublishProvider,
     Publisher,
     build_repo_err,
@@ -68,6 +69,28 @@ use crate::{environment_subcommand_metric, subcommand_metric};
 
 const PUBLISH_COMPLETION_POLL_INTERVAL_MILLIS: u64 = 2_000; // 1s
 const PUBLISH_COMPLETION_TIMEOUT_MILLIS: u64 = 30 * 60 * 1_000; // 30 min
+
+fn emit_publish_warnings(outcome: &PublishOutcome, mut emit: impl FnMut(&str)) {
+    for warning in &outcome.warnings {
+        emit(&format!("{}: {}", warning.input, warning.message));
+    }
+}
+
+/// Show an accepted publish's warnings, then wait for the publisher service
+/// when it is responsible for ingesting artifacts (Publisher mode). NixCopy
+/// and MetadataOnly submit NAR info directly, so there is nothing to wait for.
+/// The warnings come first so a later polling failure cannot hide them.
+async fn finish_accepted_publish(
+    outcome: &PublishOutcome,
+    emit_warning: impl FnMut(&str),
+    wait_for_publisher: impl AsyncFnOnce() -> Result<()>,
+) -> Result<()> {
+    emit_publish_warnings(outcome, emit_warning);
+    if outcome.needs_publisher_wait {
+        wait_for_publisher().await?;
+    }
+    Ok(())
+}
 
 async fn confirm_lineage_change(change: &SourceLineageChange) -> Result<bool, PublishError> {
     if !Dialog::can_prompt() {
@@ -571,7 +594,7 @@ impl Publish {
             &publish_provider.package_metadata.package
         );
         let catalog = &flox.floxhub_client;
-        let needs_publisher_wait = match publish_provider
+        let outcome = match publish_provider
             .publish(
                 catalog,
                 &catalog_name,
@@ -586,21 +609,20 @@ impl Publish {
             )
             .await
         {
-            Ok(needs_wait) => needs_wait,
+            Ok(outcome) => outcome,
             // A declined confirmation is a deliberate cancel, not a failure.
             Err(e @ PublishError::LineageChangeDeclined) => return Err(e.into()),
             Err(e) => bail!("Failed to publish package: {}", display_chain(&e)),
         };
 
-        // Only poll when the external publisher service is responsible for
-        // ingesting artifacts (Publisher mode). NixCopy and MetadataOnly
-        // submit NAR info directly, so there is nothing to wait for.
-        if needs_publisher_wait {
-            let span = info_span!(
-                "publish",
-                progress = "Waiting for confirmation of successful publish..."
-            );
-            {
+        finish_accepted_publish(
+            &outcome,
+            |warning| message::warning(warning),
+            async || {
+                let span = info_span!(
+                    "publish",
+                    progress = "Waiting for confirmation of successful publish..."
+                );
                 // Using a block here instead of `span.in_scope()` because
                 // that's not an async context.
                 let _ = span.enter();
@@ -613,9 +635,10 @@ impl Publish {
                         PUBLISH_COMPLETION_TIMEOUT_MILLIS,
                     )
                     .await
-                    .context("Failed while waiting for publish confirmation")?;
-            }
-        }
+                    .context("Failed while waiting for publish confirmation")
+            },
+        )
+        .await?;
         message::updated(formatdoc! {"
             Package published successfully.
 
@@ -630,10 +653,58 @@ mod tests {
     use flox_manifest::test_helpers::with_latest_schema;
     use flox_rust_sdk::providers::build::PackageTarget;
     use flox_rust_sdk::providers::build::test_helpers::prepare_empty_expressions_ref;
+    use floxhub_client::PublishWarning;
     use indoc::indoc;
 
     use super::*;
     use crate::utils::catalog_lock::test_helpers::build_lock_guard_from_parts;
+
+    #[test]
+    fn accepted_publish_displays_advisory_input_warning() {
+        let outcome = PublishOutcome {
+            needs_publisher_wait: false,
+            warnings: vec![PublishWarning {
+                code: "input_lineage_changed".to_owned(),
+                input: "dependency".to_owned(),
+                message: "dependency moved to a newer source lineage".to_owned(),
+            }],
+        };
+        let mut displayed = Vec::new();
+        emit_publish_warnings(&outcome, |message| displayed.push(message.to_owned()));
+        assert_eq!(displayed, [
+            "dependency: dependency moved to a newer source lineage"
+        ]);
+    }
+
+    #[tokio::test]
+    async fn accepted_publish_warnings_stay_visible_when_polling_fails() {
+        let outcome = PublishOutcome {
+            needs_publisher_wait: true,
+            warnings: vec![PublishWarning {
+                code: "input_lineage_changed".to_owned(),
+                input: "dependency".to_owned(),
+                message: "dependency moved to a newer source lineage".to_owned(),
+            }],
+        };
+        let mut displayed = Vec::new();
+        let err = finish_accepted_publish(
+            &outcome,
+            |message| displayed.push(message.to_owned()),
+            async || {
+                Err(anyhow!("publisher timed out")
+                    .context("Failed while waiting for publish confirmation"))
+            },
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(
+            (displayed, format!("{err:#}")),
+            (
+                vec!["dependency: dependency moved to a newer source lineage".to_owned()],
+                "Failed while waiting for publish confirmation: publisher timed out".to_owned()
+            )
+        );
+    }
 
     /// A stale committed lock fails a publish naming both the uncovered
     /// reference and the recovery command.
