@@ -1238,64 +1238,95 @@ fn gather_build_repo_meta(
         ));
     }
 
-    let remote_info = git.get_current_branch_remote_info().map_err(|e| match e {
-        GitCommandGetOriginError::NoUpstream => {
-            let remote_hint = git
-                .remotes()
-                .ok()
-                .and_then(|r| match r.as_slice() {
-                    [single] if !single.is_empty() => Some(single.clone()),
-                    _ => None,
-                })
-                .unwrap_or_else(|| "<remote>".to_string());
+    // A detached HEAD or tag has no branch upstream; suggest checking out a branch.
+    let local_branch_ref = match status.ref_.as_deref() {
+        Some(ref_) if ref_.starts_with("refs/heads/") => ref_,
+        Some(ref_) => {
+            return Err(build_repo_err(&formatdoc! {"
+                '{ref_}' is not a branch.
+                Check out a branch before publishing: git checkout -b <branch-name>"
+            }));
+        },
+        None => {
+            return Err(build_repo_err(&formatdoc! {"
+                Repository is in detached HEAD state.
+                Check out a branch before publishing: git checkout -b <branch-name>"
+            }));
+        },
+    };
 
-            if let Some(branch) = status
-                .ref_
-                .as_deref()
-                .and_then(|r| r.strip_prefix("refs/heads/"))
-            {
+    let remote_info = git
+        .get_current_branch_remote_info(local_branch_ref)
+        .map_err(|e| match e {
+            GitCommandGetOriginError::NoUpstream => {
+                let remote_hint = git
+                    .remotes()
+                    .ok()
+                    .and_then(|r| match r.as_slice() {
+                        [single] if !single.is_empty() => Some(single.clone()),
+                        _ => None,
+                    })
+                    .unwrap_or_else(|| "<remote>".to_string());
+                let branch = local_branch_ref
+                    .strip_prefix("refs/heads/")
+                    .unwrap_or(local_branch_ref);
                 build_repo_err(&formatdoc! {"
                     Current branch '{branch}' has no upstream remote configured.
                     Set one with 'git branch --set-upstream-to={remote_hint}/{branch}'"
                 })
-            } else {
+            },
+            GitCommandGetOriginError::UpstreamNotABranch { upstream } => {
+                let branch = local_branch_ref
+                    .strip_prefix("refs/heads/")
+                    .unwrap_or(local_branch_ref);
                 build_repo_err(&formatdoc! {"
-                    Repository is in detached HEAD state and has no upstream remote configured.
-                    Check out a branch before publishing: \
-                        git checkout -b <branch-name>"
+                    Current branch '{branch}' tracks '{upstream}', which is not a branch.
+                    Configure a branch upstream with 'git branch --set-upstream-to=<remote>/<branch>'"
                 })
-            }
-        },
-        GitCommandGetOriginError::AccessDenied(ref cmd_err) => build_repo_err(&formatdoc! {"
-            Could not access the remote repository: {cmd_err}
-            Check your SSH agent (`ssh-add -l`) or credential configuration."
-        }),
-        GitCommandGetOriginError::Command(ref cmd_err) => build_repo_err(&cmd_err.to_string()),
-    })?;
+            },
+            GitCommandGetOriginError::AmbiguousLocalRef { ref_, rows } => build_repo_err(&formatdoc! {"
+                Found multiple upstream configurations for '{ref_}': {rows:?}"
+            }),
+            GitCommandGetOriginError::AccessDenied(ref cmd_err) => build_repo_err(&formatdoc! {"
+                Could not access the remote repository: {cmd_err}
+                Check your SSH agent (`ssh-add -l`) or credential configuration."
+            }),
+            GitCommandGetOriginError::Command(ref cmd_err) => build_repo_err(&cmd_err.to_string()),
+        })?;
 
-    let rev_on_remote = match git.rev_exists_on_remote(&status.rev, &remote_info.name) {
+    let rev_on_remote = match git.rev_is_on_remote_branch(
+        &status.rev,
+        &remote_info.name,
+        &remote_info.reference,
+    ) {
         Ok(exists) => exists,
+        Err(GitCommandError::MissingRemoteBranch { remote, branch }) => {
+            return Err(build_repo_err(&format!(
+                "Remote branch '{remote}/{branch}' no longer exists. Restore that branch or configure an existing branch upstream before publishing."
+            )));
+        },
         Err(ref cmd_err) if cmd_err.is_access_denied() => {
             return Err(build_repo_err(&formatdoc! {"
-                Could not access remote '{remote_name}' while verifying the local revision: {cmd_err}
+                Could not access remote '{remote_name}' while verifying branch containment: {cmd_err}
                 Check your SSH agent (`ssh-add -l`) or credential configuration.",
                 remote_name = remote_info.name,
             }));
         },
         Err(cmd_err) => {
             return Err(build_repo_err(&formatdoc! {"
-                Failed to check whether local revision exists on remote '{remote_name}/{remote_branch}': {cmd_err}",
+                Could not verify that the local revision is on remote branch '{remote_name}/{remote_branch}': {cmd_err}
+                Fetch the branch and its full history, then retry publishing.",
                 remote_name = remote_info.name,
-                remote_branch = remote_info.reference,
+                remote_branch = remote_info.short_branch(),
             }));
         },
     };
     if !rev_on_remote {
         return Err(build_repo_err(&formatdoc! {"
-            Local revision is not present on remote '{remote_name}/{remote_branch}'.
-            Push your commits with 'git push'",
+            Local revision is not contained in remote branch '{remote_name}/{remote_branch}'.
+            Push this revision with 'git push {remote_name} HEAD:{remote_branch}' before publishing.",
             remote_name = remote_info.name,
-            remote_branch = remote_info.reference,
+            remote_branch = remote_info.short_branch(),
         }));
     }
 
@@ -1335,7 +1366,9 @@ fn url_for_remote_containing_current_rev(
     // Check the configured remotes, once each, in order of..
     let mut ordered_remotes = IndexSet::new();
     // 1. Tracked remote for branch, if configured.
-    if let Ok(tracked_remote) = git.get_current_branch_remote_info() {
+    if let Some(local_branch_ref) = status.ref_.as_deref()
+        && let Ok(tracked_remote) = git.get_current_branch_remote_info(local_branch_ref)
+    {
         ordered_remotes.insert(tracked_remote.name);
     }
     // 2. Preferred remotes, if they are present.

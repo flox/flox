@@ -9,7 +9,7 @@ use std::sync::LazyLock;
 
 use chrono::{DateTime, Utc};
 use thiserror::Error;
-use tracing::{debug, warn};
+use tracing::debug;
 
 use crate::flox::FLOX_VERSION;
 use crate::utils::CommandExt;
@@ -27,11 +27,23 @@ pub trait GitDiscoverError {
     fn not_found(&self) -> bool;
 }
 
+#[derive(Debug)]
 pub struct OriginInfo {
     pub name: String,
     pub url: String,
+    /// The full upstream ref, e.g. `refs/heads/main`.
     pub reference: String,
-    pub revision: Option<String>,
+}
+
+impl OriginInfo {
+    /// Return the short upstream branch for user-facing messages.
+    /// Preserve the full ref if an `OriginInfo` was constructed without the
+    /// branch prefix, so this accessor remains infallible.
+    pub fn short_branch(&self) -> &str {
+        self.reference
+            .strip_prefix("refs/heads/")
+            .unwrap_or(&self.reference)
+    }
 }
 
 pub struct BranchInfo {
@@ -134,7 +146,12 @@ pub trait GitProvider: Sized + std::fmt::Debug {
     fn push(&self, remote: &str, force: bool) -> Result<(), Self::PushError>;
     fn set_origin(&self, branch: &str, origin_name: &str) -> Result<(), Self::SetOriginError>;
 
-    fn get_current_branch_remote_info(&self) -> Result<OriginInfo, Self::GetOriginError>;
+    /// Look up the upstream remote of `local_branch_ref` (a full local ref,
+    /// e.g. `refs/heads/main`).
+    fn get_current_branch_remote_info(
+        &self,
+        local_branch_ref: &str,
+    ) -> Result<OriginInfo, Self::GetOriginError>;
 
     fn workdir(&self) -> Option<&Path>;
     fn path(&self) -> &Path;
@@ -150,6 +167,8 @@ pub enum GitCommandError {
     InvalidOutput(String),
     #[error("Remote URL was invalid")]
     InvalidUrl(#[source] url::ParseError),
+    #[error("remote branch '{remote}/{branch}' does not exist")]
+    MissingRemoteBranch { remote: String, branch: String },
 }
 
 impl GitCommandError {
@@ -320,6 +339,82 @@ pub struct GitCommandProvider {
 }
 
 impl GitCommandProvider {
+    /// Verify against a freshly fetched branch tip, deepening only if needed.
+    /// A cached remote-tracking ref cannot establish what is currently published.
+    pub fn rev_is_on_remote_branch(
+        &self,
+        rev: &str,
+        remote_name: &str,
+        branch_ref: &str,
+    ) -> Result<bool, GitCommandError> {
+        if !branch_ref.starts_with("refs/heads/") {
+            return Err(GitCommandError::InvalidOutput(format!(
+                "'{branch_ref}' is not a remote branch ref"
+            )));
+        }
+
+        let mut fetch = self.new_command();
+        fetch.args(["fetch", "--no-tags", "--", remote_name, branch_ref]);
+        if let Err(fetch_err) = Self::run_command(&mut fetch) {
+            let mut probe = self.new_command();
+            probe.args([
+                "ls-remote",
+                "--exit-code",
+                "--heads",
+                "--",
+                remote_name,
+                branch_ref,
+            ]);
+            if matches!(
+                Self::run_command(&mut probe),
+                Err(GitCommandError::BadExit(2, _, _))
+            ) {
+                return Err(GitCommandError::MissingRemoteBranch {
+                    remote: remote_name.to_owned(),
+                    branch: branch_ref.trim_start_matches("refs/heads/").to_owned(),
+                });
+            }
+            return Err(fetch_err);
+        }
+
+        let mut ancestor = self.new_command();
+        ancestor.args(["merge-base", "--is-ancestor", rev, "FETCH_HEAD"]);
+        match Self::run_command(&mut ancestor) {
+            Ok(_) => Ok(true),
+            // In a depth-1 clone the requested local ancestor may itself be
+            // absent, and merge-base then exits 128 rather than 1.
+            Err(GitCommandError::BadExit(code, stdout, stderr)) if code == 1 || code == 128 => {
+                let shallow = Self::run_command(
+                    self.new_command()
+                        .args(["rev-parse", "--is-shallow-repository"]),
+                )?;
+                if shallow.to_string_lossy().trim() != "true" {
+                    return if code == 1 {
+                        Ok(false)
+                    } else {
+                        Err(GitCommandError::BadExit(code, stdout, stderr))
+                    };
+                }
+                let mut deepen = self.new_command();
+                deepen.args([
+                    "fetch",
+                    "--no-tags",
+                    "--unshallow",
+                    "--",
+                    remote_name,
+                    branch_ref,
+                ]);
+                Self::run_command(&mut deepen)?;
+                match Self::run_command(&mut ancestor) {
+                    Ok(_) => Ok(true),
+                    Err(GitCommandError::BadExit(1, _, _)) => Ok(false),
+                    Err(err) => Err(err),
+                }
+            },
+            Err(err) => Err(err),
+        }
+    }
+
     /// Create a new [Command] with the current [GitCommandOptions]
     /// and the current working directory set to the path of the repo.
     ///
@@ -773,6 +868,12 @@ pub enum GitCommandGetOriginError {
     NoUpstream,
     #[error("access denied: {0}")]
     AccessDenied(GitCommandError),
+    /// A tracked tag cannot serve as the publish branch.
+    #[error("upstream '{upstream}' is not a branch")]
+    UpstreamNotABranch { upstream: String },
+    /// Multiple exact rows violate Git's unique-ref invariant; do not choose one.
+    #[error("found multiple upstream rows for '{ref_}': {rows:?}")]
+    AmbiguousLocalRef { ref_: String, rows: Vec<String> },
 }
 
 impl From<GitCommandError> for GitCommandGetOriginError {
@@ -985,15 +1086,12 @@ impl GitProvider for GitCommandProvider {
         let ref_ = {
             let mut command = self.new_command();
             command.arg("symbolic-ref");
+            command.arg("--quiet");
             command.arg("HEAD");
             let ref_output_result = GitCommandProvider::run_command(&mut command);
             match ref_output_result {
                 Ok(ref_) => Some(ref_.to_string_lossy().trim().to_string()),
-                Err(GitCommandError::BadExit(128, _, stderr))
-                    if stderr == "fatal: ref HEAD is not a symbolic ref" =>
-                {
-                    None
-                },
+                Err(GitCommandError::BadExit(1, _, _)) => None,
                 Err(e) => Err(e)?,
             }
         };
@@ -1049,35 +1147,52 @@ impl GitProvider for GitCommandProvider {
         Ok(())
     }
 
-    /// Retrieve information about the remote origin for the current branch/repo
+    /// Retrieve the upstream remote of `local_branch_ref`, a full local ref
+    /// (e.g. `refs/heads/main`).
     ///
-    /// Return a tuple containing
-    ///
-    /// 1. the remote name of the current branch
-    /// 2. the remote url
-    /// 3. the upstream branch name
-    /// 4. the current revision of the upstream branch
-    ///
-    /// This is essentially
-    ///
-    ///   upstream_ref = git rev-parse @{u}
-    ///   (remote_name, branch_name) = split_once "/" upstream_ref
-    ///   upstream_url = git remote get-url ${remote_name}
-    ///   upstream_rev = git ls-remote ${remote_name} ${branch_name}
-    fn get_current_branch_remote_info(&self) -> Result<OriginInfo, Self::GetOriginError> {
-        let (remote_name, remote_branch) = {
-            let reference = GitCommandProvider::run_command(
-                self.new_command()
-                    .arg("rev-parse")
-                    .arg("--abbrev-ref")
-                    .arg("--symbolic-full-name")
-                    .arg("@{u}"),
-            )
-            .map_err(|_| GitCommandGetOriginError::NoUpstream)?;
-            let as_str = reference.to_string_lossy();
-            let (remote_name, remote_branch) = as_str.trim().split_once('/').unwrap();
-            (remote_name.to_string(), remote_branch.to_string())
+    /// Require an exact ref match: `for-each-ref <pattern>` also returns
+    /// deeper refs sharing its prefix. Read the remote name from Git's own
+    /// field because a remote name can itself contain `/`.
+    fn get_current_branch_remote_info(
+        &self,
+        local_branch_ref: &str,
+    ) -> Result<OriginInfo, Self::GetOriginError> {
+        let output = GitCommandProvider::run_command(
+            self.new_command()
+                .arg("for-each-ref")
+                .arg("--format=%(refname)\t%(upstream:remoteref)\t%(upstream:remotename)")
+                .arg(local_branch_ref),
+        )?;
+        let text = output.to_string_lossy();
+        let rows: Vec<&str> = text
+            .lines()
+            .filter(|line| line.split('\t').next() == Some(local_branch_ref))
+            .collect();
+
+        let row = match rows.as_slice() {
+            [] => return Err(GitCommandGetOriginError::NoUpstream),
+            [row] => *row,
+            _ => {
+                return Err(GitCommandGetOriginError::AmbiguousLocalRef {
+                    ref_: local_branch_ref.to_string(),
+                    rows: rows.into_iter().map(str::to_string).collect(),
+                });
+            },
         };
+
+        let mut fields = row.split('\t');
+        let _refname = fields.next();
+        let upstream_ref = fields.next().unwrap_or("").to_string();
+        let remote_name = fields.next().unwrap_or("").to_string();
+
+        if upstream_ref.is_empty() {
+            return Err(GitCommandGetOriginError::NoUpstream);
+        }
+        if !upstream_ref.starts_with("refs/heads/") {
+            return Err(GitCommandGetOriginError::UpstreamNotABranch {
+                upstream: upstream_ref,
+            });
+        }
 
         let url = GitCommandProvider::run_command(
             self.new_command()
@@ -1089,27 +1204,10 @@ impl GitProvider for GitCommandProvider {
         .trim()
         .to_string();
 
-        let remote_revision = {
-            let remote_revision = GitCommandProvider::run_command(
-                self.new_command()
-                    .arg("ls-remote")
-                    .arg(&remote_name)
-                    .arg(&remote_branch),
-            )?;
-
-            if remote_revision.len() < 40 {
-                warn!("No commit found upstream for ref {remote_branch}");
-                None
-            } else {
-                Some(remote_revision.to_string_lossy()[..40].to_string())
-            }
-        };
-
         Ok(OriginInfo {
             name: remote_name,
             url,
-            reference: remote_branch,
-            revision: remote_revision,
+            reference: upstream_ref,
         })
     }
 
