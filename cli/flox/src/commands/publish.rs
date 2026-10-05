@@ -19,6 +19,7 @@ use flox_rust_sdk::providers::build::{
 use flox_rust_sdk::providers::nix_auth::NixAuth;
 use flox_rust_sdk::providers::publish::{
     PublishError,
+    PublishOutcome,
     PublishProvider,
     Publisher,
     build_repo_err,
@@ -69,6 +70,12 @@ use crate::{environment_subcommand_metric, subcommand_metric};
 
 const PUBLISH_COMPLETION_POLL_INTERVAL_MILLIS: u64 = 2_000; // 1s
 const PUBLISH_COMPLETION_TIMEOUT_MILLIS: u64 = 30 * 60 * 1_000; // 30 min
+
+fn emit_publish_warnings(outcome: &PublishOutcome, mut emit: impl FnMut(&str)) {
+    for warning in &outcome.warnings {
+        emit(&format!("{}: {}", warning.input, warning.message));
+    }
+}
 
 async fn confirm_lineage_change(change: &SourceLineageChange) -> Result<bool, PublishError> {
     if !Dialog::can_prompt() {
@@ -578,7 +585,7 @@ impl Publish {
             &publish_provider.package_metadata.package
         );
         let catalog = &flox.floxhub_client;
-        let needs_publisher_wait = match publish_provider
+        let outcome = match publish_provider
             .publish(
                 catalog,
                 &catalog_name,
@@ -593,16 +600,19 @@ impl Publish {
             )
             .await
         {
-            Ok(needs_wait) => needs_wait,
+            Ok(outcome) => outcome,
             // A declined confirmation is a deliberate cancel, not a failure.
             Err(e @ PublishError::LineageChangeDeclined) => return Err(e.into()),
             Err(e) => bail!("Failed to publish package: {}", display_chain(&e)),
         };
 
+        // A later poll failure must not hide warnings from the accepted POST.
+        emit_publish_warnings(&outcome, |warning| message::warning(warning));
+
         // Only poll when the external publisher service is responsible for
         // ingesting artifacts (Publisher mode). NixCopy and MetadataOnly
         // submit NAR info directly, so there is nothing to wait for.
-        if needs_publisher_wait {
+        if outcome.needs_publisher_wait {
             let span = info_span!(
                 "publish",
                 progress = "Waiting for confirmation of successful publish..."
@@ -636,6 +646,7 @@ impl Publish {
 mod tests {
     use flox_manifest::test_helpers::with_latest_schema;
     use flox_rust_sdk::providers::build::test_helpers::prepare_empty_expressions_ref;
+    use floxhub_client::PublishWarning;
     use indoc::indoc;
 
     use super::*;

@@ -290,12 +290,15 @@ pub trait CatalogClientTrait {
     ) -> Result<(), FloxhubClientError>;
 
     /// Publish a build of a user package.
+    ///
+    /// Returns a [`PublishReceipt`] carrying any warnings the server
+    /// returned.
     async fn publish_build(
         &self,
         catalog_name: impl AsRef<str> + Send + Sync,
         package_name: impl AsRef<str> + Send + Sync,
         build_info: &UserBuildPublish,
-    ) -> Result<(), FloxhubClientError>;
+    ) -> Result<PublishReceipt, FloxhubClientError>;
 
     /// Get store info for a list of derivations.
     async fn get_store_info(
@@ -677,10 +680,10 @@ impl CatalogClientTrait for FloxhubClient {
         catalog_name: impl AsRef<str> + Send + Sync,
         package_name: impl AsRef<str> + Send + Sync,
         build_info: &UserBuildPublish,
-    ) -> Result<(), FloxhubClientError> {
+    ) -> Result<PublishReceipt, FloxhubClientError> {
         let catalog = str_to_catalog_name(catalog_name)?;
         let package = str_to_package_name(package_name)?;
-        self.catalog
+        let response = self.catalog
             .create_package_build_api_v1_catalog_catalogs_catalog_name_packages_package_name_builds_post(
                 &catalog, &package, build_info,
             )
@@ -688,7 +691,7 @@ impl CatalogClientTrait for FloxhubClient {
             .map_api_error()
             .await
             .map_err(FloxhubClientError::classify_publish_error)?;
-        Ok(())
+        Ok(response.into_inner().into())
     }
 
     async fn get_store_info(
