@@ -37,4 +37,18 @@
     expr = (lib.nef.dirToAttrs ./testData/pkgs).entries.setMakeScope.entries ? makeScopeDependency;
     expected = true;
   };
+
+  "test: foo.nix wins over a same-named foo/default.nix" = {
+    expr = lib.hasSuffix "/foo.nix" (
+      (lib.nef.dirToAttrs ./testData/filePrecedence/fileOverDefaultNix).entries.foo.path
+    );
+    expected = true;
+  };
+
+  "test: foo.nix wins over a same-named foo/ package-set directory" = {
+    expr = lib.hasSuffix "/foo.nix" (
+      (lib.nef.dirToAttrs ./testData/filePrecedence/fileOverPackageSetDir).entries.foo.path
+    );
+    expected = true;
+  };
 }
