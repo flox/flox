@@ -11,6 +11,7 @@
         inherit (extendAttrSetModule) extendAttrSet applyOverlay;
         inherit (mkOverlayModule) mkOverlay callPackageIn;
         reflect = self.callPackage ./reflect.nix { };
+        deepOverrides = self.callPackage ./deepOverrides.nix { };
         instantiate = self.callPackage ./instantiate.nix { };
       }
     );
