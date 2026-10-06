@@ -993,7 +993,7 @@ impl ModifyCommands {
     async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
             ModifyCommands::Install(args) => args.handle(flox).await?,
-            ModifyCommands::List(args) => args.handle(flox).await?,
+            ModifyCommands::List(args) => args.handle(config, flox).await?,
             ModifyCommands::Edit(args) => args.handle(flox).await?,
             ModifyCommands::Include(args) => args.handle(flox).await?,
             ModifyCommands::Upgrade(args) => args.handle(flox).await?,
