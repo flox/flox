@@ -404,12 +404,16 @@ impl CatalogClientTrait for MockClient {
             .expect("couldn't acquire mock lock")
             .pop_front();
 
-        let resp = match mock_resp {
-            Some(Response::GetBaseCatalog(resp)) => resp,
+        match mock_resp {
+            Some(Response::GetBaseCatalog(resp)) => Ok(resp),
+            Some(Response::Error(err)) => Err(FloxhubClientError::APIError(
+                floxhub_client::ApiError::ErrorResponse(
+                    err.try_into()
+                        .expect("couldn't convert mock error response"),
+                ),
+            )),
             _ => panic!("expected get_base_catalog response, found {:?}", &mock_resp),
-        };
-
-        Ok(resp)
+        }
     }
 
     async fn get_catalog_locked_sources(
@@ -521,6 +525,31 @@ pub fn base_catalog_url_for_stability_arg(
         },
     };
     Ok(url)
+}
+
+/// A stability that the Flox Catalog doesn't provide.
+#[derive(Debug, Clone, PartialEq)]
+pub struct UnknownStabilityError {
+    pub stability: String,
+    pub available: Vec<String>,
+}
+
+/// Check that `base_catalog_info` lists `stability`.
+///
+/// The Flox Catalog decides which stabilities exist, so they're read from it
+/// rather than from a list in the CLI.
+pub fn check_stability_available(
+    stability: &str,
+    base_catalog_info: &BaseCatalogInfo,
+) -> Result<(), UnknownStabilityError> {
+    let available = base_catalog_info.available_stabilities();
+    if available.contains(&stability) {
+        return Ok(());
+    }
+    Err(UnknownStabilityError {
+        stability: stability.to_string(),
+        available: available.into_iter().map(str::to_string).collect(),
+    })
 }
 
 /// Returns the nixpkgs URL used for expression builds and publishes.

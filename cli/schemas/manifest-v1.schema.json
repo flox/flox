@@ -1317,6 +1317,10 @@
           "default": {},
           "description": "Options that control the behavior of the manifest."
         },
+        "pkg-groups": {
+          "$ref": "#/$defs/PkgGroups",
+          "description": "Settings shared by every package in a package group, keyed by\ngroup name."
+        },
         "plugins": {
           "$ref": "#/$defs/Plugins",
           "description": "Free-form data provided by installed plugins, keyed by plugin\npackage name (`[plugins.<pkg-name>]`). Each plugin defines and\nvalidates the shape of its own table; Flox does not interpret it.\nThe convention for secrets plugins is a flat table of\n`ENV_VAR_NAME = \"path/to/secret/in/store\"`, read by the plugin's\n`profile.d` script at activation."
@@ -1416,7 +1420,7 @@
     },
     "Options2": {
       "additionalProperties": false,
-      "description": "Manifest options for V1_18_0: identical to `common::Options` except that\n`activate` is the V1_18_0 [`ActivateOptions`]. Earlier schema versions keep\nusing `common::Options`.",
+      "description": "Manifest options for V1_18_0: identical to `common::Options` except that\n`activate` is the V1_18_0 [`ActivateOptions`] and `stability` is added.\nEarlier schema versions keep using `common::Options`.",
       "properties": {
         "activate": {
           "$ref": "#/$defs/ActivateOptions2",
@@ -1436,6 +1440,13 @@
         "semver": {
           "$ref": "#/$defs/SemverOptions",
           "description": "Options that control how semver versions are resolved."
+        },
+        "stability": {
+          "description": "The catalog stability that every package group resolves against,\ne.g. `stable`, unless the group sets its own under\n`[pkg-groups.<name>]`.\n\nThe catalog validates the value; when unset, groups without their\nown stability resolve against the catalog's default.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "systems": {
           "description": "A list of systems that each package is resolved for.",
@@ -1637,6 +1648,26 @@
       "required": [
         "store-path"
       ],
+      "type": "object"
+    },
+    "PkgGroup": {
+      "additionalProperties": false,
+      "properties": {
+        "stability": {
+          "description": "The catalog stability to resolve the group's packages against,\ne.g. `stable` or `staging`.\n\nThe catalog validates the value; when unset, the group takes\n`options.stability`, and without that the catalog's default.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "PkgGroups": {
+      "additionalProperties": {
+        "$ref": "#/$defs/PkgGroup"
+      },
+      "description": "Settings for package groups, keyed by the group name that packages\nreference with `pkg-group`.\n\nEvery package in a group is resolved together against a single catalog\npage, so settings that constrain resolution belong to the group rather\nthan to individual packages.",
       "type": "object"
     },
     "Plugins": {

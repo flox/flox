@@ -33,11 +33,13 @@ use flox_manifest::parsed::latest::{
     ManifestLatest,
     ManifestPackageDescriptor,
     PackageDescriptorCatalog,
+    PkgGroups,
 };
 use flox_manifest::parsed::{Inner, latest};
 use flox_manifest::raw::DEFAULT_SYSTEMS_STR;
 use flox_manifest::{Manifest, ManifestError, MigratedTypedOnly};
 use floxhub_client::{
+    FloxhubClientError,
     MessageLevel,
     MsgAttrPathNotFoundNotFoundForAllSystems,
     MsgAttrPathNotFoundNotInCatalog,
@@ -51,12 +53,14 @@ use floxhub_client::{
 use indent::{indent_all_by, indent_by};
 use indoc::formatdoc;
 use itertools::{Either, Itertools};
+use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, instrument};
 
 use crate::flox::Flox;
 use crate::models::environment::fetcher::IncludeFetcher;
 use crate::models::environment::{CoreEnvironmentError, EnvironmentError};
+use crate::providers::catalog::{UnknownStabilityError, check_stability_available};
 use crate::providers::flake_installable_locker::{
     FlakeInstallableError,
     FlakeInstallableToLock,
@@ -75,6 +79,16 @@ pub enum ResolveError {
 
     #[error("resolution failed: {0}")]
     ResolutionFailed(ResolutionFailures),
+
+    #[error("{}", unknown_stability_message(setting, stability, available, *in_include))]
+    UnknownStability {
+        setting: StabilitySetting,
+        stability: String,
+        available: Vec<String>,
+        /// Whether an included environment, rather than the manifest being
+        /// locked, sets the stability.
+        in_include: bool,
+    },
 
     // todo: this should probably part of some validation logic of the manifest file
     //       rather than occurring during the locking process creation
@@ -111,6 +125,49 @@ pub enum ResolveError {
 
     #[error(transparent)]
     Manifest(#[from] ManifestError),
+}
+
+/// Where a pkg-group's stability is set.
+#[derive(Debug, Clone, PartialEq)]
+pub enum StabilitySetting {
+    /// `pkg-groups.<group>.stability`
+    PkgGroup(String),
+    /// `options.stability`, which applies to every pkg-group that doesn't
+    /// set its own.
+    Options,
+}
+
+fn unknown_stability_message(
+    setting: &StabilitySetting,
+    stability: &str,
+    available: &[String],
+    in_include: bool,
+) -> String {
+    let (subject, location) = match setting {
+        StabilitySetting::PkgGroup(group) => (
+            format!("for pkg-group '{group}'"),
+            format!("'{}.stability'", PkgGroups::key_path(group)),
+        ),
+        StabilitySetting::Options => (
+            "in 'options.stability'".to_string(),
+            "'options.stability'".to_string(),
+        ),
+    };
+    // The composer's settings win over its includes', so it can override a
+    // stability that an include sets.
+    let next_step = if in_include {
+        formatdoc! {"
+            An included environment sets {location}.
+            Change it in that environment, or override it with 'flox edit'."}
+    } else {
+        format!("Change {location} with 'flox edit'.")
+    };
+    formatdoc! {"
+        Stability '{stability}' {subject} does not exist.
+        Available stabilities are: {available}
+        {next_step}",
+        available = available.join(", "),
+    }
 }
 
 /// Errors that occur during merging a manifest that flox edit can recover from
@@ -217,6 +274,7 @@ impl LockManifest {
         seed: Option<&Lockfile>,
     ) -> Result<impl Iterator<Item = PackageGroup>, ResolveError> {
         let seed_locked_packages = Self::seed_mapping(seed)?;
+        let seed_manifest = seed.map(Lockfile::migrated_manifest).transpose()?;
         let pkgs_by_group = manifest.catalog_pkgs_by_group();
         let manifest_systems = manifest.options.systems.as_deref();
         let maybe_licenses = manifest
@@ -259,11 +317,19 @@ impl LockManifest {
         let mut map: BTreeMap<String, PackageGroup> = BTreeMap::new();
 
         for (group_name, pkgs) in pkgs_by_group.iter() {
+            let stability = manifest.group_stability(group_name);
+            // Stability selects the catalog page that the whole group
+            // resolves against, so changing it invalidates every package in
+            // the group, not only those whose descriptors changed.
+            let stability_changed = seed_manifest.as_ref().is_some_and(|seed_manifest| {
+                seed_manifest.as_latest_schema().group_stability(group_name) != stability
+            });
             let group = map
                 .entry(group_name.clone())
                 .or_insert_with(|| PackageGroup {
                     descriptors: vec![],
                     name: group_name.clone(),
+                    stability: stability.map(str::to_string),
                 });
             let group_descriptors = &mut group.descriptors;
             for (id, desc) in pkgs.iter() {
@@ -281,7 +347,8 @@ impl LockManifest {
                     let locked_derivation = seed_locked_packages
                         .get(&(id.as_str(), system.to_string().as_str()))
                         .filter(|(descriptor, _)| {
-                            !descriptor.invalidates_existing_resolution(&desc.into())
+                            !stability_changed
+                                && !descriptor.invalidates_existing_resolution(&desc.into())
                         })
                         .and_then(|(_, locked_package)| locked_package.as_catalog_package_ref())
                         .map(|locked_package| locked_package.derivation.clone());
@@ -363,6 +430,7 @@ impl LockManifest {
         let packages =
             Self::resolve_manifest(&merged, seed_lockfile, catalog, &flox.installable_locker)
                 .await
+                .map_err(|err| Self::mark_included_stability(err, manifest.as_latest_schema()))
                 .map_err(|e| EnvironmentError::Core(CoreEnvironmentError::Resolve(e)))?;
 
         let proposed_lockfile = Lockfile {
@@ -678,10 +746,26 @@ impl LockManifest {
 
         // lock packages
         let resolved = if !groups_to_lock.is_empty() {
-            client
-                .resolve(groups_to_lock)
-                .await
-                .map_err(ResolveError::CatalogResolve)?
+            let stability_settings = groups_to_lock
+                .iter()
+                .filter_map(|group| {
+                    let stability = group.stability.clone()?;
+                    let setting = if manifest.group_stability_override(&group.name).is_some() {
+                        StabilitySetting::PkgGroup(group.name.clone())
+                    } else {
+                        StabilitySetting::Options
+                    };
+                    Some((setting, stability))
+                })
+                .collect::<Vec<_>>();
+            match client.resolve(groups_to_lock).await {
+                Ok(resolved) => resolved,
+                Err(err) => {
+                    return Err(
+                        Self::explain_resolve_error(err, &stability_settings, client).await,
+                    );
+                },
+            }
         } else {
             vec![]
         };
@@ -717,6 +801,73 @@ impl LockManifest {
             locked_installables,
         ]
         .concat())
+    }
+
+    /// Explain a failed resolve request that set a stability the Flox Catalog
+    /// doesn't provide.
+    ///
+    /// The catalog rejects such a request as unprocessable, so the available
+    /// stabilities are only fetched for that status, and only when a
+    /// pkg-group sets a stability. Otherwise, or if they can't be fetched,
+    /// the catalog's error is returned as is.
+    ///
+    /// Only the first unknown stability is reported, so a bad
+    /// `options.stability` is reported once rather than for each pkg-group
+    /// that inherits it.
+    async fn explain_resolve_error(
+        err: floxhub_client::ResolveError,
+        stability_settings: &[(StabilitySetting, String)],
+        client: &impl floxhub_client::CatalogClientTrait,
+    ) -> ResolveError {
+        let floxhub_client::ResolveError::FloxhubClientError(FloxhubClientError::APIError(
+            api_error,
+        )) = &err
+        else {
+            return ResolveError::CatalogResolve(err);
+        };
+        if stability_settings.is_empty()
+            || api_error.status() != Some(StatusCode::UNPROCESSABLE_ENTITY)
+        {
+            return ResolveError::CatalogResolve(err);
+        }
+        let Ok(base_catalog_info) = client.get_base_catalog_info().await else {
+            return ResolveError::CatalogResolve(err);
+        };
+        stability_settings
+            .iter()
+            .find_map(|(setting, stability)| {
+                let UnknownStabilityError {
+                    stability,
+                    available,
+                } = check_stability_available(stability, &base_catalog_info).err()?;
+                Some(ResolveError::UnknownStability {
+                    setting: setting.clone(),
+                    stability,
+                    available,
+                    in_include: false,
+                })
+            })
+            .unwrap_or(ResolveError::CatalogResolve(err))
+    }
+
+    /// Mark an unknown stability that `composer` doesn't set as coming from
+    /// an included environment, so that the error points to the manifest
+    /// that sets it.
+    fn mark_included_stability(mut err: ResolveError, composer: &ManifestLatest) -> ResolveError {
+        if let ResolveError::UnknownStability {
+            setting,
+            stability,
+            in_include,
+            ..
+        } = &mut err
+        {
+            let composer_stability = match setting {
+                StabilitySetting::PkgGroup(group) => composer.group_stability_override(group),
+                StabilitySetting::Options => composer.options.stability.as_deref(),
+            };
+            *in_include = composer_stability != Some(stability.as_str());
+        }
+        err
     }
 
     /// Given locked packages and manifest options allows, verify that the
@@ -1364,7 +1515,7 @@ mod tests {
         fake_store_path_lock,
     };
     use flox_manifest::parsed::common::{DEFAULT_GROUP_NAME, Include, KnownSchemaVersion, Vars};
-    use flox_manifest::parsed::latest::PackageDescriptorFlake;
+    use flox_manifest::parsed::latest::{PackageDescriptorFlake, PkgGroup};
     use flox_manifest::raw::test_helpers::{
         empty_test_migrated_manifest,
         mk_test_manifest_from_contents,
@@ -1372,6 +1523,8 @@ mod tests {
     use flox_manifest::test_helpers::with_latest_schema;
     use flox_test_utils::GENERATED_DATA;
     use floxhub_client::{
+        ApiErrorResponse,
+        BaseCatalogInfo,
         CatalogPage,
         PackageDescriptor,
         PackageOutput,
@@ -1395,11 +1548,12 @@ mod tests {
     };
     use crate::models::environment::path_environment::tests::generate_path_environments_without_install_or_include;
     use crate::models::environment::remote_environment::test_helpers::mock_remote_environment;
-    use crate::providers::catalog::MockClient;
     use crate::providers::catalog::test_helpers::{
         auto_recording_catalog_client,
         catalog_replay_client,
+        reset_mocks,
     };
+    use crate::providers::catalog::{GenericResponse, MockClient, Response};
     use crate::providers::flake_installable_locker::{InstallableLocker, InstallableLockerMock};
 
     static TEST_MANIFEST_CONTENTS: &str = indoc! {r#"
@@ -1496,6 +1650,7 @@ mod tests {
                 allow_missing_builds: None,
                 systems: vec![floxhub_client::PackageSystem::Aarch64Darwin],
             }],
+            stability: None,
         }]
     });
 
@@ -1579,6 +1734,7 @@ mod tests {
                     systems: vec![floxhub_client::PackageSystem::X8664Linux],
                 },
             ],
+            stability: None,
         }];
 
         let actual_params = LockManifest::collect_resolution_package_groups(&manifest, None)
@@ -1647,6 +1803,7 @@ mod tests {
                     systems: vec![PackageSystem::X8664Linux],
                 },
             ],
+            stability: None,
         }];
 
         let actual_params = LockManifest::collect_resolution_package_groups(&manifest, None)
@@ -1724,6 +1881,7 @@ mod tests {
                     allow_missing_builds: None,
                     systems: vec![PackageSystem::Aarch64Darwin],
                 }],
+                stability: None,
             },
             PackageGroup {
                 name: "group2".to_string(),
@@ -1740,6 +1898,7 @@ mod tests {
                     allow_missing_builds: None,
                     systems: vec![PackageSystem::Aarch64Darwin],
                 }],
+                stability: None,
             },
         ];
 
@@ -1808,6 +1967,7 @@ mod tests {
                     systems: vec![PackageSystem::Aarch64Darwin],
                 },
             ],
+            stability: None,
         }];
 
         assert_eq!(actual_params, expected_params);
@@ -1943,6 +2103,123 @@ mod tests {
         );
     }
 
+    /// If a seed mapping is provided, use the derivations from the seed where possible
+    /// 4) Changing a group's stability re-resolves every package in that
+    ///    group, even though none of their descriptors changed, and leaves
+    ///    other groups locked.
+    #[test]
+    fn make_params_seeded_unlock_group_if_stability_changed() {
+        let (foo_iid, foo_descriptor, foo_locked) = fake_catalog_package_lock("foo", Some("tools"));
+        let (bar_iid, bar_descriptor, bar_locked) = fake_catalog_package_lock("bar", Some("tools"));
+        let (baz_iid, baz_descriptor, baz_locked) = fake_catalog_package_lock("baz", Some("other"));
+        let mut manifest_before = ManifestLatest::default();
+        manifest_before.install.inner_mut().extend([
+            (foo_iid, foo_descriptor),
+            (bar_iid, bar_descriptor),
+            (baz_iid, baz_descriptor),
+        ]);
+
+        let seed = Lockfile {
+            version: Version::<1>,
+            manifest: manifest_before.as_typed_only(),
+            packages: vec![
+                foo_locked.into(),
+                bar_locked.into(),
+                baz_locked.clone().into(),
+            ],
+            compose: None,
+        };
+
+        // ---------------------------------------------------------------------
+
+        let mut manifest_after = manifest_before.clone();
+        manifest_after
+            .pkg_groups
+            .inner_mut()
+            .insert("tools".to_string(), PkgGroup {
+                stability: Some("lts".to_string()),
+            });
+
+        let actual_params =
+            LockManifest::collect_resolution_package_groups(&manifest_after, Some(&seed))
+                .unwrap()
+                .map(|group| {
+                    let derivations = group
+                        .descriptors
+                        .into_iter()
+                        .map(|descriptor| (descriptor.install_id, descriptor.derivation))
+                        .collect::<Vec<_>>();
+                    (group.name, group.stability, derivations)
+                })
+                .collect::<Vec<_>>();
+
+        assert_eq!(actual_params, vec![
+            ("other".to_string(), None, vec![(
+                "baz_install_id".to_string(),
+                Some(baz_locked.derivation)
+            )]),
+            ("tools".to_string(), Some("lts".to_string()), vec![
+                ("bar_install_id".to_string(), None),
+                ("foo_install_id".to_string(), None),
+            ]),
+        ]);
+    }
+
+    /// Changing `options.stability` re-resolves the groups that inherit it,
+    /// and leaves a group that sets its own stability locked.
+    #[test]
+    fn make_params_seeded_unlock_groups_if_options_stability_changed() {
+        let (foo_iid, foo_descriptor, foo_locked) = fake_catalog_package_lock("foo", Some("tools"));
+        let (baz_iid, baz_descriptor, baz_locked) = fake_catalog_package_lock("baz", Some("other"));
+        let mut manifest_before = ManifestLatest::default();
+        manifest_before
+            .install
+            .inner_mut()
+            .extend([(foo_iid, foo_descriptor), (baz_iid, baz_descriptor)]);
+        manifest_before
+            .pkg_groups
+            .inner_mut()
+            .insert("tools".to_string(), PkgGroup {
+                stability: Some("lts".to_string()),
+            });
+
+        let seed = Lockfile {
+            version: Version::<1>,
+            manifest: manifest_before.as_typed_only(),
+            packages: vec![foo_locked.clone().into(), baz_locked.into()],
+            compose: None,
+        };
+
+        // ---------------------------------------------------------------------
+
+        let mut manifest_after = manifest_before.clone();
+        manifest_after.options.stability = Some("stable".to_string());
+
+        let actual_params =
+            LockManifest::collect_resolution_package_groups(&manifest_after, Some(&seed))
+                .unwrap()
+                .map(|group| {
+                    let derivations = group
+                        .descriptors
+                        .into_iter()
+                        .map(|descriptor| (descriptor.install_id, descriptor.derivation))
+                        .collect::<Vec<_>>();
+                    (group.name, group.stability, derivations)
+                })
+                .collect::<Vec<_>>();
+
+        assert_eq!(actual_params, vec![
+            ("other".to_string(), Some("stable".to_string()), vec![(
+                "baz_install_id".to_string(),
+                None
+            )]),
+            ("tools".to_string(), Some("lts".to_string()), vec![(
+                "foo_install_id".to_string(),
+                Some(foo_locked.derivation)
+            )]),
+        ]);
+    }
+
     /// If flake installables and catalog packages are mixed,
     /// [LockManifest::collect_resolution_package_groups]
     /// should only return [PackageGroup]s for the catalog descriptors.
@@ -1979,6 +2256,7 @@ mod tests {
                 .into_iter()
                 .flatten()
                 .collect(),
+            stability: None,
         }];
 
         let actual_params = LockManifest::collect_resolution_package_groups(&manifest, None)
@@ -2533,6 +2811,7 @@ mod tests {
                     systems: vec![PackageSystem::Aarch64Darwin,],
                 }
             ],
+            stability: None,
         }]);
     }
 
@@ -3071,6 +3350,186 @@ mod tests {
             .unwrap_err(),
             ResolveError::UnfreeNotAllowed { .. }
         ));
+    }
+
+    /// A stability that the Flox Catalog rejects is explained with the
+    /// stabilities it provides, rather than with the catalog's raw error.
+    #[tokio::test]
+    async fn lock_manifest_explains_unknown_stability() {
+        let (foo_iid, foo_descriptor, _) = fake_catalog_package_lock("foo", Some("tools"));
+        let mut manifest = ManifestLatest::default();
+        manifest.install.inner_mut().insert(foo_iid, foo_descriptor);
+        manifest
+            .pkg_groups
+            .inner_mut()
+            .insert("tools".to_string(), PkgGroup {
+                stability: Some("lst".to_string()),
+            });
+
+        let mut client = MockClient::new();
+        reset_mocks(&mut client, vec![
+            Response::Error(GenericResponse {
+                inner: ApiErrorResponse {
+                    detail: "Invalid stability 'lst' in group 'tools'.".to_string(),
+                },
+                status: 422,
+            }),
+            Response::GetBaseCatalog(BaseCatalogInfo::new_mock()),
+        ]);
+
+        let err =
+            LockManifest::resolve_manifest(&manifest, None, &client, &InstallableLockerMock::new())
+                .await
+                .unwrap_err();
+
+        let ResolveError::UnknownStability {
+            setting,
+            stability,
+            available,
+            in_include,
+        } = err
+        else {
+            panic!("expected an unknown stability error, got: {err:?}");
+        };
+        assert_eq!(
+            (setting, stability, available, in_include),
+            (
+                StabilitySetting::PkgGroup("tools".to_string()),
+                "lst".to_string(),
+                vec!["stable".to_string(), "not-default".to_string()],
+                false
+            )
+        );
+    }
+
+    /// A bad `options.stability` is reported as such, not as the stability
+    /// of one of the pkg-groups that inherit it.
+    #[tokio::test]
+    async fn lock_manifest_explains_unknown_options_stability() {
+        let mut manifest = ManifestLatest::default();
+        for (name, group) in [("foo", Some("tools")), ("bar", None)] {
+            let (iid, descriptor, _) = fake_catalog_package_lock(name, group);
+            manifest.install.inner_mut().insert(iid, descriptor);
+        }
+        manifest.options.stability = Some("lst".to_string());
+
+        let mut client = MockClient::new();
+        reset_mocks(&mut client, vec![
+            catalog_error_response(422),
+            Response::GetBaseCatalog(BaseCatalogInfo::new_mock()),
+        ]);
+
+        let err =
+            LockManifest::resolve_manifest(&manifest, None, &client, &InstallableLockerMock::new())
+                .await
+                .unwrap_err();
+
+        let ResolveError::UnknownStability { setting, .. } = err else {
+            panic!("expected an unknown stability error, got: {err:?}");
+        };
+        assert_eq!(setting, StabilitySetting::Options);
+    }
+
+    /// An unknown stability is only attributed to the composer if the
+    /// composer itself sets it.
+    #[test]
+    fn mark_included_stability_checks_composer_setting() {
+        let unknown = |setting: StabilitySetting| ResolveError::UnknownStability {
+            setting,
+            stability: "lst".to_string(),
+            available: vec![],
+            in_include: false,
+        };
+        let mut composer = ManifestLatest::default();
+        composer
+            .pkg_groups
+            .inner_mut()
+            .insert("tools".to_string(), PkgGroup {
+                stability: Some("lst".to_string()),
+            });
+
+        let in_include = [
+            StabilitySetting::PkgGroup("tools".to_string()),
+            StabilitySetting::PkgGroup("other".to_string()),
+            StabilitySetting::Options,
+        ]
+        .map(|setting| {
+            match LockManifest::mark_included_stability(unknown(setting), &composer) {
+                ResolveError::UnknownStability { in_include, .. } => in_include,
+                err => panic!("expected an unknown stability error, got: {err:?}"),
+            }
+        });
+
+        assert_eq!(in_include, [false, true, true]);
+    }
+
+    /// Resolve a manifest whose `tools` pkg-group has `stability`, with the
+    /// catalog returning `responses`.
+    async fn resolve_error_with_stability(
+        stability: &str,
+        responses: Vec<Response>,
+    ) -> ResolveError {
+        let (foo_iid, foo_descriptor, _) = fake_catalog_package_lock("foo", Some("tools"));
+        let mut manifest = ManifestLatest::default();
+        manifest.install.inner_mut().insert(foo_iid, foo_descriptor);
+        manifest
+            .pkg_groups
+            .inner_mut()
+            .insert("tools".to_string(), PkgGroup {
+                stability: Some(stability.to_string()),
+            });
+        let mut client = MockClient::new();
+        reset_mocks(&mut client, responses);
+
+        LockManifest::resolve_manifest(&manifest, None, &client, &InstallableLockerMock::new())
+            .await
+            .unwrap_err()
+    }
+
+    fn catalog_error_response(status: u16) -> Response {
+        Response::Error(GenericResponse {
+            inner: ApiErrorResponse {
+                detail: "catalog error".to_string(),
+            },
+            status,
+        })
+    }
+
+    /// Only an unprocessable request can be caused by an unknown stability,
+    /// so other errors are returned as is, without fetching the available
+    /// stabilities.
+    #[tokio::test]
+    async fn lock_manifest_keeps_catalog_error_for_other_statuses() {
+        // Fetching the base catalog info would fail, since it isn't mocked.
+        let err = resolve_error_with_stability("lst", vec![catalog_error_response(500)]).await;
+
+        assert!(matches!(err, ResolveError::CatalogResolve(_)), "{err:?}");
+    }
+
+    /// Without the available stabilities, the catalog's error is returned as
+    /// is.
+    #[tokio::test]
+    async fn lock_manifest_keeps_catalog_error_without_base_catalog_info() {
+        let err = resolve_error_with_stability("lst", vec![
+            catalog_error_response(422),
+            catalog_error_response(500),
+        ])
+        .await;
+
+        assert!(matches!(err, ResolveError::CatalogResolve(_)), "{err:?}");
+    }
+
+    /// An unprocessable request with only known stabilities has another
+    /// cause, so the catalog's error is returned as is.
+    #[tokio::test]
+    async fn lock_manifest_keeps_catalog_error_for_known_stabilities() {
+        let err = resolve_error_with_stability("stable", vec![
+            catalog_error_response(422),
+            Response::GetBaseCatalog(BaseCatalogInfo::new_mock()),
+        ])
+        .await;
+
+        assert!(matches!(err, ResolveError::CatalogResolve(_)), "{err:?}");
     }
 
     /// [Lockfile::lock_manifest] returns an error if the server

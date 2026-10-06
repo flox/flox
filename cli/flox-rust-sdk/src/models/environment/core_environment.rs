@@ -34,7 +34,7 @@ use tracing::debug;
 
 use super::fetcher::IncludeFetcher;
 use super::install::validate_outputs_against_lockfile;
-use super::uninstall::{UninstallSpec, resolve_specs_to_modifications};
+use super::uninstall::{UninstallSpec, pkg_groups_emptied_by, resolve_specs_to_modifications};
 use super::{
     CanonicalizeError,
     EnvironmentError,
@@ -402,8 +402,11 @@ impl CoreEnvironment<ReadOnly> {
         // Resolve specs to modifications using manifest + lockfile.
         // This also handles PackageOnlyIncluded detection internally.
         let modifications = resolve_specs_to_modifications(&uninstall_specs, &manifest, &lockfile)?;
+        let emptied_pkg_groups = pkg_groups_emptied_by(&modifications, &manifest, &lockfile)?;
 
-        let new_manifest = manifest.modify_packages(&modifications)?;
+        let new_manifest = manifest
+            .modify_packages(&modifications)?
+            .remove_pkg_groups(&emptied_pkg_groups)?;
         let (store_path, _) =
             self.transact_with_manifest(&new_manifest, flox, out_link_prefix, None)?;
 
@@ -424,6 +427,7 @@ impl CoreEnvironment<ReadOnly> {
             still_included,
             built_environment_store_paths: Some(store_path),
             modifications,
+            removed_pkg_groups: emptied_pkg_groups,
         })
     }
 

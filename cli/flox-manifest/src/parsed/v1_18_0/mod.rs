@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use flox_core::activate::mode::ActivateMode;
 use flox_core::data::System;
 #[cfg(any(test, feature = "tests"))]
-use flox_test_utils::proptest::{optional_string, optional_vec_of_strings};
+use flox_test_utils::proptest::{btree_map_strategy, optional_string, optional_vec_of_strings};
 #[cfg(any(test, feature = "tests"))]
 use proptest::prelude::*;
 use schemars::JsonSchema;
@@ -14,6 +14,7 @@ use crate::interfaces::{AsTypedOnlyManifest, SchemaVersion, impl_pkg_lookup};
 use crate::parsed::common::{
     Allows,
     Containerize,
+    DEFAULT_GROUP_NAME,
     Include,
     KnownSchemaVersion,
     SemverOptions,
@@ -39,7 +40,7 @@ pub use crate::parsed::v1_16_0::{
     ServiceStartCondition,
     Services,
 };
-use crate::parsed::{Inner, SkipSerializing};
+use crate::parsed::{Inner, SkipSerializing, impl_into_inner};
 use crate::{Manifest, ManifestError, Parsed, TypedOnly};
 
 /// Not meant for writing manifest files, only for reading them.
@@ -76,6 +77,12 @@ pub struct ManifestV1_18_0 {
     #[serde(default)]
     #[serde(skip_serializing_if = "Install::skip_serializing")]
     pub install: Install,
+    /// Settings shared by every package in a package group, keyed by
+    /// group name.
+    #[serde(default)]
+    #[serde(rename = "pkg-groups")]
+    #[serde(skip_serializing_if = "PkgGroups::skip_serializing")]
+    pub pkg_groups: PkgGroups,
     /// Variables that are exported to the shell environment upon activation.
     #[serde(default)]
     #[serde(skip_serializing_if = "Vars::skip_serializing")]
@@ -125,6 +132,7 @@ impl Default for ManifestV1_18_0 {
             description: Default::default(),
             minimum_cli_version: Default::default(),
             install: Default::default(),
+            pkg_groups: Default::default(),
             vars: Default::default(),
             hook: Default::default(),
             profile: Default::default(),
@@ -155,8 +163,8 @@ impl SchemaVersion for ManifestV1_18_0 {
 }
 
 /// Manifest options for V1_18_0: identical to `common::Options` except that
-/// `activate` is the V1_18_0 [`ActivateOptions`]. Earlier schema versions keep
-/// using `common::Options`.
+/// `activate` is the V1_18_0 [`ActivateOptions`] and `stability` is added.
+/// Earlier schema versions keep using `common::Options`.
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash, JsonSchema)]
 #[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
@@ -184,6 +192,17 @@ pub struct Options {
     #[serde(default)]
     #[serde(skip_serializing_if = "ActivateOptions::skip_serializing")]
     pub activate: ActivateOptions,
+    /// The catalog stability that every package group resolves against,
+    /// e.g. `stable`, unless the group sets its own under
+    /// `[pkg-groups.<name>]`.
+    ///
+    /// The catalog validates the value; when unset, groups without their
+    /// own stability resolve against the catalog's default.
+    #[cfg_attr(
+        any(test, feature = "tests"),
+        proptest(strategy = "optional_string(5)")
+    )]
+    pub stability: Option<String>,
 }
 
 /// Activation options for V1_18_0: adds `upgrade-notifications`.
@@ -211,8 +230,8 @@ impl SkipSerializing for ActivateOptions {
 }
 
 // Conversion from the common type, used by the V1_17_0 -> V1_18_0 migration.
-// The new `upgrade_notifications` field defaults to None, which is what makes
-// the migration lossless.
+// The new `upgrade_notifications` and `stability` fields default to None, which
+// is what makes the migration lossless.
 impl From<crate::parsed::common::Options> for Options {
     fn from(options: crate::parsed::common::Options) -> Self {
         let crate::parsed::common::Options {
@@ -231,6 +250,151 @@ impl From<crate::parsed::common::Options> for Options {
                 mode: activate.mode,
                 upgrade_notifications: None,
             },
+            stability: None,
         }
+    }
+}
+
+impl ManifestV1_18_0 {
+    /// The catalog stability that the packages in `group` resolve against:
+    /// the group's own stability, else the environment's
+    /// `options.stability`, or `None` to let the catalog pick its default.
+    ///
+    /// `group` is the name the packages are locked under, so the default
+    /// group is [`DEFAULT_GROUP_NAME`].
+    pub fn group_stability(&self, group: &str) -> Option<&str> {
+        self.group_stability_override(group)
+            .or(self.options.stability.as_deref())
+    }
+
+    /// The stability that `group` sets under `[pkg-groups.<group>]`, which
+    /// overrides `options.stability` for that group.
+    pub fn group_stability_override(&self, group: &str) -> Option<&str> {
+        self.pkg_groups
+            .inner()
+            .get(group)
+            .and_then(|settings| settings.stability.as_deref())
+    }
+
+    /// Whether any catalog package is installed into `group`.
+    pub fn group_has_packages(&self, group: &str) -> bool {
+        self.install.inner().values().any(|descriptor| {
+            let ManifestPackageDescriptor::Catalog(catalog) = descriptor else {
+                return false;
+            };
+            catalog.pkg_group.as_deref().unwrap_or(DEFAULT_GROUP_NAME) == group
+        })
+    }
+}
+
+/// Settings for package groups, keyed by the group name that packages
+/// reference with `pkg-group`.
+///
+/// Every package in a group is resolved together against a single catalog
+/// page, so settings that constrain resolution belong to the group rather
+/// than to individual packages.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, JsonSchema)]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
+pub struct PkgGroups(
+    #[cfg_attr(
+        any(test, feature = "tests"),
+        proptest(strategy = "btree_map_strategy::<PkgGroup>(5, 3)")
+    )]
+    pub(crate) BTreeMap<String, PkgGroup>,
+);
+
+impl_into_inner!(PkgGroups, BTreeMap<String, PkgGroup>);
+
+impl PkgGroups {
+    /// The dotted key of the settings of `group`, with the name quoted if it
+    /// isn't a bare key, e.g. `pkg-groups.legacy` or `pkg-groups."v1.2"`.
+    ///
+    /// Unlike a `[pkg-groups.<NAME>]` header, this names the settings however
+    /// the manifest writes them, e.g. as `legacy.stability` in `[pkg-groups]`.
+    pub fn key_path(group: &str) -> String {
+        format!("pkg-groups.{}", toml_edit::Key::new(group))
+    }
+}
+
+impl SkipSerializing for PkgGroups {
+    fn skip_serializing(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+#[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, JsonSchema)]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
+#[serde(deny_unknown_fields)]
+pub struct PkgGroup {
+    /// The catalog stability to resolve the group's packages against,
+    /// e.g. `stable` or `staging`.
+    ///
+    /// The catalog validates the value; when unset, the group takes
+    /// `options.stability`, and without that the catalog's default.
+    #[cfg_attr(
+        any(test, feature = "tests"),
+        proptest(strategy = "optional_string(5)")
+    )]
+    pub stability: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn manifest_with_stabilities(
+        options_stability: Option<&str>,
+        groups: &[(&str, Option<&str>)],
+    ) -> ManifestV1_18_0 {
+        let pkg_groups = groups
+            .iter()
+            .map(|(name, stability)| {
+                (name.to_string(), PkgGroup {
+                    stability: stability.map(str::to_string),
+                })
+            })
+            .collect();
+        ManifestV1_18_0 {
+            options: Options {
+                stability: options_stability.map(str::to_string),
+                ..Default::default()
+            },
+            pkg_groups: PkgGroups(pkg_groups),
+            ..Default::default()
+        }
+    }
+
+    /// A group's own stability wins over `options.stability`, which applies
+    /// to every other group.
+    #[test]
+    fn group_stability_prefers_group_over_options() {
+        let manifest =
+            manifest_with_stabilities(Some("stable"), &[("legacy", Some("lts")), ("tools", None)]);
+
+        assert_eq!(
+            [
+                manifest.group_stability("legacy"),
+                manifest.group_stability("tools"),
+                manifest.group_stability(DEFAULT_GROUP_NAME),
+            ],
+            [Some("lts"), Some("stable"), Some("stable")]
+        );
+    }
+
+    #[test]
+    fn group_stability_is_unset_without_group_or_options_stability() {
+        let manifest = manifest_with_stabilities(None, &[("legacy", Some("lts"))]);
+
+        assert_eq!(manifest.group_stability(DEFAULT_GROUP_NAME), None);
+    }
+
+    /// Pkg-group names that aren't bare TOML keys are quoted, so that a
+    /// name with a dot doesn't read as a nested table.
+    #[test]
+    fn pkg_groups_key_path_quotes_names() {
+        assert_eq!(PkgGroups::key_path("legacy"), "pkg-groups.legacy");
+        assert_eq!(PkgGroups::key_path("v1.2"), r#"pkg-groups."v1.2""#);
+        assert_eq!(PkgGroups::key_path("my group"), r#"pkg-groups."my group""#);
     }
 }

@@ -775,6 +775,7 @@ async fn exec_run(run_args: RunArgs, flox: &Flox) -> Result<()> {
     let package_group = PackageGroup {
         name: "toplevel".to_string(),
         descriptors: vec![descriptor],
+        stability: None,
     };
 
     let mut resolved_groups = flox

@@ -503,6 +503,7 @@ impl Node {
                 },
             ],
             name: "yarn".to_string(), // pkg-group name
+            stability: None,
         };
         let catalog = &flox.floxhub_client;
         let resolved = catalog.resolve(vec![yarn_and_node_pkg_group]).await?;

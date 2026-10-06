@@ -352,9 +352,10 @@ impl CatalogClientTrait for FloxhubClient {
                 .into_iter()
                 .map(|mut group| {
                     // Fall back to the client's stability pin when a group
-                    // doesn't carry its own value. A per-group value (once
-                    // plumbed in) always wins over the config default.
-                    // Test/regen-only — see `FloxhubClientConfig::stability`.
+                    // doesn't carry its own value. A group's own value, from
+                    // the manifest's `pkg-groups`, always wins over the
+                    // config default, which is test/regen-only — see
+                    // `FloxhubClientConfig::stability`.
                     group.stability = group.stability.or_else(|| self.config.stability.clone());
                     group
                 })
@@ -1067,6 +1068,7 @@ pub mod tests {
         let resolve_req = vec![PackageGroup {
             name: "group".to_string(),
             descriptors: vec![],
+            stability: None,
         }];
 
         let server = MockServer::start_async().await;
@@ -1103,6 +1105,7 @@ pub mod tests {
             .resolve(vec![PackageGroup {
                 name: "group".to_string(),
                 descriptors: vec![],
+                stability: None,
             }])
             .await;
 
@@ -1124,6 +1127,7 @@ pub mod tests {
             .resolve(vec![PackageGroup {
                 name: "group".to_string(),
                 descriptors: vec![],
+                stability: None,
             }])
             .await;
 
@@ -1167,10 +1171,57 @@ pub mod tests {
                 PackageGroup {
                     name: "group-one".to_string(),
                     descriptors: vec![],
+                    stability: None,
                 },
                 PackageGroup {
                     name: "group-two".to_string(),
                     descriptors: vec![],
+                    stability: None,
+                },
+            ])
+            .await
+            .unwrap();
+        mock.assert();
+    }
+
+    /// A group's own stability wins over `FloxhubClientConfig::stability`;
+    /// groups without one still fall back to the config value.
+    #[tokio::test]
+    async fn resolve_prefers_group_stability_over_config() {
+        let server = MockServer::start_async().await;
+        let mock = server.mock(|when, then| {
+            when.method("POST")
+                .path("/api/v1/catalog/resolve")
+                .json_body(json!({
+                    "items": [{
+                        "descriptors": [],
+                        "name": "group-one",
+                        "stability": "staging",
+                    }, {
+                        "descriptors": [],
+                        "name": "group-two",
+                        "stability": "lts",
+                    }]
+                }));
+            then.status(200).json_body(json!({"items": []}));
+        });
+
+        let config = FloxhubClientConfig {
+            stability: Some("lts".to_string()),
+            ..client_config(&server.base_url())
+        };
+        let client = FloxhubClient::new(config).unwrap();
+        client
+            .resolve(vec![
+                PackageGroup {
+                    name: "group-one".to_string(),
+                    descriptors: vec![],
+                    stability: Some("staging".to_string()),
+                },
+                PackageGroup {
+                    name: "group-two".to_string(),
+                    descriptors: vec![],
+                    stability: None,
                 },
             ])
             .await
@@ -1200,6 +1251,7 @@ pub mod tests {
             .resolve(vec![PackageGroup {
                 name: "group".to_string(),
                 descriptors: vec![],
+                stability: None,
             }])
             .await
             .unwrap();
@@ -1229,6 +1281,7 @@ pub mod tests {
             .resolve(vec![PackageGroup {
                 name: "group".to_string(),
                 descriptors: vec![],
+                stability: None,
             }])
             .await
             .unwrap();
@@ -1260,6 +1313,7 @@ pub mod tests {
             .resolve(vec![PackageGroup {
                 name: "group".to_string(),
                 descriptors: vec![],
+                stability: None,
             }])
             .await
             .unwrap();
