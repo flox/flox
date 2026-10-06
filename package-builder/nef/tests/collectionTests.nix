@@ -51,4 +51,23 @@
     );
     expected = true;
   };
+
+  # `foo/` also has a `deep-override` marker. `foo.nix` wins the name,
+  # so `foo` is a shallow package, not a deep override.
+  "test: foo.nix beside a deep-override-marked foo/ resolves to the file, not the override" =
+    let
+      partitioned = lib.nef.deepOverrides.partitionPkgsTree (
+        lib.nef.dirToAttrs ./testData/filePrecedence/fileOverDeepOverrideDir
+      );
+    in
+    {
+      expr = {
+        isShallow = partitioned.shallowTree.entries ? foo;
+        isDeepOverride = partitioned.deepTree.entries ? foo;
+      };
+      expected = {
+        isShallow = true;
+        isDeepOverride = false;
+      };
+    };
 }
