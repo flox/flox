@@ -42,6 +42,18 @@ Running the container non-interactively with `docker run <container id>`
 allows you to run a command within the container without launching a subshell,
 similar to `flox activate --`.
 
+## GPU access
+
+Container activation honors `[options] cuda-detection` in the environment
+manifest, including options inherited from composed environments.
+Detection is enabled by default; set `cuda-detection = false` to disable it.
+This applies in both `dev` and `run` mode.
+
+The container runtime must expose the GPU devices and host driver libraries
+inside the container, for example with the NVIDIA Container Toolkit.
+CUDA detection discovers those libraries; it does not install a host driver
+or grant access to GPU devices.
+
 # OPTIONS
 
 `-f`, `--file`

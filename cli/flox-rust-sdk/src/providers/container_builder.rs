@@ -81,6 +81,7 @@ impl From<ContainerizeConfig> for OCIConfig {
 pub struct MkContainerNix {
     store_path: BuiltStorePath,
     activation_mode: ActivateMode,
+    cuda_detection: bool,
     container_config: Option<OCIConfig>,
 }
 
@@ -103,6 +104,7 @@ impl MkContainerNix {
     /// Create a new [MkContainerNix] instance that will build a container
     /// from the given [BuiltStorePath].
     /// Generally, this should be the output of a [crate::providers::buildenv::BuildEnv::build].
+    /// `cuda_detection` is the resolved manifest option, including its default.
     ///
     /// Note: this constructor is only available on Linux.
     /// On macOS, use a macOS-specific implementation of [ContainerBuilder].
@@ -113,11 +115,13 @@ impl MkContainerNix {
     pub fn new(
         store_path: BuiltStorePath,
         activation_mode: ActivateMode,
+        cuda_detection: bool,
         container_config: Option<OCIConfig>,
     ) -> Self {
         Self {
             store_path,
             activation_mode,
+            cuda_detection,
             container_config,
         }
     }
@@ -157,6 +161,11 @@ impl ContainerBuilder for MkContainerNix {
             "--argstr",
             "activationMode",
             &self.activation_mode.to_string(),
+        ]);
+        command.args([
+            "--arg",
+            "cudaDetection",
+            if self.cuda_detection { "true" } else { "false" },
         ]);
         command.args([
             "--argstr",

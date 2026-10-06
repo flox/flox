@@ -36,6 +36,7 @@
   parallel,
   podman,
   procps,
+  python3,
   pstree,
   unixtools,
   util-linux,
@@ -85,6 +86,7 @@ let
     yq
     process-compose
     procps
+    python3
     (podman.override (prev: {
       extraPackages = [ "/run/wrappers" ];
     }))

@@ -8,6 +8,8 @@
   interpreterPath,
   # what mode it should be activation with
   activationMode,
+  # Discover host-provided CUDA drivers unless the manifest opts out.
+  cudaDetection ? true,
   # the system to build for
   system,
   containerSystem,
@@ -117,7 +119,7 @@ let
       interpreter_path = "${interpreterPath}";
       flox_prompt_environments = "floxenv";
       set_prompt = true;
-      flox_env_cuda_detection = "0";
+      flox_env_cuda_detection = if cudaDetection then "1" else "0";
       flox_active_environments = "[]";
     };
     project_ctx = null;
@@ -165,6 +167,13 @@ let
         mkdir -m 1777 tmp
         mkdir -m 1770 run
         mkdir -p -m 1770 run/flox
+
+        # Container runtimes read these files before entering the container.
+        # Absolute store symlinks can escape their rootfs-scoped lookup. Copy
+        # the generated records, replacing links rather than writing through
+        # them into the store. nsswitch.conf is only read inside the container.
+        cp --remove-destination --dereference --preserve=mode \
+          ${fakeNss}/etc/passwd ${fakeNss}/etc/group etc/
       '';
 
       # symlinkJoin fails when drv contains a symlinked bin directory, so wrap in an additional buildEnv.
