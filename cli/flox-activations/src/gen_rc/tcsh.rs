@@ -14,7 +14,6 @@ use shell_gen::{GenerateShell, SetVar, Shell};
 
 use crate::attach_diff::todo_drop_set_exported_unexpanded;
 use crate::gen_rc::{Action, RM, invocation_types_update_stmt};
-use crate::vars::FLOX_ACTIVATIONS_BIN;
 
 /// Arguments for generating tcsh startup commands
 #[derive(Debug, Clone)]
@@ -275,7 +274,7 @@ pub fn generate_tcsh_profile_commands(
             stmts.push(
                 format!(
                     r#"eval "`'{}' profile-scripts-deactivate --shell {} --env '{}' $_already_sourced_args:q`";"#,
-                    FLOX_ACTIVATIONS_BIN.display(),
+                    ctx.flox_activations.display(),
                     Shell::Tcsh,
                     ctx.flox_env.display()
                 )
@@ -512,7 +511,7 @@ mod tests {
             if ( $?tty ) then; source '/interpreter/activate.d/set-prompt.tcsh'; endif;
             set _already_sourced_args = ();
             if ($?_FLOX_SOURCED_PROFILE_SCRIPTS) set _already_sourced_args = ( --already-sourced-env-dirs `echo $_FLOX_SOURCED_PROFILE_SCRIPTS:q` );
-            eval "`'/flox_activations' profile-scripts-deactivate --shell tcsh --env '/flox_env' $_already_sourced_args:q`";
+            eval "`'/flox-activations' profile-scripts-deactivate --shell tcsh --env '/flox_env' $_already_sourced_args:q`";
             unsetenv _activate_d; unsetenv _flox_activate_tracer;
             rehash;
         "#]]

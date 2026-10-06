@@ -199,7 +199,7 @@ pub fn generate_zsh_profile_commands(
             stmts.push(
                 format!(
                     r#"eval "$('{}' profile-scripts-deactivate --shell {} --env '{}' --already-sourced-env-dirs "${{_FLOX_SOURCED_PROFILE_SCRIPTS:-}}")";"#,
-                    FLOX_ACTIVATIONS_BIN.display(),
+                    ctx.flox_activations.display(),
                     Shell::Zsh,
                     ctx.flox_env.display()
                 )
@@ -512,7 +512,7 @@ mod tests {
                 fi;
                 unset _FLOX_HOOK_SAVE_FPATH _FLOX_HOOK_SAVE_COMPINIT_DUMPFILE;
             fi;
-            eval "$('/flox_activations' profile-scripts-deactivate --shell zsh --env '/flox_env' --already-sourced-env-dirs "${_FLOX_SOURCED_PROFILE_SCRIPTS:-}")";
+            eval "$('/flox-activations' profile-scripts-deactivate --shell zsh --env '/flox_env' --already-sourced-env-dirs "${_FLOX_SOURCED_PROFILE_SCRIPTS:-}")";
             unset _FLOX_INVOCATION_TYPES;
             if [[ -o interactive ]]; then source '/interpreter/activate.d/set-prompt.zsh'; fi;
             unset _activate_d _flox_activate_tracer _flox_activate_tracelevel;
@@ -547,7 +547,7 @@ mod tests {
                 fi;
                 unset _flox_deactivate_old_fpath;
             fi;
-            eval "$('/flox_activations' profile-scripts-deactivate --shell zsh --env '/flox_env' --already-sourced-env-dirs "${_FLOX_SOURCED_PROFILE_SCRIPTS:-}")";
+            eval "$('/flox-activations' profile-scripts-deactivate --shell zsh --env '/flox_env' --already-sourced-env-dirs "${_FLOX_SOURCED_PROFILE_SCRIPTS:-}")";
             typeset -g _FLOX_INVOCATION_TYPES='[{"env":{"name":"outer_env","type":"path"},"invocation_type":"inplace"}]';
             if [[ -o interactive ]]; then source '/interpreter/activate.d/set-prompt.zsh'; fi;
             unset _activate_d _flox_activate_tracer _flox_activate_tracelevel;
