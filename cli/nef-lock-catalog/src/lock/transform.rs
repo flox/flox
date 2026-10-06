@@ -45,13 +45,21 @@ pub fn build_lock_from_locked_inputs<'d>(
             inputs: _,
             locked_inputs_hash: _,
             source,
-            deep_overrides: _,
+            deep_overrides,
         } = entry;
+
+        // Widening conversion: a `DeepOverridesItemItem` is already a
+        // validated non-empty string, so this cannot fail.
+        let deep_overrides = deep_overrides
+            .unwrap_or_default()
+            .into_iter()
+            .map(|path| path.into_iter().map(String::from).collect())
+            .collect();
 
         builders
             .entry(CatalogId(catalog))
             .or_insert_with(PackageTreeBuilder::new)
-            .add_package_source(attr_path, build_type, source.into())?;
+            .add_package_source(attr_path, build_type, source.into(), deep_overrides)?;
     }
 
     let catalogs = builders
@@ -237,6 +245,51 @@ mod tests {
         assert_eq!(
             value["catalogs"]["beta"]["packages"]["entries"]["bar"]["source"],
             expected_b
+        );
+    }
+
+    /// A populated `deep_overrides` on the wire entry reaches the built
+    /// tree's package node, rather than being dropped in translation.
+    #[test]
+    fn deep_overrides_carried_into_package_tree() {
+        let source = git_source("https://example.com/repo", "abc");
+        let mut wire_entry = entry("myorg", &["hello"], BuildType::Nef, source);
+        wire_entry.deep_overrides = Some(vec![vec!["openssl".try_into().unwrap()]]);
+        let locked = HashMap::from([("myorg.hello".to_string(), wire_entry)]);
+
+        let value = serde_json::to_value(
+            build_lock_from_locked_inputs(locked, [&"myorg.hello".to_string()])
+                .expect("transform succeeds"),
+        )
+        .unwrap();
+
+        assert_eq!(
+            value["catalogs"]["myorg"]["packages"]["entries"]["hello"]["deep_overrides"],
+            json!([["openssl"]])
+        );
+    }
+
+    /// A nested attribute path on the wire entry (a package-set member)
+    /// reaches the tree as a multi-component list, not a dotted string.
+    #[test]
+    fn nested_deep_override_path_carried_into_package_tree() {
+        let source = git_source("https://example.com/repo", "abc");
+        let mut wire_entry = entry("myorg", &["hello"], BuildType::Nef, source);
+        wire_entry.deep_overrides = Some(vec![vec![
+            "setMakeScope".try_into().unwrap(),
+            "makeScopeDependency".try_into().unwrap(),
+        ]]);
+        let locked = HashMap::from([("myorg.hello".to_string(), wire_entry)]);
+
+        let value = serde_json::to_value(
+            build_lock_from_locked_inputs(locked, [&"myorg.hello".to_string()])
+                .expect("transform succeeds"),
+        )
+        .unwrap();
+
+        assert_eq!(
+            value["catalogs"]["myorg"]["packages"]["entries"]["hello"]["deep_overrides"],
+            json!([["setMakeScope", "makeScopeDependency"]])
         );
     }
 }
