@@ -28,7 +28,24 @@ lib.makeScope lib.callPackageWith (self: {
       }:
       "depends on ${makeScopeValue}, ${topLevelDependency} and ${makeScopeDependency}"
     ) { };
+
+    # Targets for nested deep-override tests, which can only replace
+    # existing attributes.
+    wantsExistingNestedSibling = throw "This will be overridden";
+    wantsMissingNestedSibling = throw "This will be overridden";
   });
 
   setNotExtendable = { };
+
+  # Targets for deep-override tests, which can only replace existing
+  # attributes. No test reads these values.
+  usesLocalTool = throw "This will be overridden";
+  reachesProjectPkg = throw "This will be overridden";
+  overrideA = throw "This will be overridden";
+  overrideB = throw "This will be overridden";
+  usesTopLevelDependency = throw "This will be overridden";
+  wantsTopLevelSibling = throw "This will be overridden";
+  wantsOwnSibling = throw "This will be overridden";
+  wantsOtherSourceSibling = throw "This will be overridden";
+  wantsOtherOwnSibling = throw "This will be overridden";
 })

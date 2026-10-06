@@ -1,0 +1,1 @@
+{ topLevelDependency }: "consumer sees: ${topLevelDependency}"
