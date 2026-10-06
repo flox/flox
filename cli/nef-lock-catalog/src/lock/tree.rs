@@ -24,6 +24,18 @@ pub enum PackageTreeNode {
         /// The package's locked source ref, stored verbatim. See
         /// [RawNixFlakerefAttrs] for the invariant it carries.
         source: RawNixFlakerefAttrs,
+        /// Attribute paths of the deep overrides the publishing repository
+        /// declared, e.g. `["setMakeScope", "makeScopeDependency"]` for a
+        /// package set member. A package directory is a deep override when
+        /// it holds a `deep-override` file beside its `default.nix`. A
+        /// consumer's NEF eval fetches only the sources with a non-empty
+        /// list here, rather than every locked source in the closure, to
+        /// check for overrides. Omitted from the rendered lock when empty
+        /// (the common case), so a lock without overrides changes byte for
+        /// byte, and `#[serde(default)]` reads a lock written before this
+        /// field existed the same way, as an empty list.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        deep_overrides: Vec<Vec<String>>,
     },
 }
 
@@ -55,6 +67,7 @@ impl PackageTreeBuilder {
         attr_path: Vec<String>,
         build_type: BuildType,
         source: RawNixFlakerefAttrs,
+        deep_overrides: Vec<Vec<String>>,
     ) -> Result<()> {
         let Some((final_attribute, parent_attributes)) = attr_path.split_last() else {
             anyhow::bail!("Empty attribute path");
@@ -99,7 +112,11 @@ impl PackageTreeBuilder {
 
         // Insert final package using final component as key. The source is
         // stored verbatim — it is already locked server-side.
-        let package = PackageTreeNode::Package { build_type, source };
+        let package = PackageTreeNode::Package {
+            build_type,
+            source,
+            deep_overrides,
+        };
         match current_node {
             PackageTreeNode::PackageSet { entries } => {
                 // Check if there's already a package set at this location
@@ -171,6 +188,7 @@ mod tests {
                 vec!["pkgs".to_string(), "hello".to_string()],
                 BuildType::Manifest,
                 RawNixFlakerefAttrs::new_unchecked(source.clone()),
+                Vec::new(),
             )
             .unwrap();
         builder
@@ -178,6 +196,7 @@ mod tests {
                 vec!["pkgs".to_string(), "grep".to_string()],
                 BuildType::Manifest,
                 RawNixFlakerefAttrs::new_unchecked(source.clone()),
+                Vec::new(),
             )
             .unwrap();
 
@@ -211,6 +230,7 @@ mod tests {
                 vec!["standalone".to_string()],
                 BuildType::Manifest,
                 RawNixFlakerefAttrs::new_unchecked(source.clone()),
+                Vec::new(),
             )
             .unwrap();
 
@@ -241,6 +261,7 @@ mod tests {
                 vec!["conflict".to_string()],
                 BuildType::Manifest,
                 RawNixFlakerefAttrs::new_unchecked(source.clone()),
+                Vec::new(),
             )
             .unwrap();
 
@@ -250,6 +271,7 @@ mod tests {
                 vec!["conflict".to_string(), "child".to_string()],
                 BuildType::Manifest,
                 RawNixFlakerefAttrs::new_unchecked(source.clone()),
+                Vec::new(),
             )
             .unwrap();
 
@@ -284,6 +306,7 @@ mod tests {
                 vec!["conflict".to_string(), "child".to_string()],
                 BuildType::Manifest,
                 RawNixFlakerefAttrs::new_unchecked(source.clone()),
+                Vec::new(),
             )
             .unwrap();
 
@@ -293,6 +316,7 @@ mod tests {
                 vec!["conflict".to_string()],
                 BuildType::Manifest,
                 RawNixFlakerefAttrs::new_unchecked(source.clone()),
+                Vec::new(),
             )
             .unwrap();
 
@@ -326,6 +350,7 @@ mod tests {
             vec![],
             BuildType::Manifest,
             RawNixFlakerefAttrs::new_unchecked(source),
+            Vec::new(),
         );
         assert!(result.is_err());
         assert!(
@@ -351,6 +376,7 @@ mod tests {
                 ],
                 BuildType::Manifest,
                 RawNixFlakerefAttrs::new_unchecked(source.clone()),
+                Vec::new(),
             )
             .unwrap();
 
@@ -393,6 +419,7 @@ mod tests {
                 vec!["test".to_string()],
                 BuildType::Manifest,
                 RawNixFlakerefAttrs::new_unchecked(source.clone()),
+                Vec::new(),
             )
             .unwrap();
 
@@ -437,6 +464,7 @@ mod tests {
                 vec!["pkg1".to_string()],
                 BuildType::Manifest,
                 RawNixFlakerefAttrs::new_unchecked(source.clone()),
+                Vec::new(),
             )
             .unwrap();
         builder
@@ -444,6 +472,7 @@ mod tests {
                 vec!["pkg2".to_string()],
                 BuildType::Manifest,
                 RawNixFlakerefAttrs::new_unchecked(source.clone()),
+                Vec::new(),
             )
             .unwrap();
         builder
@@ -451,6 +480,7 @@ mod tests {
                 vec!["pkg3".to_string()],
                 BuildType::Manifest,
                 RawNixFlakerefAttrs::new_unchecked(source.clone()),
+                Vec::new(),
             )
             .unwrap();
 
@@ -480,6 +510,7 @@ mod tests {
                 vec!["a".to_string(), "b".to_string(), "c".to_string()],
                 BuildType::Manifest,
                 RawNixFlakerefAttrs::new_unchecked(source.clone()),
+                Vec::new(),
             )
             .unwrap();
         builder
@@ -487,6 +518,7 @@ mod tests {
                 vec!["a".to_string(), "d".to_string()],
                 BuildType::Manifest,
                 RawNixFlakerefAttrs::new_unchecked(source.clone()),
+                Vec::new(),
             )
             .unwrap();
         builder
@@ -494,6 +526,7 @@ mod tests {
                 vec!["e".to_string()],
                 BuildType::Manifest,
                 RawNixFlakerefAttrs::new_unchecked(source.clone()),
+                Vec::new(),
             )
             .unwrap();
 
@@ -521,5 +554,80 @@ mod tests {
         .unwrap();
 
         assert_eq!(tree, expected_tree);
+    }
+
+    /// A lock written before `deep_overrides` existed has no such key on
+    /// its package entries; `#[serde(default)]` must still parse it, as
+    /// an empty list, rather than fail deserialization.
+    #[test]
+    fn package_without_deep_overrides_key_parses_as_empty() {
+        let source = test_source();
+        let json = json!({
+            "type": "package",
+            "build_type": "manifest",
+            "source": source,
+        });
+
+        let node: PackageTreeNode = serde_json::from_value(json).unwrap();
+
+        let PackageTreeNode::Package { deep_overrides, .. } = node else {
+            panic!("expected package node");
+        };
+        assert_eq!(deep_overrides, Vec::<Vec<String>>::new());
+    }
+
+    /// A populated `deep_overrides` list round-trips through
+    /// serialization unchanged.
+    #[test]
+    fn package_deep_overrides_round_trip() {
+        let source = test_source();
+        let node = PackageTreeNode::Package {
+            build_type: BuildType::Nef,
+            source: RawNixFlakerefAttrs::new_unchecked(source.clone()),
+            deep_overrides: vec![vec!["openssl".to_string()]],
+        };
+
+        let rendered = serde_json::to_value(&node).unwrap();
+        assert_eq!(
+            rendered,
+            json!({
+                "type": "package",
+                "build_type": "nef",
+                "source": source,
+                "deep_overrides": [["openssl"]],
+            })
+        );
+
+        let read: PackageTreeNode = serde_json::from_value(rendered).unwrap();
+        assert_eq!(read, node);
+    }
+
+    /// A nested attribute path (a package-set member) round-trips as a
+    /// multi-component list, not a dotted string.
+    #[test]
+    fn package_deep_overrides_nested_path_round_trip() {
+        let source = test_source();
+        let node = PackageTreeNode::Package {
+            build_type: BuildType::Nef,
+            source: RawNixFlakerefAttrs::new_unchecked(source.clone()),
+            deep_overrides: vec![vec![
+                "setMakeScope".to_string(),
+                "makeScopeDependency".to_string(),
+            ]],
+        };
+
+        let rendered = serde_json::to_value(&node).unwrap();
+        assert_eq!(
+            rendered,
+            json!({
+                "type": "package",
+                "build_type": "nef",
+                "source": source,
+                "deep_overrides": [["setMakeScope", "makeScopeDependency"]],
+            })
+        );
+
+        let read: PackageTreeNode = serde_json::from_value(rendered).unwrap();
+        assert_eq!(read, node);
     }
 }
