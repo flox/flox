@@ -36,6 +36,11 @@ by passing 'toplevel' as the group name.
 A single package can only be specified to upgrade by ID
 if it is not in a group with any other packages.
 
+The stability configured for a package group limits how often it receives updates.
+For example, a package group with the `stable` stability is upgraded at most once per month.
+Stability can be changed with `pkg-groups.<group name>.stability` as described in
+[`manifest.toml(5)`](./manifest.toml.md).
+
 See [`manifest.toml(5)`](./manifest.toml.md) for more on using pkg-groups.
 
 # OPTIONS

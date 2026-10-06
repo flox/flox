@@ -511,6 +511,75 @@ cmd = "flox install rubyPackages_3_2.rails"
 pre_cmd = "flox init"
 cmd = "flox install rustPlatform.rustLibSrc"
 
+# Locks ripgrep in the toplevel pkg-group with the 'lts' stability.
+[resolve.ripgrep_lts]
+pre_cmd = '''
+    flox init
+    printf '%s\n' \
+        'schema-version = "1.18.0"' \
+        '' \
+        '[install]' \
+        'ripgrep.pkg-path = "ripgrep"' \
+        '' \
+        '[pkg-groups.toplevel]' \
+        'stability = "lts"' \
+        > manifest.toml
+'''
+cmd = "flox edit -f manifest.toml"
+
+# Locks ripgrep in a pkg-group with the 'lts' stability.
+[resolve.ripgrep_legacy_lts]
+pre_cmd = '''
+    flox init
+    printf '%s\n' \
+        'schema-version = "1.18.0"' \
+        '' \
+        '[install]' \
+        'ripgrep.pkg-path = "ripgrep"' \
+        'ripgrep.pkg-group = "legacy"' \
+        '' \
+        '[pkg-groups.legacy]' \
+        'stability = "lts"' \
+        > manifest.toml
+'''
+cmd = "flox edit -f manifest.toml"
+
+# Changes the stability of the toplevel pkg-group after locking ripgrep in it
+# with the 'lts' stability.
+[resolve.ripgrep_lts_to_unstable]
+pre_cmd = '''
+    flox init
+    printf '%s\n' \
+        'schema-version = "1.18.0"' \
+        '' \
+        '[install]' \
+        'ripgrep.pkg-path = "ripgrep"' \
+        '' \
+        '[pkg-groups.toplevel]' \
+        'stability = "lts"' \
+        > manifest.toml
+    flox edit -f manifest.toml
+    sed -i 's/^stability = "lts"$/stability = "unstable"/' manifest.toml
+'''
+cmd = "flox edit -f manifest.toml"
+
+# Locks a pkg-group with a stability that the catalog doesn't provide.
+[resolve.ripgrep_unknown_stability]
+pre_cmd = '''
+    flox init
+    printf '%s\n' \
+        'schema-version = "1.18.0"' \
+        '' \
+        '[install]' \
+        'ripgrep.pkg-path = "ripgrep"' \
+        '' \
+        '[pkg-groups.toplevel]' \
+        'stability = "lst"' \
+        > manifest.toml
+'''
+cmd = "flox edit -f manifest.toml"
+ignore_cmd_errors = true
+
 [resolve.tabula]
 pre_cmd = "flox init"
 cmd = "flox install tabula"

@@ -400,7 +400,7 @@ with_latest_schema() {
   if [ -z "$body" ]; then
     printf "schema-version = \"1.18.0\"\n"
   else
-    printf "schema-version = \"1.16.0\"\n\n%s" "$body"
+    printf "schema-version = \"1.18.0\"\n\n%s" "$body"
   fi
 }
 
@@ -416,6 +416,13 @@ skip_x86_64_darwin_replay() {
   if [ "$NIX_SYSTEM" == "x86_64-darwin" ]; then
     skip "catalog recordings don't cover x86_64-darwin"
   fi
+}
+
+# The nixpkgs revision of the first package in the resolve response of a
+# catalog recording, which may also record other requests.
+recorded_resolved_rev() {
+  yq -r 'select(.when.path == "/api/v1/catalog/resolve") | .then.body' "$1" \
+    | jq -r '.items[].page.packages[0].rev'
 }
 
 # Ask for all four systems, including x86_64-darwin, which is no longer an

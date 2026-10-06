@@ -254,3 +254,30 @@ EOF
 ℹ 'hello' is still installed by environment 'included'
 EOF
 }
+
+# bats test_tags=uninstall:stability
+@test "uninstall: removes the settings of a pkg-group left without packages" {
+  skip_x86_64_darwin_replay
+  "$FLOX_BIN" init
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/ripgrep_legacy_lts.yaml" \
+    "$FLOX_BIN" edit -f <(with_latest_schema '
+[install]
+ripgrep.pkg-path = "ripgrep"
+ripgrep.pkg-group = "legacy"
+
+[pkg-groups.legacy]
+stability = "lts"
+')
+  run tomlq -c '."pkg-groups"' "$MANIFEST_PATH"
+  assert_output '{"legacy":{"stability":"lts"}}'
+
+  run "$FLOX_BIN" uninstall ripgrep
+  assert_success
+  assert_output - <<'EOF'
+━ 'ripgrep' uninstalled from environment 'test'
+ℹ Removed 'pkg-groups.legacy' since it has no packages left
+EOF
+
+  run tomlq -c 'has("pkg-groups")' "$MANIFEST_PATH"
+  assert_output 'false'
+}

@@ -27,6 +27,10 @@ Requesting to uninstall multiple packages where at least one of them was not
 previously installed will cause the transaction to fail
 and no packages will be uninstalled.
 
+Uninstalling the last package of a pkg-group also removes its
+`pkg-groups.<NAME>` settings, unless the pkg-group is `toplevel`
+or still has packages from an included environment.
+
 # OPTIONS
 
 ## Remove Options

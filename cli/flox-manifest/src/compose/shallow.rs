@@ -14,8 +14,8 @@ use crate::parsed::Inner;
 use crate::parsed::common::{Allows, Containerize, Include, SemverOptions, Vars};
 // merge_hook operates on the latest schema's Hook (which carries
 // `on-deactivate`), and merge_options on the latest schema's Options (which
-// carries `activate.upgrade-notifications`), so composing environments
-// preserves those fields.
+// carries `activate.upgrade-notifications` and `stability`), so composing
+// environments preserves those fields.
 use crate::parsed::latest::{
     ActivateOptions,
     Hook,
@@ -23,6 +23,7 @@ use crate::parsed::latest::{
     ManifestLatest,
     MinimumCliVersion,
     Options,
+    PkgGroups,
 };
 // merge_build operates on the latest schema's Build (which carries
 // `sandbox-allow`), so composing environments preserves the field.
@@ -254,6 +255,12 @@ impl ShallowMerger {
                 high_priority.activate.upgrade_notifications,
             );
 
+        let (merged_stability, stability_warning) = shallow_merge_options(
+            root_key.push("stability"),
+            low_priority.stability.clone(),
+            high_priority.stability.clone(),
+        );
+
         let merged = Options {
             systems: merged_systems,
             allow: Allows {
@@ -269,6 +276,7 @@ impl ShallowMerger {
                 mode: merged_activate_mode,
                 upgrade_notifications: merged_activate_upgrade_notifications,
             },
+            stability: merged_stability,
         };
 
         warnings.extend(
@@ -280,6 +288,7 @@ impl ShallowMerger {
                 allow_licenses_warning,
                 allow_pre_releases_warning,
                 cuda_detection_warning,
+                stability_warning,
                 systems_warning,
             ]
             .into_iter()
@@ -341,6 +350,32 @@ impl ShallowMerger {
         Ok((Plugins(merged), warnings))
     }
 
+    /// Group settings merge per group, like install IDs: an included
+    /// environment's group settings apply unless the composer configures the
+    /// same group, in which case the composer's settings win.
+    ///
+    /// Identical settings for the same group don't override anything, so
+    /// only differing settings warn.
+    #[instrument(skip_all)]
+    fn merge_pkg_groups(
+        low_priority: &PkgGroups,
+        high_priority: &PkgGroups,
+    ) -> Result<(PkgGroups, Vec<Warning>), MergeError> {
+        let mut merged = low_priority.inner().clone();
+        let mut warnings = Vec::new();
+        for (group, settings) in high_priority.inner() {
+            if let Some(overridden) = merged.insert(group.clone(), settings.clone())
+                && overridden != *settings
+            {
+                warnings.push(Warning::Overriding(KeyPath::from_iter([
+                    "pkg-groups",
+                    group.as_str(),
+                ])));
+            }
+        }
+        Ok((PkgGroups(merged), warnings))
+    }
+
     #[instrument(skip_all)]
     fn merge_containerize(
         low_priority: Option<&Containerize>,
@@ -383,6 +418,10 @@ impl ManifestMergeTrait for ShallowMerger {
         let (install, install_warnings) =
             Self::merge_install(&low_priority.install, &high_priority.install)?;
 
+        trace!(section = "pkg-groups", "merging manifest section");
+        let (pkg_groups, pkg_groups_warnings) =
+            Self::merge_pkg_groups(&low_priority.pkg_groups, &high_priority.pkg_groups)?;
+
         trace!(section = "vars", "merging manifest section");
         let (vars, vars_warnings) = Self::merge_vars(&low_priority.vars, &high_priority.vars)?;
 
@@ -421,6 +460,7 @@ impl ManifestMergeTrait for ShallowMerger {
         let warnings = [
             minimum_cli_version_warnings,
             install_warnings,
+            pkg_groups_warnings,
             vars_warnings,
             options_warnings,
             services_warnings,
@@ -440,6 +480,7 @@ impl ManifestMergeTrait for ShallowMerger {
             ),
             minimum_cli_version,
             install,
+            pkg_groups,
             vars,
             hook,
             profile,
@@ -465,7 +506,7 @@ mod tests {
 
     use super::*;
     use crate::parsed::common::{Allows, ContainerizeConfig, SemverOptions};
-    use crate::parsed::latest::ManifestPackageDescriptor;
+    use crate::parsed::latest::{ManifestPackageDescriptor, PkgGroup};
     // Build merging operates on the latest schema's BuildDescriptor.
     use crate::parsed::v1_13_0::BuildDescriptor;
     // Service merging operates on the latest schema's ServiceDescriptor.
@@ -623,7 +664,8 @@ mod tests {
                 mode: options2.activate.mode.or(options1.activate.mode),
                 upgrade_notifications: options2.activate.upgrade_notifications.or(options1.activate.upgrade_notifications),
             };
-            let expected = Options { systems, allow, semver, cuda_detection, activate };
+            let stability = options2.stability.or(options1.stability);
+            let expected = Options { systems, allow, semver, cuda_detection, activate, stability };
             prop_assert_eq!(merged, expected);
         }
 
@@ -1081,6 +1123,70 @@ mod tests {
         );
         assert_eq!(warnings, vec![Warning::Overriding(KeyPath::from_iter([
             "plugins", "plugin-a"
+        ]))]);
+    }
+
+    fn pkg_groups(groups: &[(&str, &str)]) -> PkgGroups {
+        PkgGroups(
+            groups
+                .iter()
+                .map(|(group, stability)| {
+                    (group.to_string(), PkgGroup {
+                        stability: Some(stability.to_string()),
+                    })
+                })
+                .collect(),
+        )
+    }
+
+    #[test]
+    fn merges_pkg_groups_section_high_priority_wins() {
+        let low_priority = pkg_groups(&[("legacy", "lts"), ("toplevel", "stable")]);
+        let high_priority = pkg_groups(&[("toplevel", "staging")]);
+
+        let (merged, warnings) =
+            ShallowMerger::merge_pkg_groups(&low_priority, &high_priority).unwrap();
+
+        assert_eq!(
+            merged,
+            pkg_groups(&[("legacy", "lts"), ("toplevel", "staging")])
+        );
+        assert_eq!(warnings, vec![Warning::Overriding(KeyPath::from_iter([
+            "pkg-groups",
+            "toplevel"
+        ]))]);
+    }
+
+    #[test]
+    fn merges_pkg_groups_section_identical_settings_dont_warn() {
+        let low_priority = pkg_groups(&[("toplevel", "stable")]);
+        let high_priority = pkg_groups(&[("toplevel", "stable")]);
+
+        let (merged, warnings) =
+            ShallowMerger::merge_pkg_groups(&low_priority, &high_priority).unwrap();
+
+        assert_eq!(merged, pkg_groups(&[("toplevel", "stable")]));
+        assert_eq!(warnings, vec![]);
+    }
+
+    /// A higher priority table for a pkg-group replaces the lower priority
+    /// one as a whole, so a table without a stability unsets it.
+    #[test]
+    fn merges_pkg_groups_section_table_without_stability_unsets_it() {
+        let low_priority = pkg_groups(&[("toplevel", "lts")]);
+        let high_priority = PkgGroups(
+            [("toplevel".to_string(), PkgGroup { stability: None })]
+                .into_iter()
+                .collect(),
+        );
+
+        let (merged, warnings) =
+            ShallowMerger::merge_pkg_groups(&low_priority, &high_priority).unwrap();
+
+        assert_eq!(merged, high_priority);
+        assert_eq!(warnings, vec![Warning::Overriding(KeyPath::from_iter([
+            "pkg-groups",
+            "toplevel"
         ]))]);
     }
 
