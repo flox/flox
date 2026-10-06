@@ -10,7 +10,6 @@ use shell_gen::{GenerateShell, Shell, source_file};
 
 use crate::attach_diff::{todo_drop_set_exported_unexpanded, todo_drop_unset};
 use crate::gen_rc::{Action, RM, invocation_types_update_stmt};
-use crate::vars::FLOX_ACTIVATIONS_BIN;
 
 /// Arguments for generating bash startup commands
 #[derive(Debug, Clone)]
@@ -241,7 +240,7 @@ pub fn generate_bash_profile_commands(
             stmts.push(
                 format!(
                     r#"eval "$('{}' profile-scripts-deactivate --shell {} --env '{}' --already-sourced-env-dirs "${{_FLOX_SOURCED_PROFILE_SCRIPTS:-}}")";"#,
-                    FLOX_ACTIVATIONS_BIN.display(),
+                    ctx.flox_activations.display(),
                     Shell::Bash,
                     ctx.flox_env.display()
                 )
@@ -511,7 +510,7 @@ mod tests {
             export DELETED_VAR=DELETED_ORIGINAL;
             unset _FLOX_INVOCATION_TYPES;
             if [ -t 1 ]; then source '/interpreter/activate.d/set-prompt.bash'; fi;
-            eval "$('/flox_activations' profile-scripts-deactivate --shell bash --env '/flox_env' --already-sourced-env-dirs "${_FLOX_SOURCED_PROFILE_SCRIPTS:-}")";
+            eval "$('/flox-activations' profile-scripts-deactivate --shell bash --env '/flox_env' --already-sourced-env-dirs "${_FLOX_SOURCED_PROFILE_SCRIPTS:-}")";
             unset _activate_d _flox_activate_tracer;
             set -h;
         "#]]

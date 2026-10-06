@@ -10,7 +10,6 @@ use shell_gen::{GenerateShell, Shell};
 
 use crate::attach_diff::todo_drop_set_exported_unexpanded;
 use crate::gen_rc::{Action, RM, invocation_types_update_stmt};
-use crate::vars::FLOX_ACTIVATIONS_BIN;
 
 /// Arguments for generating fish startup commands
 #[derive(Debug, Clone)]
@@ -232,7 +231,7 @@ pub fn generate_fish_profile_commands(
             stmts.push(
                 format!(
                     r#"{} profile-scripts-deactivate --shell {} --env '{}' --already-sourced-env-dirs (if set -q _FLOX_SOURCED_PROFILE_SCRIPTS; echo "$_FLOX_SOURCED_PROFILE_SCRIPTS"; else; echo ""; end) | source;"#,
-                    FLOX_ACTIVATIONS_BIN.display(),
+                    ctx.flox_activations.display(),
                     Shell::Fish,
                     ctx.flox_env.display()
                 )
@@ -481,7 +480,7 @@ mod tests {
             set -gx DELETED_VAR DELETED_ORIGINAL;
             set -e _FLOX_INVOCATION_TYPES;
             if isatty 1; source '/interpreter/activate.d/set-prompt.fish'; end;
-            /flox_activations profile-scripts-deactivate --shell fish --env '/flox_env' --already-sourced-env-dirs (if set -q _FLOX_SOURCED_PROFILE_SCRIPTS; echo "$_FLOX_SOURCED_PROFILE_SCRIPTS"; else; echo ""; end) | source;
+            /flox-activations profile-scripts-deactivate --shell fish --env '/flox_env' --already-sourced-env-dirs (if set -q _FLOX_SOURCED_PROFILE_SCRIPTS; echo "$_FLOX_SOURCED_PROFILE_SCRIPTS"; else; echo ""; end) | source;
             set -e _activate_d _flox_activate_tracer;
         "#]]
         .assert_eq(&output);

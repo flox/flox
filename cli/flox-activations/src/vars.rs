@@ -8,6 +8,11 @@ use std::sync::LazyLock;
 /// than having it compiled in. `FLOX_ACTIVATIONS_BIN` overrides it: the dev
 /// shell points it at the cargo-built binary, and the integration tests use it
 /// to pin a stable path.
+///
+/// Only meaningful inside the `flox-activations` binary. The `flox` CLI links
+/// this crate as a library, and there this resolves to `flox` itself, so the
+/// code it calls (the deactivate script generators) must take the path as an
+/// argument instead.
 pub static FLOX_ACTIVATIONS_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
     std::env::var("FLOX_ACTIVATIONS_BIN")
         .map(PathBuf::from)
