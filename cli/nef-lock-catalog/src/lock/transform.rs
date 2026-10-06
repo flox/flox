@@ -45,6 +45,7 @@ pub fn build_lock_from_locked_inputs<'d>(
             inputs: _,
             locked_inputs_hash: _,
             source,
+            deep_overrides: _,
         } = entry;
 
         builders
@@ -101,6 +102,7 @@ mod tests {
             inputs: None,
             locked_inputs_hash: "sha256-test".to_string(),
             source,
+            deep_overrides: None,
         }
     }
 

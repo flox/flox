@@ -1109,6 +1109,83 @@ manifest packages were built via the traditional flox manifest workflow.*/
             value.clone()
         }
     }
+    ///`DeepOverridesItemItem`
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "type": "string",
+    ///  "minLength": 1
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+    #[serde(transparent)]
+    pub struct DeepOverridesItemItem(::std::string::String);
+    impl ::std::ops::Deref for DeepOverridesItemItem {
+        type Target = ::std::string::String;
+        fn deref(&self) -> &::std::string::String {
+            &self.0
+        }
+    }
+    impl ::std::convert::From<DeepOverridesItemItem> for ::std::string::String {
+        fn from(value: DeepOverridesItemItem) -> Self {
+            value.0
+        }
+    }
+    impl ::std::convert::From<&DeepOverridesItemItem> for DeepOverridesItemItem {
+        fn from(value: &DeepOverridesItemItem) -> Self {
+            value.clone()
+        }
+    }
+    impl ::std::str::FromStr for DeepOverridesItemItem {
+        type Err = self::error::ConversionError;
+        fn from_str(
+            value: &str,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            if value.chars().count() < 1usize {
+                return Err("shorter than 1 characters".into());
+            }
+            Ok(Self(value.to_string()))
+        }
+    }
+    impl ::std::convert::TryFrom<&str> for DeepOverridesItemItem {
+        type Error = self::error::ConversionError;
+        fn try_from(
+            value: &str,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl ::std::convert::TryFrom<&::std::string::String> for DeepOverridesItemItem {
+        type Error = self::error::ConversionError;
+        fn try_from(
+            value: &::std::string::String,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl ::std::convert::TryFrom<::std::string::String> for DeepOverridesItemItem {
+        type Error = self::error::ConversionError;
+        fn try_from(
+            value: ::std::string::String,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl<'de> ::serde::Deserialize<'de> for DeepOverridesItemItem {
+        fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
+        where
+            D: ::serde::Deserializer<'de>,
+        {
+            ::std::string::String::deserialize(deserializer)?
+                .parse()
+                .map_err(|e: self::error::ConversionError| {
+                    <D::Error as ::serde::de::Error>::custom(e.to_string())
+                })
+        }
+    }
     ///Deprecation metadata for a package from nixpkgs aliases.nix
     ///
     /// <details><summary>JSON schema</summary>
@@ -1777,6 +1854,21 @@ which publish rejects.*/
     ///      "title": "Catalog",
     ///      "type": "string"
     ///    },
+    ///    "deep_overrides": {
+    ///      "title": "Deep Overrides",
+    ///      "type": [
+    ///        "array",
+    ///        "null"
+    ///      ],
+    ///      "items": {
+    ///        "type": "array",
+    ///        "items": {
+    ///          "type": "string",
+    ///          "minLength": 1
+    ///        },
+    ///        "minItems": 1
+    ///      }
+    ///    },
     ///    "inputs": {
     ///      "title": "Inputs",
     ///      "type": [
@@ -1803,6 +1895,10 @@ which publish rejects.*/
         pub attr_path: ::std::vec::Vec<::std::string::String>,
         pub build_type: BuildType,
         pub catalog: ::std::string::String,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub deep_overrides: ::std::option::Option<
+            ::std::vec::Vec<::std::vec::Vec<DeepOverridesItemItem>>,
+        >,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub inputs: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
         pub locked_inputs_hash: ::std::string::String,
@@ -2907,6 +3003,21 @@ catalog) or '<owner>.<pkgset>.*' (package set) — e.g. 'brantley.*'
     ///        "null"
     ///      ]
     ///    },
+    ///    "deep_overrides": {
+    ///      "title": "Deep Overrides",
+    ///      "type": [
+    ///        "array",
+    ///        "null"
+    ///      ],
+    ///      "items": {
+    ///        "type": "array",
+    ///        "items": {
+    ///          "type": "string",
+    ///          "minLength": 1
+    ///        },
+    ///        "minItems": 1
+    ///      }
+    ///    },
     ///    "derivation": {
     ///      "$ref": "#/components/schemas/PackageDerivation"
     ///    },
@@ -3010,6 +3121,10 @@ catalog) or '<owner>.<pkgset>.*' (package set) — e.g. 'brantley.*'
         pub build_type: ::std::option::Option<BuildType>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub cache_uri: ::std::option::Option<::std::string::String>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub deep_overrides: ::std::option::Option<
+            ::std::vec::Vec<::std::vec::Vec<DeepOverridesItemItem>>,
+        >,
         pub derivation: PackageDerivation,
         #[serde(default = "defaults::package_build_with_nar_info_dot_flox_dir")]
         pub dot_flox_dir: ::std::string::String,

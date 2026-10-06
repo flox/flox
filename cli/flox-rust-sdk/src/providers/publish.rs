@@ -773,6 +773,7 @@ where
                 .into_owned(),
             allow_lineage_change,
             factory_build_token: factory_build_token.map(str::to_string),
+            deep_overrides: None,
         };
 
         tracing::debug!(

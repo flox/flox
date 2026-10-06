@@ -231,6 +231,7 @@ mod tests {
                 type_: "git".to_string(),
                 url: "https://example.com/repo".to_string(),
             },
+            deep_overrides: None,
         }
     }
 
