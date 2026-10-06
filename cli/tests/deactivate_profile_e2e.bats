@@ -45,6 +45,9 @@ setup() {
   # `_FLOX_PROMPT_HOOK_VERSION` marker, so opt out of the suite-wide
   # `disable_hook = true`.
   enable_prompt_hook
+  # Resolve the `flox-activations` path the way an installed Flox does: the
+  # suite-wide override hides a deactivate script that names the wrong binary.
+  unset FLOX_ACTIVATIONS_BIN
   home_setup test
   setup_isolated_flox
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"

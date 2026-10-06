@@ -280,8 +280,11 @@ pub(crate) mod test_helpers {
 
     /// Strip lines referencing platform-specific or
     /// environment-dependent variables from rendered deactivate
-    /// output. Also normalizes the absolute `FLOX_ACTIVATIONS_BIN`
-    /// path to `/flox_activations` so snapshots are portable.
+    /// output.
+    ///
+    /// The `FLOX_ACTIVATIONS_BIN` path is deliberately left in, so that a
+    /// snapshot fails if a deactivate script names it rather than
+    /// `DeactivateCtx::flox_activations`.
     pub fn strip_volatile_deactivate(output: &str) -> String {
         const VOLATILE: &[&str] = &[
             "LOCALE_ARCHIVE",
@@ -289,10 +292,8 @@ pub(crate) mod test_helpers {
             "PATH_LOCALE",
             "SSL_CERT_FILE",
         ];
-        let bin = FLOX_ACTIVATIONS_BIN.display().to_string();
-        let normalized = output.replace(&bin, "/flox_activations");
-        let trailing_newline = normalized.ends_with('\n');
-        let mut filtered = normalized
+        let trailing_newline = output.ends_with('\n');
+        let mut filtered = output
             .lines()
             .filter(|l| !VOLATILE.iter().any(|v| l.contains(v)))
             .collect::<Vec<_>>()
