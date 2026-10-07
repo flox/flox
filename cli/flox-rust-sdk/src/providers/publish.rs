@@ -3637,4 +3637,127 @@ pub mod tests {
             "Expected 'dirty' in message, got: {msg}"
         );
     }
+    #[tokio::test]
+    async fn publish_keeps_source_declarations_separate_from_the_input_closure() {
+        for declare_own_overrides in [false, true] {
+            let (mut flox, _temp_dir_handle) = flox_instance();
+            let (_tempdir_handle, _remote_repo, remote_uri) = example_git_remote_repo();
+            let (env, build_repo) = example_path_environment(&flox, Some(&remote_uri));
+
+            let own_paths = if declare_own_overrides {
+                vec![vec!["nested", "wheel"], vec!["zlib"]]
+            } else {
+                vec![]
+            };
+            for path in &own_paths {
+                let directory = path
+                    .iter()
+                    .fold(env.dot_flox_path().join("pkgs"), |p, name| p.join(name));
+                std::fs::create_dir_all(&directory).unwrap();
+                std::fs::write(directory.join("default.nix"), "{ }: null").unwrap();
+                std::fs::write(directory.join("deep-override"), "").unwrap();
+            }
+            if declare_own_overrides {
+                build_repo
+                    .add(&[&env.dot_flox_path().join("pkgs")])
+                    .unwrap();
+                build_repo.commit("Declare source overrides").unwrap();
+                build_repo.push("origin", false).unwrap();
+            }
+            let closure = PackageClosure {
+            direct_inputs: vec!["dep/root".to_string()],
+            locked_inputs: serde_json::from_value(serde_json::json!({
+                "dep/root": {
+                    "attr_path": ["root"], "build_type": "nef", "catalog": "dep",
+                    "inputs": ["dep/child"], "locked_inputs_hash": "sha256-root",
+                    "source": {"type": "git", "url": "https://example.com/dependency",
+                               "rev": "dependency-revision", "ref": "refs/heads/main", "dir": "."},
+                    "deep_overrides": []
+                },
+                "dep/child": {
+                    "attr_path": ["child"], "build_type": "nef", "catalog": "dep",
+                    "inputs": [], "locked_inputs_hash": "sha256-child",
+                    "source": {"type": "git", "url": "https://example.com/transitive",
+                               "rev": "transitive-revision", "ref": "refs/heads/main", "dir": "."},
+                    "deep_overrides": [["openssl"]]
+                }
+        })).unwrap(),
+        };
+
+            set_test_auth(&mut flox, "test");
+            let catalog_name = "test".to_string();
+
+            let env_metadata = check_environment_metadata(&flox, &env).unwrap();
+            let package_metadata = check_package_metadata(
+                Some(&mock_base_catalog_url()),
+                env_metadata.toplevel_catalog_ref.as_ref(),
+                EXAMPLE_MANIFEST_PACKAGE_TARGET.clone(),
+            )
+            .unwrap();
+
+            let build_metadata = check_build_metadata(
+                &flox,
+                env_metadata.toplevel_catalog_ref.as_ref().unwrap(),
+                None,
+                &env_metadata,
+                &package_metadata.package,
+                None,
+            )
+            .unwrap();
+
+            let auth = NixAuth::from_flox(&flox).unwrap();
+            let publish_provider = PublishProvider::new(env_metadata, package_metadata, auth);
+
+            let mut catalog = MockClient::new();
+            reset_mocks(&mut catalog, vec![
+                Response::CreatePackage,
+                Response::Publish(PublishResponse {
+                    ingress_uri: None,
+                    ingress_auth: None,
+                    catalog_store_config: CatalogStoreConfig::MetaOnly,
+                }),
+                Response::PublishBuild,
+            ]);
+
+            let package_created = publish_provider
+                .create_package_and_possibly_user_catalog(&catalog, &catalog_name)
+                .await
+                .unwrap();
+            publish_provider
+                .publish(
+                    &catalog,
+                    &catalog_name,
+                    package_created,
+                    &build_metadata,
+                    &closure,
+                    None,
+                    false,
+                    None,
+                    false,
+                    async |_| Ok(false),
+                )
+                .await
+                .expect("expected publish to succeed");
+
+            let sent = catalog
+                .last_publish_build_info
+                .lock()
+                .expect("couldn't acquire mock lock")
+                .clone()
+                .expect("publish_build was called");
+            let body = serde_json::to_value(sent).unwrap();
+            assert_eq!(
+                (
+                    body["deep_overrides"].clone(),
+                    body["locked_inputs"].clone(),
+                    body["direct_inputs"].clone()
+                ),
+                (
+                    serde_json::json!(own_paths),
+                    serde_json::to_value(&closure.locked_inputs).unwrap(),
+                    serde_json::json!(["dep/root"])
+                ),
+            );
+        }
+    }
 }
