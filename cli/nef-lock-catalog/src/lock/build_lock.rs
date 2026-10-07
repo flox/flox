@@ -967,4 +967,101 @@ mod tests {
 
         assert_eq!(closure.locked_inputs.len(), DEPTH);
     }
+    #[test]
+    fn deep_override_states_survive_disk_and_api_boundaries() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("nix-build.lock");
+        for declared in [
+            None,
+            Some(vec![]),
+            Some(vec![vec!["zlib".to_string()], vec![
+                "python3Packages".to_string(),
+                "wheel".to_string(),
+            ]]),
+        ] {
+            let mut input = entry("myorg", &["hello"]);
+            input.deep_overrides = declared.clone();
+            let lock = build_lock_from_locked_inputs(
+                HashMap::from([("myorg/hello".to_string(), input.clone())]),
+                [&"myorg/hello".to_string()],
+            )
+            .unwrap();
+            write_lock(&lock, &path).unwrap();
+            let disk: serde_json::Value =
+                serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+            assert_eq!(disk["version"], serde_json::json!(2));
+            assert_eq!(
+                disk["locked_inputs"]["myorg/hello"].get("deep_overrides"),
+                declared
+                    .as_ref()
+                    .map(serde_json::to_value)
+                    .transpose()
+                    .unwrap()
+                    .as_ref(),
+            );
+            let restored = read_lock(&path).unwrap();
+            assert_eq!(restored.locked_inputs, lock.locked_inputs);
+            assert_eq!(
+                floxhub_client::LockedInputEntry::from(&restored.locked_inputs["myorg/hello"]),
+                input,
+            );
+        }
+    }
+
+    #[test]
+    fn old_v2_lock_leaves_deep_overrides_unknown() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("nix-build.lock");
+        fs::write(&path, r#"{
+            "version": 2,
+            "locked_inputs": {
+                "myorg/hello": {
+                    "attr_path": ["hello"], "build_type": "nef", "catalog": "myorg",
+                    "inputs": [], "locked_inputs_hash": "sha256-test", "version": null, "build": null,
+                    "source": {"dir": ".", "ref": "refs/heads/main", "rev": "abc",
+                               "type": "git", "url": "https://example.com/repo"}
+                }
+            },
+            "direct_inputs": ["myorg/hello"]
+        }"#).unwrap();
+        let lock = read_lock(&path).unwrap();
+        assert_eq!(
+            lock.locked_inputs,
+            BTreeMap::from([(
+                "myorg/hello".to_string(),
+                LockedInput::from(entry("myorg", &["hello"]))
+            ),])
+        );
+    }
+
+    #[test]
+    fn projection_preserves_transitive_deep_overrides_and_excludes_unselected_inputs() {
+        let mut root = entry("myorg", &["root"]);
+        root.inputs = Some(vec!["myorg/empty".to_string(), "myorg/marked".to_string()]);
+        let mut empty = entry("myorg", &["empty"]);
+        empty.deep_overrides = Some(vec![]);
+        let mut marked = entry("myorg", &["marked"]);
+        marked.deep_overrides = Some(vec![vec!["zlib".to_string()]]);
+        let mut unrelated = entry("other", &["unrelated"]);
+        unrelated.deep_overrides = Some(vec![vec!["openssl".to_string()]]);
+        let expected = BTreeMap::from([
+            ("myorg/root".to_string(), root),
+            ("myorg/empty".to_string(), empty),
+            ("myorg/marked".to_string(), marked),
+        ]);
+        let mut inputs: HashMap<_, _> = expected.clone().into_iter().collect();
+        inputs.insert("other/unrelated".to_string(), unrelated);
+        let lock = build_lock_from_locked_inputs(inputs, [
+            &"myorg/root".to_string(),
+            &"other/unrelated".to_string(),
+        ])
+        .unwrap();
+        let closure = lock
+            .project_package(&references(&["catalogs.myorg.root"]))
+            .unwrap();
+        assert_eq!(closure, PackageClosure {
+            locked_inputs: expected,
+            direct_inputs: vec!["myorg/root".to_string()],
+        });
+    }
 }
