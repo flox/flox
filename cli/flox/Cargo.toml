@@ -19,7 +19,6 @@ dirs.workspace = true
 enum_dispatch.workspace = true
 floxhub-client.workspace = true
 flox-rust-sdk.workspace = true
-fslock.workspace = true
 futures.workspace = true
 indent.workspace = true
 indicatif.workspace = true

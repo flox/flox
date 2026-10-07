@@ -1,7 +1,7 @@
 use std::any::Any;
 use std::collections::{HashMap, VecDeque};
 use std::fmt::Debug;
-use std::fs::{File, OpenOptions};
+use std::fs::{File, OpenOptions, TryLockError};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
@@ -9,9 +9,9 @@ use std::time::Duration as TimeoutDuration;
 
 use anyhow::{Context, Result, bail};
 use flox_config::Config;
+use flox_core::open_lock_file;
 use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::utils::INVOCATION_SOURCES;
-use fslock::LockFile;
 use indoc::indoc;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -197,7 +197,7 @@ pub(crate) struct MetricsBuffer {
     storage: File,
     /// The lock file for the metrics buffer.
     /// Used to avoid concurrent writes to the metrics buffer file.
-    _file_lock: LockFile,
+    _file_lock: File,
     buffer: VecDeque<MetricEntry>,
 }
 impl MetricsBuffer {
@@ -209,7 +209,7 @@ impl MetricsBuffer {
         // The lock is released once the object is dropped.
         // We store the lock in the instance of [MetricsBuffer],
         // thus the lifetime of the lock is extended until the buffer is dropped.
-        let mut metrics_lock = LockFile::open(&cache_dir.join(METRICS_LOCK_FILE_NAME))?;
+        let metrics_lock = open_lock_file(cache_dir.join(METRICS_LOCK_FILE_NAME))?;
         metrics_lock.lock()?;
 
         let buffer_file_path = cache_dir.join(METRICS_EVENTS_FILE_NAME);
@@ -240,9 +240,11 @@ impl MetricsBuffer {
     /// Returns `None` when another process holds the lock so the caller can
     /// exit early rather than piling up concurrent flushers.
     fn try_read(cache_dir: &Path) -> Result<Option<Self>> {
-        let mut metrics_lock = LockFile::open(&cache_dir.join(METRICS_LOCK_FILE_NAME))?;
-        if !metrics_lock.try_lock()? {
-            return Ok(None);
+        let metrics_lock = open_lock_file(cache_dir.join(METRICS_LOCK_FILE_NAME))?;
+        match metrics_lock.try_lock() {
+            Ok(()) => {},
+            Err(TryLockError::WouldBlock) => return Ok(None),
+            Err(TryLockError::Error(err)) => return Err(err.into()),
         }
 
         let buffer_file_path = cache_dir.join(METRICS_EVENTS_FILE_NAME);

@@ -11,7 +11,6 @@ floxhub-client = { workspace = true }
 chrono.workspace = true
 derive_more.workspace = true
 enum_dispatch.workspace = true
-fslock.workspace = true
 futures.workspace = true
 flox-core.workspace = true
 git-url-parse.workspace = true

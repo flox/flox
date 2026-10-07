@@ -1,7 +1,7 @@
+use std::fs::File;
 use std::path::{Path, PathBuf};
 
-use flox_core::{WriteError, serialize_atomically, traceable_path};
-use fslock::LockFile;
+use flox_core::{WriteError, open_lock_file, serialize_atomically, traceable_path};
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
@@ -12,7 +12,7 @@ pub const USER_STATE_FILENAME: &str = "user_state.json";
 #[derive(Debug, thiserror::Error)]
 pub enum UserStateError {
     #[error("couldn't acquire user state file lock")]
-    AcquireLock(#[source] fslock::Error),
+    AcquireLock(#[source] std::io::Error),
     #[error("couldn't read user state file")]
     ReadFile(#[source] std::io::Error),
     #[error("couldn't parse user state file")]
@@ -61,15 +61,13 @@ pub fn read_user_state_file(path: impl AsRef<Path>) -> Result<Option<UserState>,
 }
 
 /// Acquires the filesystem-based lock on the user state file
-pub fn acquire_user_state_lock(
-    state_file_path: impl AsRef<Path>,
-) -> Result<LockFile, UserStateError> {
+pub fn acquire_user_state_lock(state_file_path: impl AsRef<Path>) -> Result<File, UserStateError> {
     let lock_path = user_state_lock_path(state_file_path);
     debug!(
         path = traceable_path(&lock_path),
         "acquiring user state lock"
     );
-    let mut lock = LockFile::open(lock_path.as_os_str()).map_err(UserStateError::AcquireLock)?;
+    let lock = open_lock_file(&lock_path).map_err(UserStateError::AcquireLock)?;
     lock.lock().map_err(UserStateError::AcquireLock)?;
     Ok(lock)
 }
@@ -77,13 +75,13 @@ pub fn acquire_user_state_lock(
 /// Writes the user state file to disk.
 ///
 /// First the registry is written to a temporary file and then it is renamed so the write appears
-/// atomic. This also takes a [LockFile] argument to ensure that the write can only be performed
-/// when the lock is acquired. It is a bug if you pass a [LockFile] that doesn't correspond to the
+/// atomic. This also takes the locked lock file to ensure that the write can only be performed
+/// when the lock is acquired. It is a bug if you pass a lock file that doesn't correspond to the
 /// user state file, as that is essentially bypassing the lock.
 pub fn write_user_state_file(
     state: &UserState,
     path: impl AsRef<Path>,
-    lock: LockFile,
+    lock: File,
 ) -> Result<(), UserStateError> {
     serialize_atomically(state, &path, lock).map_err(UserStateError::WriteFile)
 }
@@ -92,7 +90,7 @@ pub fn write_user_state_file(
 /// both the lock and the parsed file contents.
 pub fn lock_and_read_user_state_file(
     path: impl AsRef<Path>,
-) -> Result<(LockFile, UserState), UserStateError> {
+) -> Result<(File, UserState), UserStateError> {
     let path = path.as_ref();
     debug!(path = traceable_path(&path), "reading user state file");
     if !path.exists() {

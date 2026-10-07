@@ -1,11 +1,10 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs::DirBuilder;
+use std::fs::{DirBuilder, File};
 use std::ops::Deref;
 use std::os::unix::fs::DirBuilderExt;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, bail};
-use fslock::LockFile;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use time::OffsetDateTime;
@@ -13,7 +12,7 @@ use tracing::{debug, info, trace};
 
 use crate::activate::mode::ActivateMode;
 use crate::proc_status::pid_is_running;
-use crate::{Version, path_hash};
+use crate::{Version, open_lock_file, path_hash};
 
 const EXECUTIVE_NOT_STARTED: Pid = 0;
 
@@ -193,7 +192,7 @@ pub struct AttachedPid {
 /// Acquires the filesystem-based lock on state.json
 pub fn acquire_activations_json_lock(
     activations_json_path: impl AsRef<Path>,
-) -> Result<LockFile, Error> {
+) -> Result<File, Error> {
     let lock_path = activations_json_lock_path(activations_json_path);
     let lock_path_parent = lock_path.parent().expect("lock path has parent");
     if !(lock_path.exists()) {
@@ -202,7 +201,7 @@ pub fn acquire_activations_json_lock(
             .mode(0o700)
             .create(lock_path_parent)?;
     }
-    let mut lock = LockFile::open(&lock_path).context("failed to open lockfile")?;
+    let lock = open_lock_file(&lock_path).context("failed to open lockfile")?;
     lock.lock().context("failed to lock lockfile")?;
     Ok(lock)
 }
@@ -828,7 +827,7 @@ fn parse_versioned_activation_state(content: &str) -> Result<Option<ActivationSt
 /// which should be reused for writing, to avoid TOCTOU issues.
 pub fn read_activations_json(
     path: impl AsRef<Path>,
-) -> Result<(Option<ActivationState>, LockFile), Error> {
+) -> Result<(Option<ActivationState>, File), Error> {
     let path = path.as_ref();
     let lock_file = acquire_activations_json_lock(path).context("failed to acquire lockfile")?;
 
@@ -855,7 +854,7 @@ pub fn read_activations_json(
 pub fn write_activations_json(
     activations: &ActivationState,
     path: impl AsRef<Path>,
-    lock: LockFile,
+    lock: File,
 ) -> Result<(), Error> {
     if activations.executive_pid == EXECUTIVE_NOT_STARTED {
         anyhow::bail!(

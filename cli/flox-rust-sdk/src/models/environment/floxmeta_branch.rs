@@ -1,8 +1,8 @@
-use std::fs;
+use std::fs::{self, File};
 use std::path::Path;
 
 use flox_core::data::environment_ref::RemoteEnvironmentRef;
-use fslock::LockFile;
+use flox_core::open_lock_file;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::debug;
@@ -94,7 +94,7 @@ pub enum FloxmetaBranchError {
     CreateFloxmetaDir(#[source] std::io::Error),
 
     #[error("failed to lock floxmeta git repo")]
-    LockFloxmeta(#[source] fslock::Error),
+    LockFloxmeta(#[source] std::io::Error),
 
     #[error("failed to open floxmeta git repo: {0}")]
     OpenFloxmeta(#[source] FloxMetaError),
@@ -294,12 +294,12 @@ impl FloxmetaBranch {
 #[tracing::instrument(fields(
     progress = "Waiting for lock to open or create Flox remote metadata"
 ))]
-fn acquire_floxmeta_lock(floxmeta_dir: &Path) -> Result<LockFile, FloxmetaBranchError> {
+fn acquire_floxmeta_lock(floxmeta_dir: &Path) -> Result<File, FloxmetaBranchError> {
     let parent = floxmeta_dir.parent().expect("path is non-empty");
     std::fs::create_dir_all(parent).map_err(FloxmetaBranchError::CreateFloxmetaDir)?;
     // TODO: use with_extension once we update our rustc
-    let mut lock = LockFile::open(
-        &floxmeta_dir.with_file_name(
+    let lock = open_lock_file(
+        floxmeta_dir.with_file_name(
             floxmeta_dir
                 .file_name()
                 .expect("path is non-empty")

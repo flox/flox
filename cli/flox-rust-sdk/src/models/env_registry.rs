@@ -1,8 +1,8 @@
+use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-use flox_core::{Version, WriteError, serialize_atomically, traceable_path};
-use fslock::LockFile;
+use flox_core::{Version, WriteError, open_lock_file, serialize_atomically, traceable_path};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, instrument, warn};
 
@@ -18,7 +18,7 @@ pub const ENV_REGISTRY_FILENAME: &str = "env-registry.json";
 #[derive(Debug, thiserror::Error)]
 pub enum EnvRegistryError {
     #[error("couldn't acquire environment registry file lock")]
-    AcquireLock(#[source] fslock::Error),
+    AcquireLock(#[source] std::io::Error),
     #[error("couldn't read environment registry file")]
     ReadRegistry(#[source] std::io::Error),
     #[error("couldn't parse environment registry")]
@@ -277,21 +277,21 @@ pub fn read_environment_registry(
 /// Writes the environment registry to disk.
 ///
 /// First the registry is written to a temporary file and then it is renamed so the write appears
-/// atomic. This also takes a [LockFile] argument to ensure that the write can only be performed
-/// when the lock is acquired. It is a bug if you pass a [LockFile] that doesn't correspond to the
+/// atomic. This also takes the locked lock file to ensure that the write can only be performed
+/// when the lock is acquired. It is a bug if you pass a lock file that doesn't correspond to the
 /// environment registry, as that is essentially bypassing the lock.
 fn write_environment_registry(
     reg: &EnvRegistry,
     reg_path: impl AsRef<Path>,
-    _lock: LockFile,
+    _lock: File,
 ) -> Result<(), EnvRegistryError> {
     serialize_atomically(reg, &reg_path, _lock).map_err(EnvRegistryError::WriteEnvironmentRegistry)
 }
 
 /// Acquires the filesystem-based lock on the user's environment registry file
-fn acquire_env_registry_lock(reg_path: impl AsRef<Path>) -> Result<LockFile, EnvRegistryError> {
+fn acquire_env_registry_lock(reg_path: impl AsRef<Path>) -> Result<File, EnvRegistryError> {
     let lock_path = env_registry_lock_path(reg_path);
-    let mut lock = LockFile::open(lock_path.as_os_str()).map_err(EnvRegistryError::AcquireLock)?;
+    let lock = open_lock_file(&lock_path).map_err(EnvRegistryError::AcquireLock)?;
     lock.lock().map_err(EnvRegistryError::AcquireLock)?;
     Ok(lock)
 }
@@ -422,7 +422,7 @@ mod test {
             let (flox, _temp_dir_handle) = flox_instance();
             let reg_path = env_registry_path(&flox);
             let lock_path = env_registry_lock_path(&reg_path);
-            let lock = LockFile::open(&lock_path).unwrap();
+            let lock = open_lock_file(&lock_path).unwrap();
             prop_assert!(!reg_path.exists());
             write_environment_registry(&reg, &reg_path, lock).unwrap();
             prop_assert!(reg_path.exists());
