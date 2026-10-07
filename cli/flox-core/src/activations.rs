@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{DirBuilder, File};
 use std::ops::Deref;
-use std::os::unix::fs::DirBuilderExt;
+use std::os::unix::fs::{DirBuilderExt, MetadataExt};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, bail};
@@ -190,21 +190,61 @@ pub struct AttachedPid {
 }
 
 /// Acquires the filesystem-based lock on state.json
+///
+/// The executive's cleanup renames the activation state directory, state.lock
+/// included, while it holds this lock (see `rename_state_for_removal` in
+/// flox-activations). A process that opened state.lock before the rename would
+/// wake up holding a lock on the renamed file, which no longer guards
+/// state.json, while a process arriving after the rename locks a new
+/// state.lock in a recreated directory. To rule that out, this checks after
+/// locking that the locked file is still the one at the lock path, and starts
+/// over if it is not.
 pub fn acquire_activations_json_lock(
     activations_json_path: impl AsRef<Path>,
 ) -> Result<File, Error> {
     let lock_path = activations_json_lock_path(activations_json_path);
     let lock_path_parent = lock_path.parent().expect("lock path has parent");
-    if !(lock_path.exists()) {
+
+    for _ in 0..MAX_LOCK_ATTEMPTS {
         DirBuilder::new()
             .recursive(true)
             .mode(0o700)
             .create(lock_path_parent)?;
+        let lock = match open_lock_file(&lock_path) {
+            Ok(lock) => lock,
+            // The directory was renamed away after it was created above.
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(err) => return Err(err).context("failed to open lockfile"),
+        };
+        lock.lock().context("failed to lock lockfile")?;
+
+        let locked = lock
+            .metadata()
+            .context("failed to read metadata of lockfile")?;
+        match std::fs::metadata(&lock_path) {
+            Ok(current) if (current.dev(), current.ino()) == (locked.dev(), locked.ino()) => {
+                return Ok(lock);
+            },
+            Ok(_) => {},
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {},
+            Err(err) => return Err(err).context("failed to read metadata of lockfile"),
+        }
+        debug!(
+            ?lock_path,
+            "lockfile was replaced while waiting for its lock, retrying"
+        );
     }
-    let lock = open_lock_file(&lock_path).context("failed to open lockfile")?;
-    lock.lock().context("failed to lock lockfile")?;
-    Ok(lock)
+
+    bail!(
+        "failed to lock {}: the activation state directory kept being replaced",
+        lock_path.display()
+    )
 }
+
+/// How many times [acquire_activations_json_lock] starts over after the lock
+/// file was replaced under it. Each retry needs another cleanup to have renamed
+/// the directory, so this is only reached when something keeps replacing it.
+const MAX_LOCK_ATTEMPTS: usize = 100;
 
 /// Returns the path to the lock file for state.json.
 /// The presence of the lock file does not indicate an active lock because the
@@ -1004,6 +1044,50 @@ mod tests {
                     state_path.display()
                 ),
                 "writing state without executive PID should fail"
+            );
+        }
+    }
+
+    mod state_lock {
+        use std::fs::TryLockError;
+        use std::thread;
+
+        use super::*;
+
+        /// How long the test gives the waiting thread to block in `lock()`
+        /// before the holder renames the state directory away.
+        const WAITER_BLOCK_DELAY: Duration = Duration::from_millis(200);
+
+        /// The executive's cleanup renames the activation state directory,
+        /// state.lock included, while holding the lock. A process already
+        /// waiting for the lock must not end up holding it on the renamed
+        /// file, which no longer guards state.json. Holds the lock, starts a
+        /// waiter on another thread, renames the directory away and releases
+        /// the lock, then checks that the waiter's lock excludes a new lock
+        /// on state.lock at its original path.
+        #[test]
+        fn waiter_locks_the_current_state_dir_after_a_rename() {
+            let temp_dir = TempDir::new().unwrap();
+            let activation_state_dir = temp_dir.path().join("activations").join("hash-env");
+            let state_path = state_json_path(&activation_state_dir);
+            let holder = acquire_activations_json_lock(&state_path).unwrap();
+
+            let waiter = thread::spawn({
+                let state_path = state_path.clone();
+                move || acquire_activations_json_lock(&state_path).unwrap()
+            });
+            thread::sleep(WAITER_BLOCK_DELAY);
+
+            let renamed = activation_state_dir.with_extension("cleanup.1");
+            std::fs::rename(&activation_state_dir, &renamed).unwrap();
+            drop(holder);
+            let _waiter_lock = waiter.join().unwrap();
+
+            let probe = open_lock_file(activations_json_lock_path(&state_path))
+                .expect("the waiter should have recreated state.lock at its path");
+            assert!(
+                matches!(probe.try_lock(), Err(TryLockError::WouldBlock)),
+                "the waiter's lock should cover state.lock at its path, not the renamed file"
             );
         }
     }
