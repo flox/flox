@@ -108,9 +108,34 @@ sharing environments, and administration.
 # ENVIRONMENT VARIABLES
 
 `$FLOX_DISABLE_METRICS`
-:   Variable for disabling the collection/sending of metrics data.
-    If set to `true`, prevents Flox from submitting basic metrics information
-    such as a unique token and the subcommand issued.
+:   Set to `true` to turn off telemetry.
+    Telemetry is the usage events, error reports and performance traces that Flox collects.
+    Flox sends usage events to Flox.
+    Flox sends error reports and performance traces to Sentry (`sentry.io`), a service that Flox uses.
+
+    Usage events carry a random device ID, and your FloxHub account ID when you are signed in or use a FloxHub token.
+    Flox links the device ID to every FloxHub account that signs in on this device.
+    Through that link, Flox also ties this device's signed-out events to that account.
+    Usage events also carry the search terms you type, your environment names, the packages you install, upgrade or uninstall, and every other item that `disable_metrics` in [`flox-config(1)`](./flox-config.md) lists.
+    In an activated shell, Flox's shell prompt hook records two usage events at every prompt.
+
+    Error reports and performance traces carry the device ID and file paths.
+    Error reports also carry the error message, and a stack trace when Flox crashes.
+    Error reports also carry up to 100 recent Flox log messages, including messages that `-q` hides.
+    Error reports from an activation also carry the output of the environment's `hook.on-deactivate` script.
+    On macOS, error reports also carry your Mac model.
+    Performance traces also carry the search terms, package names, environment names and FloxHub URL of the command.
+    Flox and Sentry receive your IP address when Flox sends telemetry.
+
+    This variable overrides `disable_metrics` in every config file.
+    It accepts only `true` or `false`, in any letter case.
+    Any other value, `1` included, makes Flox commands fail with a configuration error.
+
+    Turning telemetry off does not stop the requests that commands send to FloxHub and the Flox Catalog.
+    FloxHub records the search terms and package lists in those requests, with your IP address.
+    When you are signed in, FloxHub also records your FloxHub account with them.
+    See `disable_metrics` in [`flox-config(1)`](./flox-config.md) for what turning telemetry off stops and what it does not stop.
+    For every field that telemetry contains, see [Flox data collection](https://flox.dev/docs/concepts/data-collection).
 
 `$FLOX_MAX_PARALLEL_DOWNLOADS`
 :   Variable for controlling parallel downloads when building an environment.
