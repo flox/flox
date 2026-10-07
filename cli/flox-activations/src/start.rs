@@ -47,7 +47,7 @@ use crate::vars_from_env::VarsFromEnvironment;
 /// Marker the activate script writes into the start state directory as its
 /// last act, so that a hook which exited or exec'd out — taking the rest of
 /// the script with it — is distinguishable from one that returned normally.
-const ACTIVATE_COMPLETE_MARKER: &str = "complete";
+pub(crate) const ACTIVATE_COMPLETE_MARKER: &str = "complete";
 
 /// How long to wait for a newly spawned `process-compose` to answer.
 ///
