@@ -124,4 +124,12 @@ impl CachedFacts {
         self.requires_login
             && (!self.logged_in || self.expires_at.is_some_and(|expiry| expiry <= Utc::now()))
     }
+
+    /// Whether a credential is held but its known expiry has passed.
+    ///
+    /// Unlike [`Self::is_unauthenticated`], this covers opaque tokens too:
+    /// their expiry is known once `/me` has reported it.
+    pub fn is_expired(&self) -> bool {
+        self.logged_in && self.expires_at.is_some_and(|expiry| expiry <= Utc::now())
+    }
 }

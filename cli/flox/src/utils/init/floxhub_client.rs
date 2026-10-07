@@ -2,13 +2,7 @@ use std::collections::BTreeMap;
 
 use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::utils::{HEADER_DEVICE_UUID, HEADER_INVOCATION_ID, INVOCATION_SOURCES};
-use floxhub_client::{
-    AuthContext,
-    FloxhubClient,
-    FloxhubClientConfig,
-    FloxhubMockMode,
-    UnauthenticatedResolveHook,
-};
+use floxhub_client::{AuthContext, FloxhubClient, FloxhubClientConfig, FloxhubMockMode};
 use tracing::debug;
 use uuid::Uuid;
 
@@ -29,7 +23,6 @@ pub fn init_floxhub_client(
     auth_context: AuthContext,
     metrics_device_uuid: Option<Uuid>,
     invocation_id: Uuid,
-    on_unauthenticated_resolve: Option<UnauthenticatedResolveHook>,
 ) -> Result<FloxhubClient, anyhow::Error> {
     let mut extra_headers = BTreeMap::new();
 
@@ -53,7 +46,6 @@ pub fn init_floxhub_client(
         auth_context,
         user_agent: Some(format!("flox-cli/{}", &*FLOX_VERSION)),
         stability: FloxhubClientConfig::stability_from_env(),
-        on_unauthenticated_resolve,
     };
 
     debug!("using catalog client with url: {}", client_config.base_url);
@@ -81,7 +73,6 @@ mod tests {
             AuthContext::default(),
             Some(Uuid::new_v4()),
             invocation_id,
-            None,
         )
         .expect("client initializes");
         let _ = client.package_versions("hello").await;
@@ -97,14 +88,9 @@ mod tests {
             then.status(500);
         });
 
-        let client = init_floxhub_client(
-            server.base_url(),
-            AuthContext::default(),
-            None,
-            Uuid::nil(),
-            None,
-        )
-        .expect("client initializes");
+        let client =
+            init_floxhub_client(server.base_url(), AuthContext::default(), None, Uuid::nil())
+                .expect("client initializes");
         let _ = client.package_versions("hello").await;
 
         request.assert();

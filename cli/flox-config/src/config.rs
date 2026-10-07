@@ -143,12 +143,11 @@ pub struct FloxConfig {
     /// (default: true)
     pub upgrade_notifications: Option<bool>,
 
-    /// Print the advisory FloxHub authentication messages: the login
+    /// Print the advisory FloxHub authentication message: the login
     /// reminder shown when not logged in ("You are not logged in to
-    /// FloxHub. Run 'flox auth login' to log in.") and the warning
-    /// shown when packages are resolved against the catalog without
-    /// authentication. Authentication *errors* — from commands such as
-    /// 'flox push' that genuinely require a login — are unaffected.
+    /// FloxHub. Run 'flox auth login' to log in."). Authentication
+    /// *errors* — from commands that require a login, such as 'flox push'
+    /// or any command that resolves packages — are unaffected.
     ///
     /// (default: true)
     pub auth_notifications: Option<bool>,
