@@ -36,12 +36,12 @@ use serde::Serialize;
 use tracing::{debug, instrument};
 use url::Url;
 
+use crate::Exit;
 use crate::commands::general::update_config;
 use crate::utils::credential_store::{CredentialSource, CredentialStores, TokenStorage};
 use crate::utils::dialog::{Checkpoint, Dialog, WaitResult};
 use crate::utils::message;
 use crate::utils::openers::Browser;
-use crate::{Exit, subcommand_metric};
 
 #[derive(Default, Clone, Serialize)]
 pub struct Credential {
@@ -326,8 +326,6 @@ pub enum Auth {
 impl Auth {
     #[instrument(name = "auth", skip_all)]
     pub async fn handle(self, config: Config, mut flox: Flox) -> Result<()> {
-        subcommand_metric!("auth2");
-
         match self {
             Auth::Login {
                 token_file,

@@ -21,7 +21,6 @@ setup() {
   # Turn metrics on, as on a user's machine, so that falling back to the
   # default config would create telemetry state.
   export FLOX_DISABLE_METRICS=false
-  export _FLOX_METRICS_URL_OVERRIDE="http://127.0.0.1:1/legacy"
   export _FLOX_METRICS_URL_V2_OVERRIDE="http://127.0.0.1:1/v2"
   export PROJECT_DIR="${BATS_TEST_TMPDIR?}/cwd"
   mkdir -p "$PROJECT_DIR"

@@ -37,7 +37,6 @@ use crate::utils::dialog::{Dialog, Select};
 use crate::utils::errors::{display_chain, format_core_error};
 use crate::utils::events::env_detail_from_concrete;
 use crate::utils::{local_environment_id, message};
-use crate::{environment_subcommand_metric, subcommand_metric};
 
 #[derive(Debug, Clone, Bpaf)]
 enum PullSelect {
@@ -101,13 +100,9 @@ impl Pull {
             } => {
                 // This could be a `--copy` to `PathEnvironment`, rather than
                 // `ManagedEnvironment`, but we want to keep the remote name.
-                subcommand_metric!("pull", managed_environment = remote.to_string());
-
                 // No `ConcreteEnvironment` is materialized here yet, so
                 // the shared helper does not apply — construct the env
-                // detail directly from the `RemoteRef` to match the
-                // legacy `managed_environment = remote.to_string()`
-                // extra above (spec AC #2).
+                // detail directly from the `RemoteRef`.
                 let env_detail = EnvDetail::managed(remote.to_string(), None);
                 if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentPull(
                     CliEnvironmentPayload::new(env_detail),
@@ -149,12 +144,9 @@ impl Pull {
                 let environment = environment
                     .detect_concrete_environment(&mut flox, "Pull")
                     .await?;
-                environment_subcommand_metric!("pull", environment);
 
-                // Dispatch-time emit at the same point as the legacy
-                // `environment_subcommand_metric!` above — before the
-                // path-environment bail below — mirroring it 1:1 (parity
-                // contract). Outcome rides on `cli.command_completed`
+                // Dispatch-time emit, before the path-environment bail
+                // below. Outcome rides on `cli.command_completed`
                 // (exit_code), so emitting before the bail is intentional.
                 if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentPull(
                     CliEnvironmentPayload::new(env_detail_from_concrete(&flox, &environment)),

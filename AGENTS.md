@@ -223,9 +223,9 @@ eval `flox activate`     # WRONG — output is word-split and brace-expanded
 
 ## Metrics / telemetry
 
-All new CLI telemetry goes through the v2 events pipeline
-(`cli/flox-events`); do not add to the legacy `subcommand_metric!`
-stream. The wire contract — envelope shape, naming, stability and
+All CLI usage events go through the v2 events pipeline
+(`cli/flox-events`); the legacy `subcommand_metric!` stream is
+retired. The wire contract — envelope shape, naming, stability and
 privacy rules — is documented in `cli/flox-events/README.md`, and the
 step-by-step procedure for adding an event or field is the
 `adding-metrics-events` skill

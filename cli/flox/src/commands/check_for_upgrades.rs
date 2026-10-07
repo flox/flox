@@ -18,7 +18,6 @@ use time::{Duration, OffsetDateTime};
 use tracing::{debug, info_span, instrument};
 
 use super::UninitializedEnvironment;
-use crate::subcommand_metric;
 use crate::utils::detached::{DetachedCommand, LogFile};
 
 /// By default check once a day
@@ -50,8 +49,6 @@ enum ExitBranch {
 impl CheckForUpgrades {
     #[instrument(name = "check-upgrade", skip_all)]
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
-        subcommand_metric!("check-upgrade");
-
         // For catalog requests made by this command, set the QoS to background.
         // Eventually we might want to prioritize these requests differently,
         // since they are not as time-sensitive as the ones actively made by the user.

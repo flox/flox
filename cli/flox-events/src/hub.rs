@@ -150,8 +150,8 @@ impl EventsHub {
         })
     }
 
-    /// Return an [`EventsGuard`] holding this hub's single-active-guard slot —
-    /// the counterpart of the legacy `Hub::try_guard`. Errors if a guard is
+    /// Return an [`EventsGuard`] holding this hub's single-active-guard slot.
+    /// Errors if a guard is
     /// already active for this hub, so at most one guard exists per process.
     ///
     /// Dropping the guard performs no network I/O; the detached

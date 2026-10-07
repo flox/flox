@@ -1,4 +1,4 @@
-//! Hidden internal subcommand that flushes both telemetry pipelines.
+//! Hidden internal subcommand that flushes the telemetry buffer.
 //!
 //! Invoked as a detached background child by `main.rs` when telemetry is due
 //! at command exit. Because the parent exits immediately after spawning this
@@ -14,8 +14,6 @@ use bpaf::Bpaf;
 use flox_events::EventsHub;
 use flox_rust_sdk::flox::Flox;
 use tracing::debug;
-
-use crate::utils::metrics::Hub;
 
 #[derive(Bpaf, Clone, Debug)]
 pub struct SendTelemetry {
@@ -49,32 +47,17 @@ impl SendTelemetry {
                 .parse()
                 .unwrap_or(false);
 
-        // Flush both pipelines independently. A down endpoint on one must not
-        // starve the other, so each is attempted and its result captured before
-        // any error is surfaced. Both clients were installed by
-        // `FloxArgs::handle`. `try_flush` takes a non-blocking lock, so a
-        // concurrent child (from a rapid `cd`) exits early rather than queuing a
-        // second network call.
+        // The client was installed by `FloxArgs::handle`. `try_flush` takes a
+        // non-blocking lock, so a concurrent child (from a rapid `cd`) exits
+        // early rather than queuing a second network call.
         let v2_result = EventsHub::global().try_flush(force);
-        let legacy_result = Hub::global().try_flush_metrics(force);
 
         debug!(
             v2_outcome = ?flush_outcome(&v2_result),
-            legacy_outcome = ?flush_outcome(&legacy_result),
             "send-telemetry flush complete"
         );
 
-        // Surface the errors only after both pipelines have been attempted. If
-        // both failed, the legacy error is chained as context on the v2 error so
-        // neither is lost.
-        match (v2_result, legacy_result) {
-            (Ok(_), Ok(_)) => Ok(()),
-            (Err(v2_err), Ok(_)) => Err(v2_err),
-            (Ok(_), Err(legacy_err)) => Err(legacy_err),
-            (Err(v2_err), Err(legacy_err)) => {
-                Err(v2_err.context(format!("legacy metrics flush also failed: {legacy_err:#}")))
-            },
-        }
+        v2_result.map(|_| ())
     }
 }
 
@@ -94,10 +77,6 @@ mod tests {
     use flox_events::{CredentialType, EventsClient, EventsHub, SharedMetadataTemplate};
     use serial_test::serial;
     use uuid::Uuid;
-
-    use super::*;
-    use crate::utils::metrics::Connection as _;
-    use crate::utils::metrics::tests::TestConnection;
 
     fn make_template() -> SharedMetadataTemplate {
         SharedMetadataTemplate {
@@ -213,33 +192,5 @@ mod tests {
             !flushed,
             "try_flush must return false when the buffer lock is held"
         );
-    }
-
-    /// When another process holds the legacy metrics buffer lock,
-    /// try_flush_metrics returns false so the caller exits early.
-    #[test]
-    fn legacy_metrics_try_flush_returns_false_when_locked() {
-        let tempdir = tempfile::tempdir().expect("tempdir");
-        let cache_dir = tempdir.path();
-
-        // Hold the lock by opening a blocking MetricsBuffer.
-        let _held = crate::utils::metrics::MetricsBuffer::blocking_read_for_lock_test(cache_dir)
-            .expect("hold lock");
-
-        let connection = TestConnection::default();
-        let client = crate::utils::metrics::Client {
-            uuid: Uuid::new_v4(),
-            metrics_dir: cache_dir.to_path_buf(),
-            max_age: time::Duration::ZERO,
-            connection: connection.boxed(),
-            oldest_buffered_timestamp: None,
-        };
-        let hub = Hub {
-            client: std::sync::Arc::new(std::sync::Mutex::new(Some(client))),
-        };
-        let result = hub
-            .try_flush_metrics(true)
-            .expect("try_flush_metrics must not error");
-        assert!(!result, "must return false when the lock is held");
     }
 }

@@ -9,7 +9,6 @@ use flox_rust_sdk::flox::Flox;
 use floxhub_client::{CatalogClientTrait, PackageBuild, PackageDetails, VersionsError};
 use tracing::instrument;
 
-use crate::subcommand_metric;
 use crate::utils::search::DEFAULT_DESCRIPTION;
 use crate::utils::tracing::sentry_set_tag;
 
@@ -25,7 +24,6 @@ pub struct Show {
 impl Show {
     #[instrument(name = "show", skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
-        subcommand_metric!("show");
         sentry_set_tag("pkg_path", &self.pkg_path);
 
         tracing::debug!("using catalog client for show");

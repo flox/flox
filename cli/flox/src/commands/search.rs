@@ -12,7 +12,6 @@ use indoc::{formatdoc, indoc};
 use tracing::{debug, instrument};
 
 use crate::commands::run::{DISAMBIGUATION_LIMIT, classify_by_command_error};
-use crate::subcommand_metric;
 use crate::utils::didyoumean::{DidYouMean, SearchSuggestion};
 use crate::utils::message::{self, stderr_supports_color, stdout_supports_color};
 use crate::utils::search::DisplaySearchResults;
@@ -64,7 +63,6 @@ impl Search {
         sentry_set_tag("json", self.json);
         sentry_set_tag("show_all", self.all);
         sentry_set_tag("search_term", &search_term);
-        subcommand_metric!("search", search_term = search_term);
         if let Err(err) = EventsHub::global().record_event(EventKind::CliSearch(
             CliSearchPayload::new(search_term.clone()),
         )) {
@@ -160,7 +158,6 @@ impl Search {
     }
 
     async fn handle_command_search(&self, command_name: &str, flox: &Flox) -> Result<()> {
-        subcommand_metric!("search", command = command_name);
         debug!("searching for command providers: {}", command_name);
 
         let system: PackageSystem = flox.system.clone().try_into()?;

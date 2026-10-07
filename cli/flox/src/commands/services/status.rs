@@ -19,7 +19,6 @@ use tracing::{debug, instrument};
 
 use crate::commands::services::{ServicesEnvironment, guard_service_commands_available};
 use crate::commands::{EnvironmentSelect, environment_select};
-use crate::environment_subcommand_metric;
 use crate::utils::events::env_detail_from_concrete;
 
 #[derive(Bpaf, Debug, Clone)]
@@ -41,7 +40,6 @@ impl Status {
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
         let env =
             ServicesEnvironment::from_environment_selection(&mut flox, &self.environment).await?;
-        environment_subcommand_metric!("services::status", env.environment);
         if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentServicesStatus(
             CliEnvironmentPayload::new(env_detail_from_concrete(&flox, &env.environment)),
         )) {

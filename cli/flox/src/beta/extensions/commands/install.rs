@@ -7,7 +7,6 @@ use tracing::instrument;
 
 use crate::beta::extensions;
 use crate::commands::SHELL_COMPLETION_DIR;
-use crate::subcommand_metric;
 use crate::utils::message;
 
 #[derive(Debug, Bpaf, Clone)]
@@ -29,8 +28,6 @@ pub struct Install {
 impl Install {
     #[instrument(name = "extensions::install", skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
-        subcommand_metric!("extensions::install");
-
         match (self.source.as_str(), self.from_path.as_ref()) {
             (".", None) => {
                 let cwd = std::env::current_dir()?;
