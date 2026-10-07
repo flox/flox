@@ -288,7 +288,7 @@ mod tests {
     fn deep_overrides_carried_into_package_tree() {
         let source = git_source("https://example.com/repo", "abc");
         let mut wire_entry = entry("myorg", &["hello"], BuildType::Nef, source);
-        wire_entry.deep_overrides = Some(vec![vec!["openssl".try_into().unwrap()]]);
+        wire_entry.deep_overrides = Some(vec![vec!["openssl".to_string()]]);
         let locked = HashMap::from([("myorg.hello".to_string(), wire_entry)]);
 
         let lock = build_lock_from_locked_inputs(locked, [&"myorg.hello".to_string()])
@@ -309,8 +309,8 @@ mod tests {
         let source = git_source("https://example.com/repo", "abc");
         let mut wire_entry = entry("myorg", &["hello"], BuildType::Nef, source);
         wire_entry.deep_overrides = Some(vec![vec![
-            "setMakeScope".try_into().unwrap(),
-            "makeScopeDependency".try_into().unwrap(),
+            "setMakeScope".to_string(),
+            "makeScopeDependency".to_string(),
         ]]);
         let locked = HashMap::from([("myorg.hello".to_string(), wire_entry)]);
 
