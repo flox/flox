@@ -1011,6 +1011,26 @@ mod parse_toml_typed_or_bumped_tests {
         }
     }
 
+    /// A `schema-version = "1.18.0"` manifest that uses `pkg-groups`
+    /// (introduced in 1.19.0) bumps to V1_19_0.
+    #[test]
+    fn v1_18_0_with_pkg_groups_bumps_to_v1_19_0() {
+        let contents = with_schema(KnownSchemaVersion::V1_18_0, indoc! {r#"
+            [pkg-groups.toplevel]
+            stability = "lts"
+        "#});
+        let result = Manifest::parse_toml_typed_or_bumped(&contents).unwrap();
+        match result {
+            ParsedManifest::Bumped { from, to, .. } => {
+                assert_eq!(from, KnownSchemaVersion::V1_18_0);
+                assert_eq!(to, KnownSchemaVersion::V1_19_0);
+            },
+            ParsedManifest::AsStated(_) => {
+                panic!("expected Bumped, got AsStated");
+            },
+        }
+    }
+
     /// A fully valid manifest at its stated version returns `AsStated`.
     #[test]
     fn valid_manifest_returns_as_stated() {

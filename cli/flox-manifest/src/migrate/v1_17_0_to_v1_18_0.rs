@@ -5,10 +5,8 @@ use crate::parsed::v1_18_0::ManifestV1_18_0;
 /// Migrate a v1.17.0 manifest to a v1.18.0 manifest.
 ///
 /// This is a lossless migration: V1_18_0 adds an optional
-/// `options.activate.upgrade-notifications` field, `options.stability`, and a
-/// top-level `pkg-groups` table. All V1_17_0 manifests are valid V1_18_0
-/// manifests with `upgrade-notifications` unset, no stability, and no package
-/// group settings.
+/// `options.activate.upgrade-notifications` field. All V1_17_0 manifests are
+/// valid V1_18_0 manifests with `upgrade-notifications` unset.
 pub(crate) fn migrate_manifest_v1_17_0_to_v1_18_0(
     manifest: ManifestV1_17_0,
 ) -> Result<ManifestV1_18_0, MigrationError> {
@@ -17,7 +15,6 @@ pub(crate) fn migrate_manifest_v1_17_0_to_v1_18_0(
         description: manifest.description,
         minimum_cli_version: manifest.minimum_cli_version,
         install: manifest.install,
-        pkg_groups: Default::default(),
         vars: manifest.vars,
         hook: manifest.hook,
         profile: manifest.profile,
@@ -35,13 +32,12 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::parsed::v1_18_0::{ActivateOptions, Options, PkgGroups};
+    use crate::parsed::v1_18_0::{ActivateOptions, Options};
 
     proptest! {
         // The migration only sets the new schema version and defaults the new
-        // `options.activate.upgrade-notifications` and `options.stability`
-        // fields and `pkg-groups` table; everything else is carried over
-        // unchanged.
+        // `options.activate.upgrade-notifications` field; everything else is
+        // carried over unchanged.
         //
         // `expected.options` is built by hand rather than with `Options::from`,
         // the conversion the migration itself uses, so a field that conversion
@@ -55,7 +51,6 @@ mod tests {
                 description: manifest.description,
                 minimum_cli_version: manifest.minimum_cli_version,
                 install: manifest.install,
-                pkg_groups: PkgGroups::default(),
                 vars: manifest.vars,
                 hook: manifest.hook,
                 profile: manifest.profile,
@@ -68,7 +63,6 @@ mod tests {
                         mode: manifest.options.activate.mode,
                         upgrade_notifications: None,
                     },
-                    stability: None,
                 },
                 services: manifest.services,
                 build: manifest.build,

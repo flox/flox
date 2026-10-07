@@ -1,7 +1,8 @@
 use std::collections::BTreeMap;
 
+use flox_core::data::System;
 #[cfg(any(test, feature = "tests"))]
-use flox_test_utils::proptest::optional_string;
+use flox_test_utils::proptest::{btree_map_strategy, optional_string, optional_vec_of_strings};
 #[cfg(any(test, feature = "tests"))]
 use proptest::prelude::*;
 use schemars::JsonSchema;
@@ -9,7 +10,15 @@ use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
 use crate::interfaces::{AsTypedOnlyManifest, SchemaVersion, impl_pkg_lookup};
-use crate::parsed::common::{Containerize, DEFAULT_GROUP_NAME, Include, KnownSchemaVersion, Vars};
+use crate::parsed::common::{
+    Allows,
+    Containerize,
+    DEFAULT_GROUP_NAME,
+    Include,
+    KnownSchemaVersion,
+    SemverOptions,
+    Vars,
+};
 use crate::parsed::v1_10_0::{Install, ManifestPackageDescriptor};
 pub use crate::parsed::v1_11_0::MinimumCliVersion;
 pub use crate::parsed::v1_13_0::{
@@ -30,8 +39,8 @@ pub use crate::parsed::v1_16_0::{
     ServiceStartCondition,
     Services,
 };
-pub use crate::parsed::v1_18_0::{ActivateOptions, Options, PkgGroup, PkgGroups};
-use crate::parsed::{Inner, SkipSerializing};
+pub use crate::parsed::v1_18_0::ActivateOptions;
+use crate::parsed::{Inner, SkipSerializing, impl_into_inner};
 use crate::{Manifest, ManifestError, Parsed, TypedOnly};
 
 /// Not meant for writing manifest files, only for reading them.
@@ -153,6 +162,71 @@ impl SchemaVersion for ManifestV1_19_0 {
     }
 }
 
+/// Manifest options for V1_19_0: identical to the V1_18_0 options except that
+/// `stability` is added.
+#[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash, JsonSchema)]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
+pub struct Options {
+    /// A list of systems that each package is resolved for.
+    #[cfg_attr(
+        any(test, feature = "tests"),
+        proptest(strategy = "optional_vec_of_strings(3, 4)")
+    )]
+    pub systems: Option<Vec<System>>,
+    /// Options that control what types of packages are allowed.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Allows::skip_serializing")]
+    pub allow: Allows,
+    /// Options that control how semver versions are resolved.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "SemverOptions::skip_serializing")]
+    pub semver: SemverOptions,
+    /// Whether to detect CUDA devices and libs during activation.
+    // TODO: Migrate to `ActivateOptions`.
+    pub cuda_detection: Option<bool>,
+    /// Options that control the behavior of activations.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "ActivateOptions::skip_serializing")]
+    pub activate: ActivateOptions,
+    /// The catalog stability that every package group resolves against,
+    /// e.g. `stable`, unless the group sets its own under
+    /// `[pkg-groups.<name>]`.
+    ///
+    /// The catalog validates the value; when unset, groups without their
+    /// own stability resolve against the catalog's default.
+    #[cfg_attr(
+        any(test, feature = "tests"),
+        proptest(strategy = "optional_string(5)")
+    )]
+    pub stability: Option<String>,
+}
+
+// Conversion from the V1_18_0 type, used by the V1_18_0 -> V1_19_0 migration.
+// The new `stability` field defaults to None, which is what makes the
+// migration lossless.
+impl From<crate::parsed::v1_18_0::Options> for Options {
+    fn from(options: crate::parsed::v1_18_0::Options) -> Self {
+        let crate::parsed::v1_18_0::Options {
+            systems,
+            allow,
+            semver,
+            cuda_detection,
+            activate,
+        } = options;
+        Options {
+            systems,
+            allow,
+            semver,
+            cuda_detection,
+            activate,
+            stability: None,
+        }
+    }
+}
+
 impl ManifestV1_19_0 {
     /// The catalog stability that the packages in `group` resolve against:
     /// the group's own stability, else the environment's
@@ -183,6 +257,58 @@ impl ManifestV1_19_0 {
             catalog.pkg_group.as_deref().unwrap_or(DEFAULT_GROUP_NAME) == group
         })
     }
+}
+
+/// Settings for package groups, keyed by the group name that packages
+/// reference with `pkg-group`.
+///
+/// Every package in a group is resolved together against a single catalog
+/// page, so settings that constrain resolution belong to the group rather
+/// than to individual packages.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, JsonSchema)]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
+pub struct PkgGroups(
+    #[cfg_attr(
+        any(test, feature = "tests"),
+        proptest(strategy = "btree_map_strategy::<PkgGroup>(5, 3)")
+    )]
+    pub(crate) BTreeMap<String, PkgGroup>,
+);
+
+impl_into_inner!(PkgGroups, BTreeMap<String, PkgGroup>);
+
+impl PkgGroups {
+    /// The dotted key of the settings of `group`, with the name quoted if it
+    /// isn't a bare key, e.g. `pkg-groups.legacy` or `pkg-groups."v1.2"`.
+    ///
+    /// Unlike a `[pkg-groups.<NAME>]` header, this names the settings however
+    /// the manifest writes them, e.g. as `legacy.stability` in `[pkg-groups]`.
+    pub fn key_path(group: &str) -> String {
+        format!("pkg-groups.{}", toml_edit::Key::new(group))
+    }
+}
+
+impl SkipSerializing for PkgGroups {
+    fn skip_serializing(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+#[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, JsonSchema)]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
+#[serde(deny_unknown_fields)]
+pub struct PkgGroup {
+    /// The catalog stability to resolve the group's packages against,
+    /// e.g. `stable` or `staging`.
+    ///
+    /// The catalog validates the value; when unset, the group takes
+    /// `options.stability`, and without that the catalog's default.
+    #[cfg_attr(
+        any(test, feature = "tests"),
+        proptest(strategy = "optional_string(5)")
+    )]
+    pub stability: Option<String>,
 }
 
 #[cfg(test)]
