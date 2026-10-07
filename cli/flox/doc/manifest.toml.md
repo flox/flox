@@ -63,8 +63,8 @@ Valid string values are:
 - `1.16.0`: introduced services `depends-on`, and
   `shutdown.timeout-seconds` / `shutdown.signal`
 - `1.17.0`: introduced `description`
-- `1.18.0`: introduced `options.activate.upgrade-notifications`,
-  `options.stability`, and `pkg-groups`
+- `1.18.0`: introduced `options.activate.upgrade-notifications`
+- `1.19.0`: introduced `options.stability` and `pkg-groups`
 
 Existing manifest schemas, including the older `version = 1` format, are
 automatically forward-migrated when using features that require a newer schema

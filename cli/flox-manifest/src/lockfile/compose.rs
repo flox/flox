@@ -42,6 +42,7 @@ impl Compose {
                 crate::Parsed::V1_16_0(manifest) => manifest.resolve_install_id(package, version),
                 crate::Parsed::V1_17_0(manifest) => manifest.resolve_install_id(package, version),
                 crate::Parsed::V1_18_0(manifest) => manifest.resolve_install_id(package, version),
+                crate::Parsed::V1_19_0(manifest) => manifest.resolve_install_id(package, version),
             };
             match res {
                 Ok(_) => return Ok(Some(include.clone())),

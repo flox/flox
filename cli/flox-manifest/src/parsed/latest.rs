@@ -29,9 +29,9 @@ pub use crate::parsed::v1_16_0::{
 // Options are version-specific from V1_18_0 on (`activate` adds
 // `upgrade-notifications`, and `stability` is added), so the latest schema
 // re-exports that copy rather than common's.
-pub use crate::parsed::v1_18_0::{ActivateOptions, Options, PkgGroup, PkgGroups};
+pub use crate::parsed::v1_19_0::{ActivateOptions, Options, PkgGroup, PkgGroups};
 use crate::{Manifest, ManifestError, TypedOnly};
-pub type ManifestLatest = crate::parsed::v1_18_0::ManifestV1_18_0;
+pub type ManifestLatest = crate::parsed::v1_19_0::ManifestV1_19_0;
 
 impl ManifestLatest {
     /// Try to return a manifest in its original schema
@@ -141,6 +141,15 @@ impl ManifestLatest {
                 untyped
             },
             KnownSchemaVersion::V1_18_0 => {
+                let mut untyped =
+                    serde_json::to_value(self).map_err(ManifestError::SerializeJson)?;
+                let map = untyped
+                    .as_object_mut()
+                    .expect("all valid manifests should serialize to JSON objects");
+                map.insert("schema-version".into(), "1.18.0".into());
+                untyped
+            },
+            KnownSchemaVersion::V1_19_0 => {
                 return Ok(Some(self.as_typed_only()));
             },
         };

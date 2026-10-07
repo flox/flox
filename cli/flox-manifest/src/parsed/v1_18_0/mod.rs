@@ -14,7 +14,6 @@ use crate::interfaces::{AsTypedOnlyManifest, SchemaVersion, impl_pkg_lookup};
 use crate::parsed::common::{
     Allows,
     Containerize,
-    DEFAULT_GROUP_NAME,
     Include,
     KnownSchemaVersion,
     SemverOptions,
@@ -255,38 +254,6 @@ impl From<crate::parsed::common::Options> for Options {
     }
 }
 
-impl ManifestV1_18_0 {
-    /// The catalog stability that the packages in `group` resolve against:
-    /// the group's own stability, else the environment's
-    /// `options.stability`, or `None` to let the catalog pick its default.
-    ///
-    /// `group` is the name the packages are locked under, so the default
-    /// group is [`DEFAULT_GROUP_NAME`].
-    pub fn group_stability(&self, group: &str) -> Option<&str> {
-        self.group_stability_override(group)
-            .or(self.options.stability.as_deref())
-    }
-
-    /// The stability that `group` sets under `[pkg-groups.<group>]`, which
-    /// overrides `options.stability` for that group.
-    pub fn group_stability_override(&self, group: &str) -> Option<&str> {
-        self.pkg_groups
-            .inner()
-            .get(group)
-            .and_then(|settings| settings.stability.as_deref())
-    }
-
-    /// Whether any catalog package is installed into `group`.
-    pub fn group_has_packages(&self, group: &str) -> bool {
-        self.install.inner().values().any(|descriptor| {
-            let ManifestPackageDescriptor::Catalog(catalog) = descriptor else {
-                return false;
-            };
-            catalog.pkg_group.as_deref().unwrap_or(DEFAULT_GROUP_NAME) == group
-        })
-    }
-}
-
 /// Settings for package groups, keyed by the group name that packages
 /// reference with `pkg-group`.
 ///
@@ -337,64 +304,4 @@ pub struct PkgGroup {
         proptest(strategy = "optional_string(5)")
     )]
     pub stability: Option<String>,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn manifest_with_stabilities(
-        options_stability: Option<&str>,
-        groups: &[(&str, Option<&str>)],
-    ) -> ManifestV1_18_0 {
-        let pkg_groups = groups
-            .iter()
-            .map(|(name, stability)| {
-                (name.to_string(), PkgGroup {
-                    stability: stability.map(str::to_string),
-                })
-            })
-            .collect();
-        ManifestV1_18_0 {
-            options: Options {
-                stability: options_stability.map(str::to_string),
-                ..Default::default()
-            },
-            pkg_groups: PkgGroups(pkg_groups),
-            ..Default::default()
-        }
-    }
-
-    /// A group's own stability wins over `options.stability`, which applies
-    /// to every other group.
-    #[test]
-    fn group_stability_prefers_group_over_options() {
-        let manifest =
-            manifest_with_stabilities(Some("stable"), &[("legacy", Some("lts")), ("tools", None)]);
-
-        assert_eq!(
-            [
-                manifest.group_stability("legacy"),
-                manifest.group_stability("tools"),
-                manifest.group_stability(DEFAULT_GROUP_NAME),
-            ],
-            [Some("lts"), Some("stable"), Some("stable")]
-        );
-    }
-
-    #[test]
-    fn group_stability_is_unset_without_group_or_options_stability() {
-        let manifest = manifest_with_stabilities(None, &[("legacy", Some("lts"))]);
-
-        assert_eq!(manifest.group_stability(DEFAULT_GROUP_NAME), None);
-    }
-
-    /// Pkg-group names that aren't bare TOML keys are quoted, so that a
-    /// name with a dot doesn't read as a nested table.
-    #[test]
-    fn pkg_groups_key_path_quotes_names() {
-        assert_eq!(PkgGroups::key_path("legacy"), "pkg-groups.legacy");
-        assert_eq!(PkgGroups::key_path("v1.2"), r#"pkg-groups."v1.2""#);
-        assert_eq!(PkgGroups::key_path("my group"), r#"pkg-groups."my group""#);
-    }
 }
