@@ -5,8 +5,10 @@
 //! directory. The hook runs in a flox provided bash with the environment as
 //! `hook.on-activate` left it (replayed from the start's env trace), with
 //! output captured into the executive log. Failures are logged and never
-//! block cleanup, and callers must not hold the state.json lock while the
-//! hook runs so a hanging script can't block new activations.
+//! block cleanup. Callers must not hold the state.json lock while the hook
+//! runs, so a hanging script can't block attaching to other starts; they hold
+//! the environment's teardown lock instead, which a new start waits for
+//! before running its own hook.on-activate.
 
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -14,6 +16,7 @@ use std::process::{Command, Stdio};
 use anyhow::{Context, Result};
 use flox_core::activate::context::{AttachCtx, AttachProjectCtx};
 use flox_core::activations::StartIdentifier;
+use fslock::LockFile;
 use tracing::{debug, info, warn};
 
 use crate::attach_diff::AttachDiff;
@@ -32,14 +35,19 @@ const HOOK_ON_DEACTIVATE: &str = "activate.d/hook-on-deactivate";
 /// The `orphaned` list must come from
 /// `ActivationState::remove_orphaned_starts`, called under the state.json
 /// lock and persisted so a start is only ever handed to this sweep once. The
-/// lock must be dropped before calling this: the hook has no timeout and must
-/// not block new activations.
+/// state.json lock must be dropped before calling this: the hook has no
+/// timeout and must not block attaching to other starts.
+///
+/// `_teardown_lock` is the environment's teardown lock, taken before the
+/// state.json lock was released and held until the hooks have run, so a new
+/// start of the environment runs hook.on-activate after them, not alongside.
 pub fn sweep_orphaned_starts(
     subsystem_verbosity: u32,
     attach_ctx: &AttachCtx,
     project: &AttachProjectCtx,
     activation_state_dir: &Path,
     orphaned: Vec<StartIdentifier>,
+    _teardown_lock: LockFile,
 ) {
     for start_id in orphaned {
         info!(
@@ -147,7 +155,7 @@ fn run_hook_script(
 mod test {
     use std::path::PathBuf;
 
-    use flox_core::activations::StartIdentifier;
+    use flox_core::activations::{StartIdentifier, acquire_teardown_lock};
     use tempfile::TempDir;
 
     use super::*;
@@ -215,7 +223,14 @@ mod test {
         let (start_id, activation_state_dir, start_state_dir) = setup_start(&tmp, Some(&script));
 
         let (attach, project) = test_context(tmp.path());
-        sweep_orphaned_starts(0, &attach, &project, &activation_state_dir, vec![start_id]);
+        sweep_orphaned_starts(
+            0,
+            &attach,
+            &project,
+            &activation_state_dir,
+            vec![start_id],
+            acquire_teardown_lock(&activation_state_dir).unwrap(),
+        );
 
         assert_eq!(
             std::fs::read_to_string(&marker).expect("hook should have run"),
@@ -235,7 +250,14 @@ mod test {
         let (start_id, activation_state_dir, start_state_dir) = setup_start(&tmp, None);
 
         let (attach, project) = test_context(tmp.path());
-        sweep_orphaned_starts(0, &attach, &project, &activation_state_dir, vec![start_id]);
+        sweep_orphaned_starts(
+            0,
+            &attach,
+            &project,
+            &activation_state_dir,
+            vec![start_id],
+            acquire_teardown_lock(&activation_state_dir).unwrap(),
+        );
 
         assert!(!start_state_dir.exists());
     }
@@ -247,7 +269,14 @@ mod test {
         let (start_id, activation_state_dir, start_state_dir) = setup_start(&tmp, Some("exit 1\n"));
 
         let (attach, project) = test_context(tmp.path());
-        sweep_orphaned_starts(0, &attach, &project, &activation_state_dir, vec![start_id]);
+        sweep_orphaned_starts(
+            0,
+            &attach,
+            &project,
+            &activation_state_dir,
+            vec![start_id],
+            acquire_teardown_lock(&activation_state_dir).unwrap(),
+        );
 
         assert!(
             !start_state_dir.exists(),

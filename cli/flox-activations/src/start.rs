@@ -16,8 +16,10 @@ use flox_core::activations::{
     ActivationState,
     StartIdentifier,
     StartOrAttachResult,
+    acquire_teardown_lock,
     read_activations_json,
     state_json_path,
+    try_acquire_teardown_lock,
     write_activations_json,
 };
 use flox_core::process_compose::manager_responds;
@@ -104,6 +106,8 @@ pub fn start(
     if let Some((exec_pid, signals)) = new_executive {
         wait_for_executive(exec_pid, signals)?;
     }
+
+    wait_for_teardown(&context.activation_state_dir)?;
 
     let mut start_command = assemble_activate_command(
         context,
@@ -379,5 +383,64 @@ fn wait_for_executive(child_pid: Pid, mut signals: Signals) -> Result<(), anyhow
         } else {
             unreachable!("Received unexpected signal or empty iterator over signals");
         }
+    }
+}
+
+/// Wait until no hook.on-deactivate is running for an earlier start of this
+/// environment, so that this start's hook.on-activate runs after it rather
+/// than alongside it.
+fn wait_for_teardown(activation_state_dir: &Path) -> Result<()> {
+    if try_acquire_teardown_lock(activation_state_dir)?.is_some() {
+        return Ok(());
+    }
+    eprintln!("⚠️  Waiting for hook.on-deactivate of a previous activation to finish...");
+    acquire_teardown_lock(activation_state_dir)?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::mpsc;
+    use std::thread;
+
+    use tempfile::TempDir;
+
+    use super::*;
+
+    /// How long the test expects the waiter to stay blocked while the
+    /// teardown lock is held.
+    const STILL_WAITING_AFTER: Duration = Duration::from_millis(300);
+    /// How long the waiter may take to return once the lock is released.
+    const RETURNS_WITHIN: Duration = Duration::from_secs(5);
+
+    /// A new start must not run hook.on-activate while an earlier start's
+    /// hook.on-deactivate is still running. Holds the teardown lock, as the
+    /// executive does while it runs the hook, calls wait_for_teardown on
+    /// another thread, and checks that it returns only once the lock is
+    /// released.
+    #[test]
+    fn wait_for_teardown_blocks_until_the_teardown_lock_is_released() {
+        let tmp = TempDir::new().unwrap();
+        let activation_state_dir = tmp.path().join("activations").join("hash-env");
+        let teardown_lock = acquire_teardown_lock(&activation_state_dir).unwrap();
+
+        let (done_tx, done_rx) = mpsc::channel();
+        let waiter = thread::spawn({
+            let activation_state_dir = activation_state_dir.clone();
+            move || {
+                wait_for_teardown(&activation_state_dir).unwrap();
+                done_tx.send(()).unwrap();
+            }
+        });
+
+        assert!(
+            done_rx.recv_timeout(STILL_WAITING_AFTER).is_err(),
+            "a new start should wait while hook.on-deactivate runs"
+        );
+        drop(teardown_lock);
+        done_rx
+            .recv_timeout(RETURNS_WITHIN)
+            .expect("a new start should continue once the teardown is done");
+        waiter.join().unwrap();
     }
 }

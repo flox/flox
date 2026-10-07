@@ -88,6 +88,7 @@ pub mod test {
     use flox_core::activations::test_helpers::write_activation_state;
     use flox_core::activations::{
         StartOrAttachResult,
+        acquire_teardown_lock,
         activation_state_dir_path,
         read_activations_json,
         state_json_path,
@@ -343,7 +344,14 @@ pub mod test {
         );
 
         let (attach, project) = test_context(&dot_flox_path, &flox_env.to_string_lossy());
-        sweep_orphaned_starts(0, &attach, &project, &activation_state_dir, orphaned);
+        sweep_orphaned_starts(
+            0,
+            &attach,
+            &project,
+            &activation_state_dir,
+            orphaned,
+            acquire_teardown_lock(&activation_state_dir).unwrap(),
+        );
 
         // Verify state_dir_1 has been removed but state_dir_2 still exists
         assert!(!state_dir_1.exists(), "state directory 1 should be removed");

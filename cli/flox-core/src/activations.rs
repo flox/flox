@@ -207,6 +207,57 @@ pub fn acquire_activations_json_lock(
     Ok(lock)
 }
 
+/// Returns the path to the lock held while hook.on-deactivate runs for the
+/// starts of an environment.
+///
+/// {activation_state_dir}.teardown.lock, next to the state directory rather
+/// than in it: the executive renames the state directory away before it runs
+/// the hooks, and the lock has to outlive that rename. Like state.lock, the
+/// file is not removed after use.
+pub fn teardown_lock_path(activation_state_dir: impl AsRef<Path>) -> PathBuf {
+    let dir = activation_state_dir.as_ref();
+    let name = dir
+        .file_name()
+        .expect("activation state dir has a name")
+        .to_string_lossy();
+    dir.with_file_name(format!("{name}.teardown.lock"))
+}
+
+/// Acquires the lock held while hook.on-deactivate runs, blocking until a
+/// teardown in progress has finished.
+///
+/// The executive takes it before releasing the state.json lock and keeps it
+/// until the hooks are done. A new start takes it before running
+/// hook.on-activate, so the two hooks never run at the same time.
+pub fn acquire_teardown_lock(activation_state_dir: impl AsRef<Path>) -> Result<LockFile, Error> {
+    let mut lock = open_teardown_lock(activation_state_dir)?;
+    lock.lock().context("failed to lock teardown lock")?;
+    Ok(lock)
+}
+
+/// Like [acquire_teardown_lock], but returns `None` instead of blocking while
+/// a teardown is in progress.
+pub fn try_acquire_teardown_lock(
+    activation_state_dir: impl AsRef<Path>,
+) -> Result<Option<LockFile>, Error> {
+    let mut lock = open_teardown_lock(activation_state_dir)?;
+    if lock.try_lock().context("failed to lock teardown lock")? {
+        Ok(Some(lock))
+    } else {
+        Ok(None)
+    }
+}
+
+fn open_teardown_lock(activation_state_dir: impl AsRef<Path>) -> Result<LockFile, Error> {
+    let lock_path = teardown_lock_path(activation_state_dir);
+    let lock_path_parent = lock_path.parent().expect("lock path has parent");
+    DirBuilder::new()
+        .recursive(true)
+        .mode(0o700)
+        .create(lock_path_parent)?;
+    LockFile::open(&lock_path).context("failed to open teardown lock")
+}
+
 /// Returns the path to the lock file for state.json.
 /// The presence of the lock file does not indicate an active lock because the
 /// file isn't removed after use.
@@ -462,7 +513,9 @@ impl ActivationState {
     /// removed here that window is closed. The caller (normally the
     /// executive) must persist the state whenever `modified` is set and
     /// release the lock before tearing the orphaned starts down, so a hanging
-    /// `hook.on-deactivate` can't block new activations.
+    /// `hook.on-deactivate` can't block attaching to other starts. It takes
+    /// the teardown lock ([acquire_teardown_lock]) before that release, so a
+    /// new start waits for the hooks.
     ///
     /// `ready` is cleared based on attachments rather than membership in the
     /// starts list, so state where `ready` names an untracked start (e.g.
