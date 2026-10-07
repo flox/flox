@@ -35,6 +35,8 @@ Config values are read from the following sources in order of descending priorit
 3. System settings from `/etc/flox.toml` or `FLOX_SYSTEM_CONFIG_DIR/flox.toml`.
 4. `flox` provided defaults.
 
+`DO_NOT_TRACK=true` sets `disable_metrics` to `true`, whatever the other sources set.
+
 `flox config` commands that mutate configuration always write to the user config file
 determined in step 2.
 
@@ -268,6 +270,7 @@ flox config --set 'trusted_environments."owner/name"' trust
 
     Environment variables and your user config file override `/etc/flox.toml`.
     A `disable_metrics = true` in `/etc/flox.toml` is a default that each user can change.
+    `DO_NOT_TRACK=true` overrides `disable_metrics = false` from every source.
     On macOS, installing or upgrading Flox with the `.pkg` installer or Homebrew replaces `/etc/flox.toml`.
     Set it again after each upgrade.
 
@@ -275,7 +278,7 @@ flox config --set 'trusted_environments."owner/name"' trust
     In the packages that Flox distributes, that command sends a performance trace.
     If it is the first Flox command you run, it also creates `metrics-uuid` and prints the notice.
     If it is the first Flox command you run and `-q` hides the notice, it creates no `metrics-uuid` and sends no telemetry.
-    To turn telemetry off before Flox sends anything, add `export FLOX_DISABLE_METRICS=true` to your shell profile, or add `disable_metrics = true` to a config file with a text editor, before you run Flox.
+    To turn telemetry off before Flox sends anything, add `export FLOX_DISABLE_METRICS=true` or `export DO_NOT_TRACK=true` to your shell profile, or add `disable_metrics = true` to a config file with a text editor, before you run Flox.
     For CI, Imageless Kubernetes and NixOS, see [Turn off telemetry](https://flox.dev/docs/concepts/data-collection#turn-off-telemetry).
 
 `floxhub_token`
@@ -347,4 +350,14 @@ flox config --set 'trusted_environments."owner/name"' trust
     This variable overrides `disable_metrics` in every config file.
     It accepts only `true` or `false`, in any letter case.
     Any other value, `1` included, makes Flox commands fail with a configuration error.
+    `DO_NOT_TRACK=true` overrides `FLOX_DISABLE_METRICS=false`.
+    See `disable_metrics` for what telemetry contains, what turning it off stops, and what it does not stop.
+
+`$DO_NOT_TRACK`
+:   Set to `true` to turn off telemetry.
+    Flox treats every value except an empty value, `0` and `false` as `true`.
+    Flox ignores letter case and surrounding whitespace in the value.
+    `DO_NOT_TRACK` turns off everything that `disable_metrics = true` turns off.
+    It overrides `FLOX_DISABLE_METRICS=false` and `disable_metrics = false` in every config file.
+    The install script at `get.flox.dev` does not read `DO_NOT_TRACK`.
     See `disable_metrics` for what telemetry contains, what turning it off stops, and what it does not stop.

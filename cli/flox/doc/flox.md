@@ -130,12 +130,23 @@ sharing environments, and administration.
     This variable overrides `disable_metrics` in every config file.
     It accepts only `true` or `false`, in any letter case.
     Any other value, `1` included, makes Flox commands fail with a configuration error.
+    `DO_NOT_TRACK=true` overrides `FLOX_DISABLE_METRICS=false`.
 
     Turning telemetry off does not stop the requests that commands send to FloxHub and the Flox Catalog.
     FloxHub records the search terms and package lists in those requests, with your IP address.
     When you are signed in, FloxHub also records your FloxHub account with them.
     See `disable_metrics` in [`flox-config(1)`](./flox-config.md) for what turning telemetry off stops and what it does not stop.
     For every field that telemetry contains, see [Flox data collection](https://flox.dev/docs/concepts/data-collection).
+
+`$DO_NOT_TRACK`
+:   Set to `true` to turn off telemetry.
+    Flox treats every value except an empty value, `0` and `false` as `true`.
+    Flox ignores letter case and surrounding whitespace in the value.
+    `DO_NOT_TRACK` turns off everything that `disable_metrics = true` turns off.
+    It overrides `FLOX_DISABLE_METRICS=false` and `disable_metrics = false` in every config file.
+    The install script at `get.flox.dev` does not read `DO_NOT_TRACK`.
+    See `$FLOX_DISABLE_METRICS` for what telemetry contains.
+    See `disable_metrics` in [`flox-config(1)`](./flox-config.md) for what turning telemetry off stops and what it does not stop.
 
 `$FLOX_MAX_PARALLEL_DOWNLOADS`
 :   Variable for controlling parallel downloads when building an environment.
