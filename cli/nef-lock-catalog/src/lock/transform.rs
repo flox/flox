@@ -461,4 +461,35 @@ mod tests {
                 .is_none()
         );
     }
+    #[test]
+    fn materialized_tree_carries_declared_overrides_with_existing_empty_semantics() {
+        for declared in [None, Some(vec![]), Some(vec![vec!["zlib".to_string()]])] {
+            let mut input = entry(
+                "myorg",
+                &["hello"],
+                BuildType::Nef,
+                git_source("https://example.com/repo", "abc"),
+            );
+            input.deep_overrides = declared.clone();
+            let expected_source = serde_json::to_value(&input.source).unwrap();
+            let lock = build_lock_from_locked_inputs(
+                HashMap::from([("myorg/hello".to_string(), input)]),
+                [&"myorg/hello".to_string()],
+            )
+            .unwrap();
+            let mut leaf =
+                json!({"type": "package", "build_type": "nef", "source": expected_source});
+            if let Some(paths) = declared.filter(|paths| !paths.is_empty()) {
+                leaf["deep_overrides"] = json!(paths);
+            }
+            assert_eq!(
+                materialize_catalogs(&lock).unwrap(),
+                json!({
+                    "myorg": {"type": "floxhub", "packages": {
+                        "type": "package_set", "entries": {"hello": leaf}
+                    }}
+                })
+            );
+        }
+    }
 }
