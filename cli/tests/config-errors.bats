@@ -67,7 +67,10 @@ assert_cwd_empty() {
 
 @test "invalid config does not initialize Sentry" {
   export FLOX_SENTRY_DSN="http://public@127.0.0.1:1/1"
-  export RUST_LOG="flox_core::sentry=debug"
+  # Show user messages so that the first run prints the telemetry notice.
+  # A first run that hides the notice creates no device ID and starts no
+  # Sentry client.
+  export RUST_LOG="flox::utils::message=info,flox_core::sentry=debug"
 
   # A valid config with metrics on initializes Sentry.
   run "$FLOX_BIN" --help

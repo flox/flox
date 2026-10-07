@@ -104,3 +104,87 @@ enable_blocking_telemetry_endpoints() {
   assert_output --partial "192.0.2.1"
   assert [ -s "$FLOX_DATA_DIR/events-v2.json" ]
 }
+
+# The device ID is created together with the one-time telemetry notice.
+# A first run that cannot show the notice creates no telemetry files and
+# records nothing.
+# "disable_metrics" appears in the notice, in its list of opt-out commands.
+refute_telemetry_files() {
+  refute [ -e "$FLOX_DATA_DIR/metrics-uuid" ]
+  refute [ -e "$FLOX_DATA_DIR/events-v2.json" ]
+  refute [ -e "$FLOX_CACHE_DIR/metrics-events-v2.json" ]
+  refute [ -e "$FLOX_CACHE_DIR/metrics-lock" ]
+  refute [ -e "$FLOX_CACHE_DIR/log/send-telemetry.log" ]
+}
+
+@test "quiet first run creates no device ID until the notice is shown" {
+  unset RUST_LOG
+
+  # Forcing a flush spawns no sender either.
+  run env _FLOX_FORCE_FLUSH_METRICS=true "$FLOX_BIN" -q envs --active
+  assert_success
+  refute_output --partial "disable_metrics"
+  refute_telemetry_files
+
+  run "$FLOX_BIN" envs --active
+  assert_success
+  assert_output --partial "disable_metrics"
+  assert [ -s "$FLOX_DATA_DIR/metrics-uuid" ]
+  assert [ -s "$FLOX_DATA_DIR/events-v2.json" ]
+
+  # After the notice, quiet runs record with the same device ID.
+  local uuid events
+  uuid="$(cat "$FLOX_DATA_DIR/metrics-uuid")"
+  events="$(wc -l < "$FLOX_DATA_DIR/events-v2.json")"
+  run "$FLOX_BIN" -q envs --active
+  assert_success
+  refute_output --partial "disable_metrics"
+  assert_equal "$(cat "$FLOX_DATA_DIR/metrics-uuid")" "$uuid"
+  assert [ "$(wc -l < "$FLOX_DATA_DIR/events-v2.json")" -gt "$events" ]
+}
+
+@test "first run with RUST_LOG hiding messages creates no device ID" {
+  run env RUST_LOG=error "$FLOX_BIN" envs --active
+  assert_success
+  refute_output --partial "disable_metrics"
+  refute_telemetry_files
+
+  # A RUST_LOG filter that keeps user-facing messages shows the notice.
+  run env RUST_LOG=info "$FLOX_BIN" envs --active
+  assert_success
+  assert_output --partial "disable_metrics"
+  assert [ -s "$FLOX_DATA_DIR/metrics-uuid" ]
+}
+
+@test "shell completion creates no device ID and prints no notice" {
+  unset RUST_LOG
+
+  run "$FLOX_BIN" --bpaf-complete-rev=8 en
+  assert_success
+  refute_output --partial "disable_metrics"
+  refute_telemetry_files
+}
+
+@test "detached telemetry sender creates no device ID" {
+  unset RUST_LOG
+
+  run "$FLOX_BIN" send-telemetry
+  assert_success
+  refute_output --partial "disable_metrics"
+  refute_telemetry_files
+}
+
+# Unlike opting out, deferring is not passed on to child processes,
+# so the next run that can show the notice creates the device ID.
+@test "quiet first run does not turn telemetry off for child processes" {
+  unset RUST_LOG
+  export _FLOX_TESTING_DISABLE_BG_SIDE_EFFECTS=true
+
+  "$FLOX_BIN" -q init
+  run --separate-stderr "$FLOX_BIN" -q activate -c 'printenv FLOX_DISABLE_METRICS'
+  assert_success
+  assert_output "false"
+  refute_telemetry_files
+
+  FLOX_DISABLE_METRICS=true wait_for_activations "$PWD"
+}

@@ -84,7 +84,7 @@ use crate::utils::credential_store::{CredentialMigration, CredentialStores};
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::errors::display_chain;
 use crate::utils::events::{build_events_client, resolve_invocation_id};
-use crate::utils::init::init_floxhub_client;
+use crate::utils::init::{init_floxhub_client, telemetry_deferred};
 use crate::utils::metrics::{AWSDatalakeConnection, Client, Hub, read_metrics_uuid};
 use crate::utils::update_notifications::UpdateNotification;
 use crate::utils::{auth_warning, message};
@@ -325,7 +325,12 @@ impl FloxArgs {
             })
         };
 
-        if !config.flox.disable_metrics {
+        if telemetry_deferred() {
+            // No metrics uuid exists and `main` could not show the telemetry
+            // notice, so this invocation records nothing. Unlike opting out,
+            // this is not exported: child processes decide for themselves.
+            debug!("Metrics collection deferred until the telemetry notice is shown");
+        } else if !config.flox.disable_metrics {
             debug!("Metrics collection enabled");
 
             let connection = AWSDatalakeConnection::default();
@@ -397,7 +402,9 @@ impl FloxArgs {
 
         let invocation_id = resolve_invocation_id();
 
-        let metrics_device_uuid = (!config.flox.disable_metrics)
+        // A deferred invocation stays deferred, even if a concurrent `flox`
+        // created the uuid since `main` checked.
+        let metrics_device_uuid = (!config.flox.disable_metrics && !telemetry_deferred())
             .then(|| read_metrics_uuid(&config).ok())
             .flatten();
 
@@ -1203,7 +1210,9 @@ impl InternalCommands {
 /// Whether `name` is a detached background child, and so must not itself spawn
 /// a `send-telemetry` child. `send-telemetry` spawning one would fork-bomb;
 /// `check-for-upgrades` spawning one would add a redundant background process
-/// per activation. Gates only the spawn site in `main`.
+/// per activation. Gates the spawn site in `main`. Its stderr is a log file,
+/// so [crate::utils::init::telemetry_notice_visible] also treats it as unable
+/// to show the telemetry notice.
 pub fn is_detached_side_effect_command(name: &str) -> bool {
     matches!(name, "send-telemetry" | "check-for-upgrades")
 }
