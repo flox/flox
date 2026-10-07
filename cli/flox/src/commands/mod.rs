@@ -469,8 +469,10 @@ impl FloxArgs {
             .as_ref()
             .map(Commands::subcommand_name)
             .unwrap_or("help");
-        // Recording is gated by `is_telemetry_flush_command` — see its doc.
+        // Recording is gated by `is_telemetry_flush_command` and
+        // `is_telemetry_reset_command` — see their docs.
         if !is_telemetry_flush_command(v2_subcommand)
+            && !is_telemetry_reset_command(v2_subcommand)
             && let Err(err) = EventsHub::global().record_command_run(v2_subcommand.to_string())
         {
             debug!(error = %err, "Failed to record v2 cli.command_run event");
@@ -1225,6 +1227,17 @@ pub fn is_detached_side_effect_command(name: &str) -> bool {
 /// change, so keeping it preserves that telemetry.
 pub fn is_telemetry_flush_command(name: &str) -> bool {
     name == "send-telemetry"
+}
+
+/// Whether `name` deletes the device ID. Such a command must not record its
+/// own `cli.command_run` event, which would carry the ID it deletes, and must
+/// not reach the `send-telemetry` spawn in `main`, which would recreate files
+/// the command deleted: the flush check recreates `metrics-lock` and the legacy
+/// buffer, and the spawn recreates the send-telemetry log. Gates the recording
+/// site in `FloxArgs::handle` and the spawn site in `main`; the
+/// `reset-metrics` handler removes the events client for everything else.
+pub fn is_telemetry_reset_command(name: &str) -> bool {
+    name == "reset-metrics"
 }
 
 /// Special command to check for the presence of the `--prefix` flag.
@@ -2031,6 +2044,21 @@ mod detached_predicate_tests {
         assert!(is_telemetry_flush_command("send-telemetry"));
         assert!(!is_telemetry_flush_command("check-for-upgrades"));
         assert!(!is_telemetry_flush_command("install"));
+    }
+
+    /// The reset exclusion matches the name that the parsed `reset-metrics`
+    /// command derives, so renaming either one cannot silently drop it.
+    #[test]
+    fn reset_exclusion_covers_only_the_reset_command() {
+        let reset = flox_args()
+            .to_options()
+            .run_inner(&["reset-metrics"])
+            .unwrap_or_else(|err| panic!("failed to parse reset-metrics: {err:?}"))
+            .command
+            .expect("expected the reset-metrics subcommand");
+        assert!(is_telemetry_reset_command(reset.subcommand_name()));
+        assert!(!is_telemetry_reset_command("send-telemetry"));
+        assert!(!is_telemetry_reset_command("install"));
     }
 }
 
