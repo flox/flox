@@ -15,8 +15,9 @@ use flox_core::activations::{
     write_activations_json,
 };
 use flox_core::hook_actions::{PROMPT_HOOK_VERSION_ENV, prompt_hook_version_mismatched};
+use flox_core::proc_status::pid_is_running;
 use indoc::formatdoc;
-use tracing::debug;
+use tracing::{debug, warn};
 
 use crate::attach::{attach, quote_run_args};
 use crate::message::updated;
@@ -248,6 +249,15 @@ impl ActivateArgs {
                 running,
             )
             .into());
+        }
+
+        // A start whose PID died before it reached ready never completed
+        // hook.on-activate, so it is removed without running
+        // hook.on-deactivate. Any state change is written by the match below.
+        if let Some(abandoned) = activations.remove_abandoned_start(pid_is_running)
+            && let Err(err) = abandoned.remove_start_state_dir(&context.activation_state_dir)
+        {
+            warn!(%err, start_id = ?abandoned, "failed to remove abandoned start state dir");
         }
 
         let pid = std::process::id() as i32;

@@ -434,7 +434,10 @@ pub struct ActivationState {
     ///
     /// A start stays listed after its last attachment detaches; the executive
     /// removes it via [Self::remove_orphaned_starts] when it tears the start
-    /// down (running `hook.on-deactivate` after releasing the lock).
+    /// down (running `hook.on-deactivate` after releasing the lock). Every
+    /// listed start other than a `Ready::Starting` one has reached ready: a
+    /// start that fails or is abandoned before then is removed without
+    /// ever being handed to that sweep.
     #[serde(default)]
     starts: BTreeSet<StartIdentifier>,
 }
@@ -509,8 +512,9 @@ impl ActivationState {
     /// that is why `modified` can be set even when `orphaned` is empty.
     ///
     /// A `Ready::Starting` start is never orphaned even without an attachment
-    /// (its PID may have died mid-start): it stays owned by the next
-    /// `start_or_attach`.
+    /// (its PID may have died mid-start): it never reached ready, so it is
+    /// removed by [Self::remove_failed_start] or
+    /// [Self::remove_abandoned_start] without a `hook.on-deactivate`.
     pub fn remove_orphaned_starts(&mut self) -> OrphanedStarts {
         let mut live: BTreeSet<StartIdentifier> = self
             .attached_pids
@@ -550,15 +554,73 @@ impl ActivationState {
         }
     }
 
-    /// Remove and return every start, including a `Ready::Starting` one.
+    /// Remove every start, returning those whose `hook.on-deactivate` should
+    /// run.
     ///
     /// Only for terminal teardown, when no attachments remain and the whole
-    /// activation state is about to be removed: unlike
-    /// [Self::remove_orphaned_starts] there is no next `start_or_attach` to
-    /// hand a `Starting` start to, and its `hook.on-deactivate` bookend still
-    /// has to run if its `hook.on-activate` completed.
+    /// activation state is about to be removed. A `Starting` start never
+    /// reached ready, so it is dropped without being returned; its state
+    /// directory goes with the activation state directory.
     pub fn drain_starts(&mut self) -> Vec<StartIdentifier> {
-        std::mem::take(&mut self.starts).into_iter().collect()
+        let starting = match &self.ready {
+            Ready::Starting(_, start_id) => Some(start_id.clone()),
+            _ => None,
+        };
+        std::mem::take(&mut self.starts)
+            .into_iter()
+            .filter(|start_id| Some(start_id) != starting.as_ref())
+            .collect()
+    }
+
+    /// Remove a start whose `hook.on-activate` failed, called by the process
+    /// that was starting it.
+    ///
+    /// The start never reached ready, so it has no `hook.on-deactivate`
+    /// bookend; the caller removes its state directory directly.
+    pub fn remove_failed_start(&mut self, start_id: &StartIdentifier) {
+        debug!(?start_id, "removing start whose hook.on-activate failed");
+        self.remove_unready_start(start_id);
+    }
+
+    /// Remove the `Starting` start if the PID starting it is no longer
+    /// running, returning it so the caller can remove its state directory.
+    ///
+    /// The start never reached ready, so it has no `hook.on-deactivate`
+    /// bookend. This must run before [Self::start_or_attach], which treats
+    /// every `Starting` start as in progress so that the PID is checked only
+    /// once, here.
+    pub fn remove_abandoned_start(
+        &mut self,
+        pid_is_running: impl Fn(Pid) -> bool,
+    ) -> Option<StartIdentifier> {
+        let Ready::Starting(starting_pid, ref start_id) = self.ready else {
+            return None;
+        };
+        if pid_is_running(starting_pid) {
+            return None;
+        }
+
+        let start_id = start_id.clone();
+        debug!(
+            starting_pid,
+            ?start_id,
+            "removing start abandoned by its starting PID"
+        );
+        self.remove_unready_start(&start_id);
+        Some(start_id)
+    }
+
+    /// Remove a start that never reached ready along with its attachments,
+    /// clearing `ready` if it names the start.
+    fn remove_unready_start(&mut self, start_id: &StartIdentifier) {
+        self.starts.remove(start_id);
+        self.attached_pids
+            .retain(|_, attachment| &attachment.start_id != start_id);
+        if let Ready::Starting(_, ref starting) = self.ready
+            && starting == start_id
+        {
+            self.ready = Ready::False;
+        }
     }
 
     /// Returns all attached PIDs and their expirations, flattened from all start IDs
@@ -581,14 +643,15 @@ impl ActivationState {
     }
 
     /// Start or attach to an activation for the given store path.
+    ///
+    /// A `Starting` start is always reported as in progress; call
+    /// [Self::remove_abandoned_start] first to recover one whose PID died.
     pub fn start_or_attach(
         &mut self,
         pid: Pid,
         store_path: impl AsRef<Path>,
     ) -> StartOrAttachResult {
-        if let Ready::Starting(starting_pid, ref start_id) = self.ready
-            && pid_is_running(starting_pid)
-        {
+        if let Ready::Starting(starting_pid, ref start_id) = self.ready {
             return StartOrAttachResult::AlreadyStarting {
                 pid: starting_pid,
                 start_id: start_id.clone(),
@@ -1274,35 +1337,27 @@ mod tests {
             stop_process(proc);
         }
 
+        /// A `Starting` start blocks new starts even when its PID has died:
+        /// recovering it is [ActivationState::remove_abandoned_start]'s job,
+        /// so that the PID is checked once. Uses a stopped process as the
+        /// starting PID and checks the state is left untouched.
         #[test]
-        fn test_start_or_attach_starts_when_starting_process_terminated() {
+        fn start_or_attach_already_starting_when_starting_process_terminated() {
             let proc = start_process();
             let stopped_pid = proc.id() as i32;
             stop_process(proc);
 
-            let old_start_id = StartIdentifier::new("/nix/store/path1");
-            let mut activations =
-                make_activations(Ready::Starting(stopped_pid, old_start_id.clone()));
+            let start_id = StartIdentifier::new("/nix/store/path1");
+            let mut activations = make_activations(Ready::Starting(stopped_pid, start_id.clone()));
+            let before = activations.clone();
 
-            let pid = 123;
-            let result = activations.start_or_attach(pid, &old_start_id.store_path);
+            let result = activations.start_or_attach(123, &start_id.store_path);
 
-            let new_start_id = match result {
-                StartOrAttachResult::Start { start_id } => start_id,
-                _ => panic!("Expected StartOrAttachResult::Start, got {:?}", result),
-            };
-
-            let (ready_pid, ready_start_id) = match &activations.ready {
-                Ready::Starting(p, s) => (*p, s.clone()),
-                _ => panic!("Expected Ready::Starting"),
-            };
-            assert_eq!(ready_pid, pid);
-            assert_eq!(new_start_id, ready_start_id);
-            assert!(new_start_id.timestamp >= old_start_id.timestamp);
-            assert_eq!(
-                activations.attached_pids,
-                BTreeMap::from([(pid, make_attachment(new_start_id))])
-            );
+            assert_eq!(result, StartOrAttachResult::AlreadyStarting {
+                pid: stopped_pid,
+                start_id,
+            });
+            assert_eq!(activations, before);
         }
 
         #[test]
@@ -1543,8 +1598,9 @@ mod tests {
             assert_eq!(activations.ready, Ready::True(start_id));
         }
 
-        /// A `Starting` start is owned by the next `start_or_attach` even if
-        /// its starting PID's attachment is gone; it is never torn down here.
+        /// A `Starting` start is never torn down here even if its starting
+        /// PID's attachment is gone: it never reached ready, so it must not
+        /// be handed to the `hook.on-deactivate` sweep.
         #[test]
         fn starting_start_is_not_orphaned() {
             let start_id = StartIdentifier::new("/nix/store/path1");
@@ -1559,16 +1615,111 @@ mod tests {
             assert_eq!(activations.ready, Ready::Starting(100, start_id));
         }
 
-        /// Terminal teardown drains every start, including a `Starting` one
-        /// that `remove_orphaned_starts` would protect.
+        /// Terminal teardown drains every start but returns only those that
+        /// reached ready: a `Starting` start never completed
+        /// hook.on-activate, so it has no hook.on-deactivate to run.
         #[test]
-        fn drain_starts_returns_starting_starts_too() {
-            let start_id = StartIdentifier::new("/nix/store/path1");
-            let mut activations = make_activations(Ready::Starting(100, start_id.clone()));
-            activations.starts.insert(start_id.clone());
+        fn drain_starts_skips_starting_start() {
+            let ready = StartIdentifier::new("/nix/store/path1");
+            let starting = StartIdentifier::new("/nix/store/path2");
+            let mut activations = make_activations(Ready::Starting(100, starting.clone()));
+            activations.starts.insert(ready.clone());
+            activations.starts.insert(starting);
 
-            assert_eq!(activations.drain_starts(), vec![start_id]);
+            assert_eq!(activations.drain_starts(), vec![ready]);
             assert_eq!(activations.starts, BTreeSet::new());
+        }
+    }
+
+    mod remove_failed_start {
+        use super::*;
+
+        /// The starting process removes a start whose hook.on-activate
+        /// failed. Starts a second store path on top of a ready one, removes
+        /// it, and checks the state matches what it was before the start,
+        /// except that nothing is ready.
+        #[test]
+        fn restores_state_before_start_without_ready() {
+            let mut activations =
+                ActivationState::new(&ActivateMode::default(), Some("/test/.flox"), "/test/env");
+            activations.set_executive_pid(1);
+            let StartOrAttachResult::Start { start_id: ready } =
+                activations.start_or_attach(100, "/nix/store/path1")
+            else {
+                panic!("expected Start");
+            };
+            activations.set_ready(&ready);
+            let mut expected = activations.clone();
+            expected.ready = Ready::False;
+
+            let StartOrAttachResult::Start { start_id: failed } =
+                activations.start_or_attach(200, "/nix/store/path2")
+            else {
+                panic!("expected Start");
+            };
+            activations.remove_failed_start(&failed);
+
+            assert_eq!(activations, expected);
+        }
+    }
+
+    mod remove_abandoned_start {
+        use super::*;
+
+        /// A `Starting` start whose PID died is removed along with its
+        /// attachment and returned, so the caller can delete its state dir
+        /// without running hook.on-deactivate. A start that reached ready is
+        /// kept.
+        #[test]
+        fn removes_starting_start_with_dead_pid() {
+            let ready = StartIdentifier::new("/nix/store/path1");
+            let abandoned = StartIdentifier::new("/nix/store/path2");
+            let mut activations = make_activations(Ready::Starting(200, abandoned.clone()));
+            activations.starts.insert(ready.clone());
+            activations.attach(100, make_attachment(ready.clone()));
+            let mut expected = activations.clone();
+            expected.ready = Ready::False;
+            activations.starts.insert(abandoned.clone());
+            activations.attach(200, make_attachment(abandoned.clone()));
+
+            assert_eq!(
+                activations.remove_abandoned_start(|_| false),
+                Some(abandoned)
+            );
+            assert_eq!(activations, expected);
+        }
+
+        /// A `Starting` start whose PID is still running is in progress, not
+        /// abandoned, and is left alone.
+        #[test]
+        fn keeps_starting_start_with_running_pid() {
+            let start_id = StartIdentifier::new("/nix/store/path1");
+            let mut activations = make_activations(Ready::Starting(200, start_id.clone()));
+            activations.starts.insert(start_id.clone());
+            activations.attach(200, make_attachment(start_id));
+            let before = activations.clone();
+
+            assert_eq!(activations.remove_abandoned_start(|_| true), None);
+            assert_eq!(activations, before);
+        }
+
+        /// After an abandoned start is removed, the next activation starts
+        /// afresh and the abandoned start is no longer tracked.
+        #[test]
+        fn start_or_attach_starts_after_removal() {
+            let abandoned = StartIdentifier::new("/nix/store/path1");
+            let mut activations = make_activations(Ready::Starting(200, abandoned.clone()));
+            activations.starts.insert(abandoned.clone());
+            activations.remove_abandoned_start(|_| false);
+
+            let StartOrAttachResult::Start { start_id } =
+                activations.start_or_attach(300, &abandoned.store_path)
+            else {
+                panic!("expected Start");
+            };
+
+            assert_eq!(activations.starts, BTreeSet::from([start_id.clone()]));
+            assert_eq!(activations.ready, Ready::Starting(300, start_id));
         }
     }
 

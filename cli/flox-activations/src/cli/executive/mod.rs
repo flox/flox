@@ -772,9 +772,9 @@ fn cleanup_all(
     // activation order in reverse: services were shut down above, the hook
     // bookends close last. With no attachments left every start in the state
     // is torn down, including starts deferred by an explicit detach that the
-    // executive never got to sweep and a `Starting` start whose PID died —
-    // its hook only runs if hook.on-activate completed. No state.json write
-    // is needed — the whole directory is removed below.
+    // executive never got to sweep. A `Starting` start whose PID died never
+    // reached ready, so drain_starts leaves it out and its hook never runs.
+    // No state.json write is needed — the whole directory is removed below.
     let orphaned = activations_json.drain_starts();
     sweep_orphaned_starts(
         subsystem_verbosity,
