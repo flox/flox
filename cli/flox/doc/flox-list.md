@@ -40,8 +40,13 @@ the output.
 :   Show only the install ID of each package.
 
 `-a`, `--all`
-:   Show all available package information including priority, license,
-    and outputs (both available and installed).
+:   Show information about the environment as a whole — name,
+    generation, FloxHub sync status, upgrade-notification setting —
+    followed by full details for each package including priority,
+    license, available outputs, and whether an upgrade is pending.
+    Next-step hints are printed to stderr.
+    This flag makes zero network requests;
+    all information is derived from on-disk state.
 
 ```{.include}
 ./include/environment-options.md

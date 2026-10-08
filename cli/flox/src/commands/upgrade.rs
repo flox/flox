@@ -6,9 +6,11 @@ use flox_manifest::interfaces::{AsLatestSchema, PackageLookup};
 use flox_manifest::lockfile::LockedPackage;
 use flox_manifest::parsed::latest::ManifestPackageDescriptor;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::{Environment, SingleSystemUpgradeDiff};
+use flox_rust_sdk::models::environment::Environment;
+// Used in test helpers
+#[cfg(test)]
+use flox_rust_sdk::models::environment::SingleSystemUpgradeDiff;
 use indoc::formatdoc;
-use itertools::Itertools;
 use tracing::{debug, info_span, instrument};
 
 use super::services::warn_manifest_changes_for_services;
@@ -16,7 +18,7 @@ use super::{EnvironmentSelect, environment_select};
 use crate::commands::{ensure_auth, environment_description};
 use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message::{self, stderr_supports_color};
-use crate::utils::upgrade_output::{count_upgrade_categories, format_upgrade_summary};
+use crate::utils::upgrade_output::{count_upgrade_categories, format_upgrade_summary, render_diff};
 use crate::{environment_subcommand_metric, subcommand_metric};
 
 // Upgrade packages in an environment
@@ -209,55 +211,6 @@ fn upgrade_payload(
         payload = payload.with_version(version);
     }
     payload
-}
-
-/// Render a diff of locked packages before and after an upgrade.
-///
-/// Version changes show: `- pkg: 1.0 -> 2.0`
-/// Rebuilds show: `- pkg: 1.0 (rebuild, rev DATE -> DATE)` with fallback to
-/// rev hash or bare `(rebuild)` when rev info is unavailable.
-fn render_diff(diff: &SingleSystemUpgradeDiff) -> String {
-    diff.iter()
-        .map(|(_, (before, after))| {
-            let install_id = before.install_id();
-            let old_version = before.version().unwrap_or("unknown");
-            let new_version = after.version().unwrap_or("unknown");
-
-            if new_version != old_version {
-                return format!("- {install_id}: {old_version} -> {new_version}");
-            }
-
-            match rebuild_detail(before, after) {
-                Some(detail) => format!("- {install_id}: {old_version} (rebuild, {detail})"),
-                None => format!("- {install_id}: {old_version} (rebuild)"),
-            }
-        })
-        .join("\n")
-}
-
-/// Extract a human-readable detail string for build-only changes.
-///
-/// Tries rev_date first (formatted as YYYY-MM-DD), then rev hash (7 chars).
-/// Returns `None` if no rev info is available (e.g. flake packages).
-fn rebuild_detail(before: &LockedPackage, after: &LockedPackage) -> Option<String> {
-    let (old, new) = (
-        before.as_catalog_package_ref()?,
-        after.as_catalog_package_ref()?,
-    );
-
-    let old_date = old.rev_date.format("%Y-%m-%d");
-    let new_date = new.rev_date.format("%Y-%m-%d");
-    if old_date.to_string() != new_date.to_string() {
-        return Some(format!("rev {old_date} -> {new_date}"));
-    }
-
-    let old_rev = &old.rev[..7.min(old.rev.len())];
-    let new_rev = &new.rev[..7.min(new.rev.len())];
-    if old_rev != new_rev {
-        return Some(format!("rev {old_rev} -> {new_rev}"));
-    }
-
-    None
 }
 
 #[cfg(test)]
