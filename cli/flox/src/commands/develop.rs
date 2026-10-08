@@ -15,6 +15,7 @@ use flox_rust_sdk::providers::build::{
     FloxBuildMk,
     ManifestBuilder,
     PackageTarget,
+    PackageTargetError,
     PackageTargetKind,
 };
 use flox_rust_sdk::providers::nix;
@@ -273,44 +274,45 @@ impl Develop {
 
     /// Resolve the package to develop from the optional CLI argument.
     ///
-    /// A named package is validated against the environment's known
-    /// targets exactly as `flox build <package>` validates its own.
-    /// With no argument, this mirrors `flox build`'s bare-invocation
-    /// convention for a single-build project: the sole Nix expression
-    /// build is used if there is exactly one. Manifest builds are never
-    /// candidates for that fallback — `refuse_manifest_build` below
-    /// refuses one unconditionally, so silently falling into one here
-    /// would only relocate that refusal to a worse error.
+    /// A named package is matched against all of the environment's known
+    /// targets, so that naming a manifest build reaches
+    /// `refuse_manifest_build` below and its pointer at `flox activate`.
+    /// Otherwise only Nix expression builds are candidates, both for the
+    /// bare-invocation fallback and in the list of packages offered when a
+    /// name is unknown: offering a manifest build would only relocate that
+    /// refusal. With no argument, this mirrors `flox build`'s convention
+    /// for a single-build project: the sole Nix expression build is used if
+    /// there is exactly one.
     ///
     /// The zero-candidate case has two causes, and `packages_to_build`
-    /// distinguishes them for free: called with an empty package list, it
-    /// bails with its own "No packages found to build." before this
-    /// function sees anything if the project defines no builds at all, so
-    /// an empty `expression_targets` here only ever means the project has
-    /// manifest builds and nothing else — the one case that needs its own
-    /// message, pointing at `flox activate` the same way
-    /// `refuse_manifest_build` does for a named manifest build.
+    /// distinguishes them for free: it bails with its own "No packages
+    /// found to build." before this function sees anything if the project
+    /// defines no builds at all, so an empty `expression_targets` here only
+    /// ever means the project has manifest builds and nothing else — the
+    /// one case that needs its own message, pointing at `flox activate` the
+    /// same way `refuse_manifest_build` does for a named manifest build.
     fn resolve_target(
         manifest: &Manifest<MigratedTypedOnly>,
         expression_ref: &NixFlakeref,
         package: Option<String>,
     ) -> Result<PackageTarget> {
-        if let Some(package) = package {
-            let targets = packages_to_build(manifest, expression_ref, &[package])?;
-            return targets
-                .into_iter()
-                .next()
-                .context("packages_to_build returned no targets for the requested package");
+        let targets = packages_to_build(manifest, expression_ref, &Vec::<String>::new())?;
+
+        if let Some(name) = &package
+            && let Some(target) = targets
+                .iter()
+                .find(|target| *target.name().as_ref() == name)
+        {
+            return Ok(target.clone());
         }
 
-        let mut expression_targets: Vec<PackageTarget> =
-            packages_to_build(manifest, expression_ref, &Vec::<String>::new())?
-                .into_iter()
-                .filter(|target| target.kind().is_expression_build())
-                .collect();
+        let mut expression_targets: Vec<PackageTarget> = targets
+            .into_iter()
+            .filter(|target| target.kind().is_expression_build())
+            .collect();
 
-        match expression_targets.len() {
-            0 => bail!(formatdoc! {"
+        if expression_targets.is_empty() {
+            bail!(formatdoc! {"
                 This project has manifest builds but no package with a Nix expression build.
                 Manifest builds run their 'build.<NAME>.command' script in the activated
                 environment, so enter the environment and run that script by hand.
@@ -319,7 +321,21 @@ impl Develop {
                   $ flox activate                       <- Enter the environment
                   $ <script from build.<NAME>.command>  <- Run the build by hand
                 "
-            }),
+            });
+        }
+
+        if let Some(name) = package {
+            return Err(PackageTargetError::NotFound {
+                name,
+                available: expression_targets
+                    .iter()
+                    .map(PackageTarget::to_string)
+                    .collect(),
+            }
+            .into());
+        }
+
+        match expression_targets.len() {
             1 => Ok(expression_targets.remove(0)),
             _ => {
                 let candidates = expression_targets
@@ -762,7 +778,8 @@ mod tests {
     /// builds at all, this project has something to build -- just not
     /// with `flox develop` -- so the refusal must say so and point at
     /// `flox activate` instead of repeating the "no packages found"
-    /// message a genuinely empty project gets.
+    /// message a genuinely empty project gets. An unknown name gets the
+    /// same refusal, because there is no expression build to list.
     #[test]
     fn resolve_target_points_at_activate_when_only_manifest_builds_exist() {
         let (flox, _tempdir) = flox_instance();
@@ -777,19 +794,42 @@ mod tests {
         let lockfile: Lockfile = env.lockfile(&flox).unwrap().into();
         let lockfile_manifest = lockfile.migrated_manifest().unwrap();
 
-        let message = Develop::resolve_target(&lockfile_manifest, expression_ref, None)
+        let expected = indoc! {"
+            This project has manifest builds but no package with a Nix expression build.
+            Manifest builds run their 'build.<NAME>.command' script in the activated
+            environment, so enter the environment and run that script by hand.
+
+            Next:
+              $ flox activate                       <- Enter the environment
+              $ <script from build.<NAME>.command>  <- Run the build by hand
+        "};
+        for package in [None, Some("typo")] {
+            let message = Develop::resolve_target(
+                &lockfile_manifest,
+                expression_ref,
+                package.map(str::to_string),
+            )
             .unwrap_err()
             .to_string();
-        assert!(message.contains("flox activate"));
-        assert!(!message.contains("No packages found to build"));
+            assert_eq!(message, expected, "resolving {package:?}");
+        }
     }
 
-    /// A named package is still validated against the environment's known
-    /// targets, independent of how many Nix expression builds exist.
+    /// In a project with a manifest build alongside two Nix expression
+    /// builds, any known name resolves, including the manifest build, which
+    /// `refuse_manifest_build` then refuses with its own message. The
+    /// manifest build is never offered as a candidate when the argument
+    /// names an unknown package.
     #[test]
-    fn resolve_target_selects_named_package_among_several() {
+    fn resolve_target_offers_only_expression_builds() {
         let (flox, tempdir) = flox_instance();
-        let mut env = new_path_environment(&flox, "version = 1\n");
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [build.hello]
+            command = ""
+        "#};
+        let mut env = new_path_environment(&flox, &manifest);
         let expression_ref = prepare_nix_expressions_in(&tempdir, &[
             (&["greet"], indoc! {r#"
                 {runCommand}: runCommand "greet" {} ""
@@ -801,12 +841,27 @@ mod tests {
         let lockfile: Lockfile = env.lockfile(&flox).unwrap().into();
         let lockfile_manifest = lockfile.migrated_manifest().unwrap();
 
-        let target = Develop::resolve_target(
-            &lockfile_manifest,
-            &expression_ref,
-            Some("farewell".to_string()),
-        )
-        .unwrap();
-        assert_eq!(target.name().to_string(), "farewell");
+        let cases = [
+            ("greet", Ok("greet".to_string())),
+            ("hello", Ok("hello".to_string())),
+            (
+                "typo",
+                Err(indoc! {"
+                    Package 'typo' not found.
+                    Available packages: farewell, greet"}
+                .to_string()),
+            ),
+        ];
+
+        for (package, expected) in cases {
+            let actual = Develop::resolve_target(
+                &lockfile_manifest,
+                &expression_ref,
+                Some(package.to_string()),
+            )
+            .map(|target| target.to_string())
+            .map_err(|err| err.to_string());
+            assert_eq!(actual, expected, "resolving {package:?}");
+        }
     }
 }
