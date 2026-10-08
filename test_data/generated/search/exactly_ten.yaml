@@ -5,13 +5,13 @@ then:
   status: 200
   header:
     - name: date
-      value: Tue, 29 Sep 2026 23:18:37 GMT
+      value: Thu, 08 Oct 2026 22:27:51 GMT
     - name: content-type
       value: application/json
     - name: server
       value: uvicorn
     - name: apigw-requestid
-      value: EfAT7ghRoAMEVYw=
+      value: E8jUDjAMoAMESkw=
   body: '{"total_count":10,"items":[{"attr_path":"python","catalog":null,"pkg_path":"python","name":"python-2.7.18.12","pname":"python","version":"2.7.18.12","description":"High-level
     dynamically-typed programming language","stabilities":[],"system":"x86_64-linux","deprecation":null},{"attr_path":"gpython","catalog":null,"pkg_path":"gpython","name":"gpython-0.2.0","pname":"gpython","version":"0.2.0","description":"Python
     interpreter written in Go","stabilities":[],"system":"x86_64-linux","deprecation":null},{"attr_path":"python2","catalog":null,"pkg_path":"python2","name":"python-2.7.18.12","pname":"python2","version":"2.7.18.12","description":"High-level

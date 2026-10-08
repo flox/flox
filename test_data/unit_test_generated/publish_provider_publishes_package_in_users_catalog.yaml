@@ -6,14 +6,14 @@ then:
   status: 201
   header:
   - name: date
-    value: Fri, 14 Aug 2026 22:17:14 GMT
+    value: Thu, 08 Oct 2026 22:44:58 GMT
   - name: server
     value: uvicorn
   - name: content-length
-    value: '116'
+    value: '133'
   - name: content-type
     value: application/json
-  body: '{"catalog":"test_user_no_catalogs","name":"publish_provider_publishes_package_in_users_catalog","original_url":null}'
+  body: '{"catalog":"test_user_no_catalogs","name":"publish_provider_publishes_package_in_users_catalog","original_url":null,"lifecycle":null}'
 ---
 when:
   path: /api/v1/catalog/catalogs/test_user_no_catalogs/packages/publish_provider_publishes_package_in_users_catalog/publish/info
@@ -23,7 +23,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Fri, 14 Aug 2026 22:17:14 GMT
+    value: Thu, 08 Oct 2026 22:44:59 GMT
   - name: server
     value: uvicorn
   - name: content-length
@@ -36,7 +36,8 @@ when:
   path: /api/v1/catalog/catalogs/test_user_no_catalogs/packages/publish_provider_publishes_package_in_users_catalog/builds
   method: POST
   json_body_includes:
-  - build_type: manifest
+  - allow_lineage_change: false
+    build_type: manifest
     derivation:
       broken: false
       description: dummy
@@ -68,7 +69,7 @@ then:
   status: 201
   header:
   - name: date
-    value: Fri, 14 Aug 2026 22:17:14 GMT
+    value: Thu, 08 Oct 2026 22:44:59 GMT
   - name: server
     value: uvicorn
   - name: content-length

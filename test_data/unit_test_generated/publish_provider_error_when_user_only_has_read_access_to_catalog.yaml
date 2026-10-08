@@ -6,7 +6,7 @@ then:
   status: 403
   header:
   - name: date
-    value: Fri, 14 Aug 2026 22:17:12 GMT
+    value: Thu, 08 Oct 2026 22:44:59 GMT
   - name: server
     value: uvicorn
   - name: content-length

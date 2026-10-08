@@ -5,7 +5,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Tue, 29 Sep 2026 23:18:35 GMT
+    value: Thu, 08 Oct 2026 22:27:45 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -13,5 +13,5 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: EfATngReIAMEVrA=
+    value: E8jTChL-IAMEaBA=
   body: '{"items":[],"total_count":0}'

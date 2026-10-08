@@ -148,7 +148,7 @@
     "include": [
       {
         "manifest": {
-          "schema-version": "1.17.0",
+          "schema-version": "1.19.0",
           "install": {
             "hello": {
               "pkg-path": "hello"
