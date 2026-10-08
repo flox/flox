@@ -333,6 +333,16 @@
               }
             }
           },
+          "401": {
+            "description": "Authentication is required to resolve packages",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Request validation error",
             "content": {
@@ -3107,6 +3117,19 @@
           "locked_inputs_hash": {
             "type": "string",
             "title": "Locked Inputs Hash"
+          },
+          "deep_overrides": {
+            "title": "Deep Overrides",
+            "nullable": true,
+            "items": {
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "type": "array",
+              "minItems": 1
+            },
+            "type": "array"
           }
         },
         "type": "object",
@@ -3592,6 +3615,19 @@
             "title": "Factory Build Token",
             "nullable": true,
             "type": "string"
+          },
+          "deep_overrides": {
+            "title": "Deep Overrides",
+            "nullable": true,
+            "items": {
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "type": "array",
+              "minItems": 1
+            },
+            "type": "array"
           }
         },
         "type": "object",
