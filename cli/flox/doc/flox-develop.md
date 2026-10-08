@@ -128,8 +128,9 @@ protected.
 
 `flox develop` without a package argument uses the project's only Nix
 expression build, as `flox build` does. Unlike `flox build`, it never
-resolves to more than one: with several such packages, it lists them so
-you can name one; with only manifest builds, it points at
+resolves to more than one: with several such packages, it prompts you to
+select one if it is running interactively, and otherwise lists them so you
+can name one; with only manifest builds, it points at
 [`flox-activate(1)`](./flox-activate.md); with no builds at all, it
 fails the same way `flox build` does on an empty project.
 
