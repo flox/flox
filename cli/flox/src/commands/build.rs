@@ -7,7 +7,7 @@ use std::time::Instant;
 // `::` selects the extern `nix` crate rather than the
 // `flox_rust_sdk::providers::nix` module that is also in scope.
 use ::nix::sys::signal::Signal;
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use flox_core::data::CanonicalPath;
 use flox_events::{CliBuildPayload, EventKind, EventsHub, Outcome};
@@ -40,6 +40,7 @@ use url::Url;
 
 use super::{DirEnvironmentSelect, dir_environment_select, needs_project_files_error};
 use crate::utils::catalog_lock::BuildLockGuard;
+use crate::utils::dialog::{Dialog, Select};
 use crate::utils::events::duration_to_ms;
 use crate::utils::message;
 use crate::{environment_subcommand_metric, subcommand_metric};
@@ -912,6 +913,55 @@ pub(crate) fn expression_rel_paths(targets: &[PackageTarget]) -> Vec<PathBuf> {
             PackageTargetKind::ManifestBuild { .. } => None,
         })
         .collect()
+}
+
+/// The outcome of matching a command's `[PACKAGE]` argument against the
+/// project's builds, before any prompt is shown.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum TargetChoice {
+    Resolved(PackageTarget),
+    Ambiguous(Vec<PackageTarget>),
+}
+
+impl TargetChoice {
+    /// Ask the user to pick one of several candidates when running
+    /// interactively, otherwise list them in the error.
+    ///
+    /// `command` is the subcommand that takes the `[PACKAGE]` argument, and
+    /// `description` completes "Found more than one package ..." with what
+    /// made each candidate eligible.
+    pub(crate) async fn resolve(self, command: &str, description: &str) -> Result<PackageTarget> {
+        let candidates = match self {
+            TargetChoice::Resolved(target) => return Ok(target),
+            TargetChoice::Ambiguous(candidates) => candidates,
+        };
+
+        if !Dialog::can_prompt() {
+            bail!(formatdoc! {"
+                Found more than one package {description}: {candidates}
+
+                Name the one to {command}:
+                  $ flox {command} <PACKAGE>
+                ",
+                candidates = candidates.iter().join(", "),
+            });
+        }
+
+        Dialog {
+            message: &format!("Select a package to {command}:"),
+            help_message: None,
+            typed: Select {
+                options: candidates,
+            },
+        }
+        .prompt()
+        .await
+        .map_err(|err| match err {
+            inquire::InquireError::OperationCanceled
+            | inquire::InquireError::OperationInterrupted => anyhow!("Package selection canceled."),
+            err => anyhow!("Could not select a package to {command}: {err}"),
+        })
+    }
 }
 
 pub(crate) fn packages_to_build<'o>(

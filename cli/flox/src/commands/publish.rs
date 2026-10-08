@@ -11,7 +11,6 @@ use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::providers::build::{
     COMMON_NIXPKGS_URL,
-    PackageTarget,
     PackageTargetKind,
     PackageTargets,
     nix_expression_dir,
@@ -43,6 +42,7 @@ use super::{DirEnvironmentSelect, dir_environment_select};
 use crate::commands::build::{
     BaseCatalogUrlSelect,
     SystemOverride,
+    TargetChoice,
     UPDATE_CATALOGS_COMMAND,
     base_catalog_url_select,
     base_nixpkgs_url_from_url_select,
@@ -263,6 +263,8 @@ struct PublishTarget {
     /// The package to publish.
     /// Possible values are all keys under the `build` attribute in the
     /// environment's `manifest.toml`.
+    /// If omitted and there are multiple builds, prompts for one when
+    /// running interactively, otherwise lists them.
     #[bpaf(positional("package"))]
     target: String,
 }
@@ -304,17 +306,16 @@ impl Publish {
         manifest: &Manifest<MigratedTypedOnly>,
         expression_ref: &NixFlakeref,
         target_arg: Option<PublishTarget>,
-    ) -> Result<PackageTarget> {
-        match packages_to_build(
+    ) -> Result<TargetChoice> {
+        let mut targets = packages_to_build(
             manifest,
             expression_ref,
             &Vec::from_iter(target_arg.map(|arg| arg.target)),
-        )?
-        .as_slice()
-        {
-            [target] => Ok(target.clone()),
-            [] => bail!("Cannot publish without a build specified"),
-            _ => bail!("Must specify an artifact to publish"),
+        )?;
+        match targets.len() {
+            0 => bail!("Cannot publish without a build specified"),
+            1 => Ok(TargetChoice::Resolved(targets.remove(0))),
+            _ => Ok(TargetChoice::Ambiguous(targets)),
         }
     }
 
@@ -358,7 +359,9 @@ impl Publish {
             let expression_dir_parent = path_env.dot_flox_path();
             let expression_ref_local = NixFlakeref::from_path(&expression_dir_parent)?;
             let package =
-                Self::get_publish_target(&lockfile_manifest, &expression_ref_local, package_arg)?;
+                Self::get_publish_target(&lockfile_manifest, &expression_ref_local, package_arg)?
+                    .resolve("publish", "to publish")
+                    .await?;
 
             // Note: when publishing an expression build,
             // this causes us to discover the containing git repo twice.
@@ -620,6 +623,7 @@ impl Publish {
 #[cfg(test)]
 mod tests {
     use flox_manifest::test_helpers::with_latest_schema;
+    use flox_rust_sdk::providers::build::PackageTarget;
     use flox_rust_sdk::providers::build::test_helpers::prepare_empty_expressions_ref;
     use indoc::indoc;
 
@@ -675,10 +679,10 @@ mod tests {
             Publish::get_publish_target(&manifest, prepare_empty_expressions_ref(), None).unwrap();
         assert_eq!(
             target,
-            PackageTarget::new_unchecked(
+            TargetChoice::Resolved(PackageTarget::new_unchecked(
                 "hello",
                 flox_rust_sdk::providers::build::PackageTargetKind::ManifestBuild { sandbox: None }
-            )
+            ))
         );
     }
 
@@ -696,7 +700,7 @@ mod tests {
     }
 
     #[test]
-    fn error_when_no_publish_target_arg_multiple_builds() {
+    fn ambiguous_when_no_publish_target_arg_multiple_builds() {
         let manifest_contents = with_latest_schema(indoc! {r#"
             [install]
             hello.pkg-path = "hello"
@@ -714,8 +718,16 @@ mod tests {
         let manifest = Manifest::parse_and_migrate(manifest_contents, None)
             .unwrap()
             .as_migrated_typed_only();
-        let res = Publish::get_publish_target(&manifest, prepare_empty_expressions_ref(), None);
-        assert!(res.is_err());
+        let choice =
+            Publish::get_publish_target(&manifest, prepare_empty_expressions_ref(), None).unwrap();
+        let manifest_build = PackageTargetKind::ManifestBuild { sandbox: None };
+        assert_eq!(
+            choice,
+            TargetChoice::Ambiguous(vec![
+                PackageTarget::new_unchecked("hello", manifest_build.clone()),
+                PackageTarget::new_unchecked("hello2", manifest_build),
+            ])
+        );
     }
 
     #[test]
@@ -747,10 +759,10 @@ mod tests {
         .unwrap();
         assert_eq!(
             target,
-            PackageTarget::new_unchecked(
+            TargetChoice::Resolved(PackageTarget::new_unchecked(
                 "hello2",
                 flox_rust_sdk::providers::build::PackageTargetKind::ManifestBuild { sandbox: None }
-            )
+            ))
         );
     }
 
@@ -778,10 +790,10 @@ mod tests {
         .unwrap();
         assert_eq!(
             target,
-            PackageTarget::new_unchecked(
+            TargetChoice::Resolved(PackageTarget::new_unchecked(
                 "hello",
                 flox_rust_sdk::providers::build::PackageTargetKind::ManifestBuild { sandbox: None }
-            )
+            ))
         );
     }
 

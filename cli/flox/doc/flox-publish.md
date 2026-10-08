@@ -56,7 +56,10 @@ in `manifest.toml`.
 If only one build is defined in `manifest.toml`, specifying the `<package>` is
 unnecessary.
 If there are multiple builds defined, you may only publish a single package at
-a time and must specify the name when calling `flox publish`.
+a time.
+When `<package>` is omitted, `flox publish` prompts you to select one if it is
+running interactively, and otherwise fails with a list of the available
+packages.
 
 Flox will then perform a clone of the repository to a temporary location
 and perform a clean `flox build` operation.
