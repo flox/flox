@@ -107,6 +107,12 @@ sharing environments, and administration.
 
 # ENVIRONMENT VARIABLES
 
+`$FLOX_LOG`
+:   Enable diagnostic output on stderr, for example `FLOX_LOG=debug` or
+    `FLOX_LOG=off,flox=trace`. Overrides `-v` and `-q`; `RUST_LOG` does not
+    configure the Flox CLI logger. Diagnostics are off by default.
+    User-facing messages and errors are printed independently of this setting.
+
 `$FLOX_DISABLE_METRICS`
 :   Variable for disabling the collection/sending of metrics data.
     If set to `true`, prevents Flox from submitting basic metrics information

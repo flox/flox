@@ -19,3 +19,18 @@ pub fn sentry_set_tag<V: ToString>(key: &str, value: V) {
         scope.set_tag(key, value);
     });
 }
+
+/// Record operation context independently of UI visibility, without creating an error event.
+pub(crate) fn command_started(command: &str) {
+    tracing::info!(command, "Command started");
+}
+
+pub(crate) fn command_finished(
+    command: &str,
+    exit_code: u8,
+    error_kind: Option<&str>,
+    error: Option<&anyhow::Error>,
+) {
+    let error = error.map(|error| format!("{error:#}"));
+    tracing::info!(command, exit_code, error_kind, error, "Command finished");
+}

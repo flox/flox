@@ -52,6 +52,7 @@ impl Stop {
             }
 
             if let Err(err) = stop_services(socket, &[&process.name]) {
+                tracing::info!(service = %process.name, error = %err, "Service stop failed");
                 message::error(format!(
                     "Failed to stop service '{}': {}",
                     process.name, err

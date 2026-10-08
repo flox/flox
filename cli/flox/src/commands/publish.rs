@@ -503,6 +503,7 @@ impl Publish {
                 "could not extract nixpkgs rev from base catalog URL; \
                  dedup check will likely miss"
             );
+            message::warning("Could not extract nixpkgs rev from base catalog URL; dedup check will likely miss.");
             ""
         });
         // An explicit `--system` the catalog cannot represent would
