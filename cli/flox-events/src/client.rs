@@ -17,7 +17,15 @@ use crate::{
     SharedMetadataTemplate,
 };
 
+/// How long the oldest buffered event waits before the buffer is due.
 const DEFAULT_BUFFER_EXPIRY: Duration = Duration::minutes(2);
+/// The same wait in CI, where the runner is typically destroyed after the
+/// job, so anything still buffered when the job ends is lost.
+const CI_BUFFER_EXPIRY: Duration = Duration::seconds(10);
+/// Marker in the data dir, created by the first successful send. The buffer
+/// is due immediately until it exists, so a first run that ends before the
+/// expiry (such as a CI job on an ephemeral runner) still delivers.
+const FIRST_SEND_MARKER_FILE_NAME: &str = "events-v2-first-send";
 pub const BATCH_SIZE: usize = 100;
 
 /// Client that stamps v2 event metadata, buffers events, and flushes
@@ -38,6 +46,11 @@ pub const BATCH_SIZE: usize = 100;
 ///
 /// Like `device_id` and `invocation_id`, the value is a per-process
 /// snapshot: a token change mid-invocation does not re-stamp events.
+///
+/// The buffer is due once its oldest event is older than `max_age`: two
+/// minutes, or 10 seconds when the shared metadata's `invocation_sources`
+/// include `ci` (or a `ci.*` sub-token). The buffer is also due regardless
+/// of age until the first successful send from this data dir.
 #[derive(Debug)]
 pub struct EventsClient {
     pub device_id: Uuid,
@@ -81,12 +94,20 @@ impl EventsClient {
         shared_metadata: SharedMetadataTemplate,
         connection: impl EventsConnection + 'static,
     ) -> Self {
+        let is_ci = shared_metadata.invocation_sources.iter().any(|source| {
+            let source = source.to_ascii_lowercase();
+            source == "ci" || source.starts_with("ci.")
+        });
         Self {
             device_id,
             data_dir: data_dir.as_ref().to_path_buf(),
             invocation_id,
             auth_subject,
-            max_age: DEFAULT_BUFFER_EXPIRY,
+            max_age: if is_ci {
+                CI_BUFFER_EXPIRY
+            } else {
+                DEFAULT_BUFFER_EXPIRY
+            },
             connection: connection.boxed(),
             shared_metadata,
             oldest_buffered_timestamp: None,
@@ -142,6 +163,26 @@ impl EventsClient {
         Ok(())
     }
 
+    /// The age past which the oldest buffered event makes the buffer due.
+    /// `Duration::MIN` makes any buffered event due: used until the first
+    /// successful send, since an ephemeral runner may never get a second
+    /// chance.
+    fn expiry(&self) -> Duration {
+        if !self.data_dir.join(FIRST_SEND_MARKER_FILE_NAME).exists() {
+            Duration::MIN
+        } else {
+            self.max_age
+        }
+    }
+
+    /// Record that a send succeeded. Best-effort: a missing marker only
+    /// means the next invocation sends again immediately.
+    fn mark_sent(&self) {
+        if let Err(err) = std::fs::write(self.data_dir.join(FIRST_SEND_MARKER_FILE_NAME), b"") {
+            debug!(error = %err, "Could not write v2 events first-send marker");
+        }
+    }
+
     /// Advisory expiry check for deciding whether to start a background sender.
     /// Uses the last append's timestamp, or a non-blocking read if no timestamp
     /// is cached. A busy buffer is left for a later invocation. The sender must
@@ -149,16 +190,16 @@ impl EventsClient {
     /// this snapshot was taken.
     pub fn is_flush_due(&self) -> Result<bool> {
         if let Some(oldest) = self.oldest_buffered_timestamp {
-            return Ok(OffsetDateTime::now_utc() - oldest > self.max_age);
+            return Ok(OffsetDateTime::now_utc() - oldest > self.expiry());
         }
         Ok(EventsBuffer::try_read(&self.data_dir)?
-            .is_some_and(|events| events.is_expired(self.max_age)))
+            .is_some_and(|events| events.is_expired(self.expiry())))
     }
 
     pub fn flush(&mut self, force: bool) -> Result<()> {
         self.oldest_buffered_timestamp = None;
         let mut events = EventsBuffer::read(&self.data_dir)?;
-        if !events.is_expired(self.max_age) && !force {
+        if !events.is_expired(self.expiry()) && !force {
             return Ok(());
         }
 
@@ -168,6 +209,7 @@ impl EventsClient {
                 let batch: Vec<&Event> = events.iter().take(batch_size).collect();
                 self.connection.send(batch)?;
             }
+            self.mark_sent();
 
             events.drain_sent(batch_size);
             events.overwrite_file()?;
@@ -199,7 +241,7 @@ impl EventsClient {
                 debug!("v2 events buffer lock held by another process; skipping flush");
                 return Ok(false);
             };
-            if !events.is_expired(self.max_age) && !force {
+            if !events.is_expired(self.expiry()) && !force {
                 return Ok(true);
             }
             // Snapshot all sendable entries and remove them from the file while
@@ -226,6 +268,7 @@ impl EventsClient {
                 EventsBuffer::read(&self.data_dir)?.prepend(drained)?;
                 return Err(err);
             }
+            self.mark_sent();
             drained.drain(..batch_size);
         }
         Ok(())

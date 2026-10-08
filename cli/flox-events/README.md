@@ -321,7 +321,8 @@ if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentDele
   so opted-out users don't pay for it.
 - Events are buffered on disk (`events-v2.json` in the data dir, one
   JSON object per line) and sent in batches of 100 once the buffer is
-  older than two minutes, from a flush-on-drop guard in `main`. A
+  older than two minutes (10 seconds in CI); the first send from a data
+  dir is immediate. Sends start from a flush-on-drop guard in `main`. A
   failed send keeps events buffered for a later retry. Two buffer
   consequences shape the contract: the buffer caps at 1000 events with
   oldest-first eviction, so a domain or completion row can outlive the
@@ -417,7 +418,8 @@ silent:
    collector stays quiet while your test events go to the production
    endpoint, which is worse than no output.
 2. Set `_FLOX_FORCE_FLUSH_METRICS=true`. Without it a single command
-   sends nothing — the buffer flushes on expiry and in batches.
+   sends nothing once the data dir has made its first send — the buffer
+   flushes on expiry and in batches.
 3. Use a real dispatched subcommand. `flox --version` returns before
    the events client is installed and emits nothing by construction.
 4. Check that metrics aren't disabled (`flox config --get
