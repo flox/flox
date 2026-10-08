@@ -196,7 +196,7 @@ EOF
   refute_output --partial "No packages found to build"
 }
 
-@test "develop: bare invocation refuses with an error naming every candidate, in sorted order, when there is more than one Nix expression build" {
+@test "develop: bare invocation without a TTY refuses with an error naming every candidate, in sorted order, when there is more than one Nix expression build" {
   project_setup
   git_init_project
   nef_package_setup greet

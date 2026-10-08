@@ -27,6 +27,7 @@ use tracing::debug;
 
 use super::build::{
     BaseCatalogUrlSelect,
+    TargetChoice,
     base_catalog_url_select,
     base_nixpkgs_url_from_url_select,
     check_git_tracking_for_expression_builds,
@@ -85,8 +86,9 @@ pub struct Develop {
     shell_command: Option<String>,
 
     /// The package to develop, as defined by its expression file in '.flox/pkgs/'.
-    /// If omitted, the project's sole such package is used;
-    /// with more than one, name which to develop.
+    /// If omitted, the project's sole such package is used.
+    /// With more than one, prompts for one when running interactively,
+    /// otherwise lists them.
     #[bpaf(positional("package"))]
     pub package: Option<String>,
 }
@@ -119,7 +121,9 @@ impl Develop {
 
         let expression_parent_dir = env.dot_flox_path();
         let expression_path_ref = NixFlakeref::from_path(&expression_parent_dir)?;
-        let target = Self::resolve_target(&lockfile_manifest, &expression_path_ref, package)?;
+        let target = Self::resolve_target(&lockfile_manifest, &expression_path_ref, package)?
+            .resolve("develop", "with a Nix expression build")
+            .await?;
 
         // An unsandboxed manifest build already refuses `--stability`
         // (`disallow_base_url_select_for_manifest_builds`, build.rs), but
@@ -295,7 +299,7 @@ impl Develop {
         manifest: &Manifest<MigratedTypedOnly>,
         expression_ref: &NixFlakeref,
         package: Option<String>,
-    ) -> Result<PackageTarget> {
+    ) -> Result<TargetChoice> {
         let targets = packages_to_build(manifest, expression_ref, &Vec::<String>::new())?;
 
         if let Some(name) = &package
@@ -303,7 +307,7 @@ impl Develop {
                 .iter()
                 .find(|target| *target.name().as_ref() == name)
         {
-            return Ok(target.clone());
+            return Ok(TargetChoice::Resolved(target.clone()));
         }
 
         let mut expression_targets: Vec<PackageTarget> = targets
@@ -336,21 +340,8 @@ impl Develop {
         }
 
         match expression_targets.len() {
-            1 => Ok(expression_targets.remove(0)),
-            _ => {
-                let candidates = expression_targets
-                    .iter()
-                    .map(PackageTarget::to_string)
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                bail!(formatdoc! {"
-                    Found more than one package with a Nix expression build: {candidates}.
-
-                    Name the one to develop:
-                      $ flox develop <PACKAGE>
-                    "
-                })
-            },
+            1 => Ok(TargetChoice::Resolved(expression_targets.remove(0))),
+            _ => Ok(TargetChoice::Ambiguous(expression_targets)),
         }
     }
 
@@ -722,35 +713,11 @@ mod tests {
         let lockfile: Lockfile = env.lockfile(&flox).unwrap().into();
         let lockfile_manifest = lockfile.migrated_manifest().unwrap();
 
-        let target = Develop::resolve_target(&lockfile_manifest, &expression_ref, None).unwrap();
-        assert_eq!(target.name().to_string(), "greet");
-    }
-
-    /// With more than one Nix expression build and no package argument,
-    /// resolution is refused with an error naming every candidate rather
-    /// than picking one arbitrarily.
-    #[test]
-    fn resolve_target_names_candidates_when_multiple_expression_builds_exist() {
-        let (flox, tempdir) = flox_instance();
-        let mut env = new_path_environment(&flox, "version = 1\n");
-        let expression_ref = prepare_nix_expressions_in(&tempdir, &[
-            (&["greet"], indoc! {r#"
-                {runCommand}: runCommand "greet" {} ""
-            "#}),
-            (&["farewell"], indoc! {r#"
-                {runCommand}: runCommand "farewell" {} ""
-            "#}),
-        ]);
-        let lockfile: Lockfile = env.lockfile(&flox).unwrap().into();
-        let lockfile_manifest = lockfile.migrated_manifest().unwrap();
-
-        // Joined in name order ("farewell" before "greet") rather than the
-        // order the expression directories are found: a check for each name
-        // separately would pass either way.
-        let message = Develop::resolve_target(&lockfile_manifest, &expression_ref, None)
-            .unwrap_err()
-            .to_string();
-        assert!(message.contains("farewell, greet"));
+        let choice = Develop::resolve_target(&lockfile_manifest, &expression_ref, None).unwrap();
+        assert_eq!(
+            ChoiceNames::from(choice),
+            ChoiceNames::Resolved("greet".to_string())
+        );
     }
 
     /// With no Nix expression builds and no manifest builds either, a bare
@@ -815,11 +782,30 @@ mod tests {
         }
     }
 
+    /// The names a [TargetChoice] carries, so that choices compare without
+    /// spelling out each expression build's metadata.
+    #[derive(Debug, PartialEq)]
+    enum ChoiceNames {
+        Resolved(String),
+        Ambiguous(Vec<String>),
+    }
+
+    impl From<TargetChoice> for ChoiceNames {
+        fn from(choice: TargetChoice) -> Self {
+            match choice {
+                TargetChoice::Resolved(target) => ChoiceNames::Resolved(target.to_string()),
+                TargetChoice::Ambiguous(candidates) => ChoiceNames::Ambiguous(
+                    candidates.iter().map(PackageTarget::to_string).collect(),
+                ),
+            }
+        }
+    }
+
     /// In a project with a manifest build alongside two Nix expression
     /// builds, any known name resolves, including the manifest build, which
     /// `refuse_manifest_build` then refuses with its own message. The
-    /// manifest build is never offered as a candidate when the argument
-    /// names an unknown package.
+    /// manifest build is never offered as a candidate, either when the
+    /// argument is omitted or when it names an unknown package.
     #[test]
     fn resolve_target_offers_only_expression_builds() {
         let (flox, tempdir) = flox_instance();
@@ -842,14 +828,27 @@ mod tests {
         let lockfile_manifest = lockfile.migrated_manifest().unwrap();
 
         let cases = [
-            ("greet", Ok("greet".to_string())),
-            ("hello", Ok("hello".to_string())),
             (
-                "typo",
+                Some("greet"),
+                Ok(ChoiceNames::Resolved("greet".to_string())),
+            ),
+            (
+                Some("hello"),
+                Ok(ChoiceNames::Resolved("hello".to_string())),
+            ),
+            (
+                Some("typo"),
                 Err(indoc! {"
                     Package 'typo' not found.
                     Available packages: farewell, greet"}
                 .to_string()),
+            ),
+            (
+                None,
+                Ok(ChoiceNames::Ambiguous(vec![
+                    "farewell".to_string(),
+                    "greet".to_string(),
+                ])),
             ),
         ];
 
@@ -857,9 +856,9 @@ mod tests {
             let actual = Develop::resolve_target(
                 &lockfile_manifest,
                 &expression_ref,
-                Some(package.to_string()),
+                package.map(str::to_string),
             )
-            .map(|target| target.to_string())
+            .map(ChoiceNames::from)
             .map_err(|err| err.to_string());
             assert_eq!(actual, expected, "resolving {package:?}");
         }
