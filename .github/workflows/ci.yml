@@ -568,6 +568,7 @@ jobs:
       - name: "Slack Notification"
         uses: rtCamp/action-slack-notify@e31e87e03dd19038e411e38ae27cbad084a90661 # v2
         env:
+          SLACK_CHANNEL: "#pod-workflows"
           SLACK_TITLE: "Something broke CI for flox/flox on ${{ github.ref_name }}"
           SLACK_FOOTER: "Thank you for caring"
           SLACK_WEBHOOK: "${{ secrets.MANAGED_SLACK_WEBHOOK }}"
