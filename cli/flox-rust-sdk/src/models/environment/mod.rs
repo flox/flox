@@ -2103,7 +2103,7 @@ mod migration_tests {
             .to_string();
 
         expect![[r#"
-            schema-version = "1.18.0"
+            schema-version = "1.19.0"
         "#]]
         .assert_eq(&manifest_contents);
     }

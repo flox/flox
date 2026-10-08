@@ -516,7 +516,7 @@ cmd = "flox install rustPlatform.rustLibSrc"
 pre_cmd = '''
     flox init
     printf '%s\n' \
-        'schema-version = "1.18.0"' \
+        'schema-version = "1.19.0"' \
         '' \
         '[install]' \
         'ripgrep.pkg-path = "ripgrep"' \
@@ -532,7 +532,7 @@ cmd = "flox edit -f manifest.toml"
 pre_cmd = '''
     flox init
     printf '%s\n' \
-        'schema-version = "1.18.0"' \
+        'schema-version = "1.19.0"' \
         '' \
         '[install]' \
         'ripgrep.pkg-path = "ripgrep"' \
@@ -550,7 +550,7 @@ cmd = "flox edit -f manifest.toml"
 pre_cmd = '''
     flox init
     printf '%s\n' \
-        'schema-version = "1.18.0"' \
+        'schema-version = "1.19.0"' \
         '' \
         '[install]' \
         'ripgrep.pkg-path = "ripgrep"' \
@@ -568,7 +568,7 @@ cmd = "flox edit -f manifest.toml"
 pre_cmd = '''
     flox init
     printf '%s\n' \
-        'schema-version = "1.18.0"' \
+        'schema-version = "1.19.0"' \
         '' \
         '[install]' \
         'ripgrep.pkg-path = "ripgrep"' \

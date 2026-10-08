@@ -1,20 +1,21 @@
 use crate::migrate::MigrationError;
-use crate::parsed::v1_17_0::ManifestV1_17_0;
 use crate::parsed::v1_18_0::ManifestV1_18_0;
+use crate::parsed::v1_19_0::ManifestV1_19_0;
 
-/// Migrate a v1.17.0 manifest to a v1.18.0 manifest.
+/// Migrate a v1.18.0 manifest to a v1.19.0 manifest.
 ///
-/// This is a lossless migration: V1_18_0 adds an optional
-/// `options.activate.upgrade-notifications` field. All V1_17_0 manifests are
-/// valid V1_18_0 manifests with `upgrade-notifications` unset.
-pub(crate) fn migrate_manifest_v1_17_0_to_v1_18_0(
-    manifest: ManifestV1_17_0,
-) -> Result<ManifestV1_18_0, MigrationError> {
-    Ok(ManifestV1_18_0 {
-        schema_version: "1.18.0".to_string(),
+/// This is a lossless migration: V1_19_0 adds `options.stability` and a
+/// top-level `pkg-groups` table. All V1_18_0 manifests are valid V1_19_0
+/// manifests with no stability and no package group settings.
+pub(crate) fn migrate_manifest_v1_18_0_to_v1_19_0(
+    manifest: ManifestV1_18_0,
+) -> Result<ManifestV1_19_0, MigrationError> {
+    Ok(ManifestV1_19_0 {
+        schema_version: "1.19.0".to_string(),
         description: manifest.description,
         minimum_cli_version: manifest.minimum_cli_version,
         install: manifest.install,
+        pkg_groups: Default::default(),
         vars: manifest.vars,
         hook: manifest.hook,
         profile: manifest.profile,
@@ -32,11 +33,11 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::parsed::v1_18_0::{ActivateOptions, Options};
+    use crate::parsed::v1_19_0::{Options, PkgGroups};
 
     proptest! {
         // The migration only sets the new schema version and defaults the new
-        // `options.activate.upgrade-notifications` field; everything else is
+        // `options.stability` field and `pkg-groups` table; everything else is
         // carried over unchanged.
         //
         // `expected.options` is built by hand rather than with `Options::from`,
@@ -44,13 +45,14 @@ mod tests {
         // drops or misassigns fails the assertion instead of being mangled
         // identically on both sides.
         #[test]
-        fn migration_v1_17_0_to_v1_18_0_is_lossless(manifest in any::<ManifestV1_17_0>()) {
-            let migrated = migrate_manifest_v1_17_0_to_v1_18_0(manifest.clone()).unwrap();
-            let expected = ManifestV1_18_0 {
-                schema_version: "1.18.0".to_string(),
+        fn migration_v1_18_0_to_v1_19_0_is_lossless(manifest in any::<ManifestV1_18_0>()) {
+            let migrated = migrate_manifest_v1_18_0_to_v1_19_0(manifest.clone()).unwrap();
+            let expected = ManifestV1_19_0 {
+                schema_version: "1.19.0".to_string(),
                 description: manifest.description,
                 minimum_cli_version: manifest.minimum_cli_version,
                 install: manifest.install,
+                pkg_groups: PkgGroups::default(),
                 vars: manifest.vars,
                 hook: manifest.hook,
                 profile: manifest.profile,
@@ -59,10 +61,8 @@ mod tests {
                     allow: manifest.options.allow,
                     semver: manifest.options.semver,
                     cuda_detection: manifest.options.cuda_detection,
-                    activate: ActivateOptions {
-                        mode: manifest.options.activate.mode,
-                        upgrade_notifications: None,
-                    },
+                    activate: manifest.options.activate,
+                    stability: None,
                 },
                 services: manifest.services,
                 build: manifest.build,

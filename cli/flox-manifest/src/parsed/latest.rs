@@ -27,11 +27,12 @@ pub use crate::parsed::v1_16_0::{
     Services,
 };
 // Options are version-specific from V1_18_0 on (`activate` adds
-// `upgrade-notifications`, and `stability` is added), so the latest schema
-// re-exports that copy rather than common's.
-pub use crate::parsed::v1_18_0::{ActivateOptions, Options, PkgGroup, PkgGroups};
+// `upgrade-notifications` in V1_18_0, and V1_19_0 adds `stability`), so the
+// latest schema re-exports those copies rather than common's.
+pub use crate::parsed::v1_18_0::ActivateOptions;
+pub use crate::parsed::v1_19_0::{Options, PkgGroup, PkgGroups};
 use crate::{Manifest, ManifestError, TypedOnly};
-pub type ManifestLatest = crate::parsed::v1_18_0::ManifestV1_18_0;
+pub type ManifestLatest = crate::parsed::v1_19_0::ManifestV1_19_0;
 
 impl ManifestLatest {
     /// Try to return a manifest in its original schema
@@ -141,6 +142,17 @@ impl ManifestLatest {
                 untyped
             },
             KnownSchemaVersion::V1_18_0 => {
+                let mut untyped =
+                    serde_json::to_value(self).map_err(ManifestError::SerializeJson)?;
+                let map = untyped
+                    .as_object_mut()
+                    .expect("all valid manifests should serialize to JSON objects");
+                // Same approach as `pkg-groups` for V1_17_0.
+                map.remove("pkg-groups");
+                map.insert("schema-version".into(), "1.18.0".into());
+                untyped
+            },
+            KnownSchemaVersion::V1_19_0 => {
                 return Ok(Some(self.as_typed_only()));
             },
         };
@@ -1157,14 +1169,14 @@ mod tests {
     }
 
     #[test]
-    fn pkg_groups_rejected_by_v1_17_0_schema() {
-        let manifest = with_schema(KnownSchemaVersion::V1_17_0, indoc! {r#"
+    fn pkg_groups_rejected_by_v1_18_0_schema() {
+        let manifest = with_schema(KnownSchemaVersion::V1_18_0, indoc! {r#"
             [pkg-groups.toplevel]
             stability = "lts"
         "#});
 
         let err = Manifest::parse_toml_typed(&manifest)
-            .expect_err("'pkg-groups' should be rejected by the v1.17.0 schema");
+            .expect_err("'pkg-groups' should be rejected by the v1.18.0 schema");
 
         let ManifestError::Invalid(err) = err else {
             panic!("expected ManifestError::Invalid, got: {err:?}");
@@ -1197,17 +1209,17 @@ mod tests {
     }
 
     #[test]
-    fn downgrades_to_v1_17_0_when_pkg_groups_unused() {
+    fn downgrades_to_v1_18_0_when_pkg_groups_unused() {
         let manifest = ManifestLatest {
             description: Some("a description".to_string()),
             ..Default::default()
         };
 
         let compat = manifest
-            .as_maybe_backwards_compatible(KnownSchemaVersion::V1_17_0, None)
+            .as_maybe_backwards_compatible(KnownSchemaVersion::V1_18_0, None)
             .unwrap();
 
-        assert_eq!(compat.get_schema_version(), KnownSchemaVersion::V1_17_0);
+        assert_eq!(compat.get_schema_version(), KnownSchemaVersion::V1_18_0);
     }
 
     #[test]
@@ -1222,13 +1234,34 @@ mod tests {
             ..Default::default()
         };
 
-        for original_schema in [KnownSchemaVersion::V1_16_0, KnownSchemaVersion::V1_17_0] {
+        for original_schema in [
+            KnownSchemaVersion::V1_16_0,
+            KnownSchemaVersion::V1_17_0,
+            KnownSchemaVersion::V1_18_0,
+        ] {
             let compat = manifest
                 .as_maybe_backwards_compatible(original_schema, None)
                 .unwrap();
 
             assert_eq!(compat.get_schema_version(), KnownSchemaVersion::latest());
         }
+    }
+
+    #[test]
+    fn stays_latest_schema_when_options_stability_used() {
+        let manifest = ManifestLatest {
+            options: Options {
+                stability: Some("lts".to_string()),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let compat = manifest
+            .as_maybe_backwards_compatible(KnownSchemaVersion::V1_18_0, None)
+            .unwrap();
+
+        assert_eq!(compat.get_schema_version(), KnownSchemaVersion::latest());
     }
 
     /// Generates a mock `TypedManifest` for testing purposes.

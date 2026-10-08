@@ -26,6 +26,7 @@ impl CommonFields for Parsed {
             Parsed::V1_16_0(m) => m.options.systems.as_ref(),
             Parsed::V1_17_0(m) => m.options.systems.as_ref(),
             Parsed::V1_18_0(m) => m.options.systems.as_ref(),
+            Parsed::V1_19_0(m) => m.options.systems.as_ref(),
         }
     }
 
@@ -42,6 +43,7 @@ impl CommonFields for Parsed {
             Parsed::V1_16_0(m) => &mut m.options.systems,
             Parsed::V1_17_0(m) => &mut m.options.systems,
             Parsed::V1_18_0(m) => &mut m.options.systems,
+            Parsed::V1_19_0(m) => &mut m.options.systems,
         }
     }
 }
