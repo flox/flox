@@ -112,6 +112,10 @@ See [the organizations concept page](https://flox.dev/docs/concepts/organization
 organizations and how to create them.
 Note that this is a paid feature available with Flox for Teams.
 
+```{.include}
+./include/publish-auth.md
+```
+
 # OPTIONS
 
 `<package>`
