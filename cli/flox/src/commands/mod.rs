@@ -26,6 +26,10 @@ mod push;
 mod run;
 mod search;
 mod send_telemetry;
+pub use send_telemetry::{
+    record_completed_and_spawn_if_due,
+    spawn_if_due as spawn_telemetry_if_due,
+};
 mod services;
 mod services_socket;
 mod show;
@@ -844,7 +848,7 @@ impl UseCommands {
     async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
             UseCommands::Activate(args) => args.handle(config, flox).await,
-            UseCommands::Develop(args) => args.handle(flox).await,
+            UseCommands::Develop(args) => args.handle(&config, flox).await,
             UseCommands::Deactivate(args) => args.handle(config, flox),
             UseCommands::Run(args) => args.handle(config, flox).await,
             UseCommands::Services(args) => args.handle(config, flox).await,

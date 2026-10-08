@@ -5,7 +5,7 @@ use std::process::{Command, Stdio};
 
 use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
-use flox_events::LifecycleFields;
+use flox_config::Config;
 use flox_manifest::lockfile::Lockfile;
 use flox_manifest::{Manifest, MigratedTypedOnly};
 use flox_rust_sdk::flox::Flox;
@@ -95,12 +95,12 @@ impl Develop {
         "develop"
     }
 
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    pub async fn handle(self, config: &Config, flox: Flox) -> Result<()> {
         subcommand_metric!("develop");
-        Self::develop(flox, self).await
+        Self::develop(config, flox, self).await
     }
 
-    async fn develop(mut flox: Flox, opts: Develop) -> Result<()> {
+    async fn develop(config: &Config, mut flox: Flox, opts: Develop) -> Result<()> {
         let Develop {
             environment,
             base_catalog_url_select,
@@ -201,20 +201,9 @@ impl Develop {
             Self::print_dev_env(&flox, &drv_path, target.name().as_ref(), &gc_root_path)?;
 
         // `exec` replaces this process, so the dispatcher's end-of-run
-        // `command_completed` emit (main.rs) never runs; record it here
-        // first, mirroring the in-place handoff `activate` performs before
-        // its own `exec` (activate.rs:741-771).
-        let hub = flox_events::EventsHub::global();
-        if let Err(err) = hub.record_command_completed("develop".to_string(), LifecycleFields {
-            exit_code: 0,
-            duration_ms: None,
-            error_kind: None,
-        }) {
-            debug!(error = %err, "Failed to record v2 cli.command_completed event before exec");
-        }
-        if let Err(err) = hub.flush(flox_events::force_flush_requested()) {
-            debug!(error = %err, "Failed to flush v2 events before exec");
-        }
+        // `command_completed` emit (main.rs) never runs; hand off first,
+        // mirroring `activate`.
+        super::record_completed_and_spawn_if_due(config, "develop");
 
         // Mirrors 'flox activate -c': the command string runs in a
         // non-interactive subshell — no ~/.bashrc, no prompt, no

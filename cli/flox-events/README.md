@@ -322,7 +322,9 @@ if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentDele
 - Events are buffered on disk (`events-v2.json` in the data dir, one
   JSON object per line) and sent in batches of 100 once the buffer is
   older than two minutes (10 seconds in CI); the first send from a data
-  dir is immediate. Sends start from a flush-on-drop guard in `main`. A
+  dir is immediate. Sends happen in a detached `send-telemetry` child,
+  spawned from `main` at command exit, or before the `exec` in `activate`
+  and `develop`; the spawning process never sends in-process. A
   failed send keeps events buffered for a later retry. Two buffer
   consequences shape the contract: the buffer caps at 1000 events with
   oldest-first eviction, so a domain or completion row can outlive the
@@ -334,11 +336,12 @@ if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentDele
   versions, an event can land later than the release that minted it.
 - Lifecycle placement matters. `flox activate` replaces the process
   with `exec()`: anything recorded after that line is dead code in the
-  parent, which is why `activate.rs` records completion and requests a
-  flush before exec'ing. (An unforced flush still waits for buffer
-  expiry — events not yet due are delivered by a later invocation.)
-  When instrumenting a new path, confirm the emission is reached on
-  every branch — including early exits and hand-off paths.
+  parent, which is why `activate.rs` and `develop.rs` record completion
+  and, if the buffer is due, spawn the detached sender before exec'ing.
+  (The sender outlives the exec; events not yet due are delivered by a
+  later invocation.) When instrumenting a new path, confirm the
+  emission is reached on every branch — including early exits and
+  hand-off paths.
 - `record_command_completed` is single-shot per client install: the
   first recorder wins and later calls are silently dropped, so the
   pre-exec emit and the dispatcher cannot double-count. Over-emission
