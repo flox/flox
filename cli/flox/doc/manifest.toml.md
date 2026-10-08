@@ -537,6 +537,8 @@ so it cannot prompt for input and its output does not appear in your
 terminal;
 output is captured in the environment's activation logs.
 A failing `on-deactivate` script is logged and never blocks deactivation.
+A new activation of the environment that has to run `on-activate` waits for
+a running `on-deactivate` to finish first.
 
 The script is best-effort: it does not run if the activation's background
 process is killed or the machine shuts down uncleanly.

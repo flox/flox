@@ -8,6 +8,7 @@ use flox_core::activate::context::{AttachCtx, AttachProjectCtx};
 use flox_core::activate::vars::FLOX_EXECUTIVE_VERBOSITY_VAR;
 use flox_core::activations::{
     acquire_activations_json_lock,
+    acquire_teardown_lock,
     read_activations_json,
     state_json_path,
     write_activations_json,
@@ -301,11 +302,14 @@ fn run_event_loop(
                     // defers teardown to the executive). Remove any such
                     // start from state.json under the lock, then tear it down
                     // with the lock released: its hook.on-deactivate has no
-                    // timeout and must not block new activations. The write
-                    // retriggers StateFileChanged, which finds nothing
-                    // modified and takes the write-free branch.
+                    // timeout and must not block attaching to other starts.
+                    // The teardown lock, taken first, makes a new start wait
+                    // for the hook. The write retriggers StateFileChanged,
+                    // which finds nothing modified and takes the write-free
+                    // branch.
                     let removal = activations.remove_orphaned_starts();
                     if removal.modified {
+                        let teardown_lock = acquire_teardown_lock(&activation_state_dir)?;
                         write_activations_json(&activations, &state_json_path, lock)?;
                         sweep_orphaned_starts(
                             subsystem_verbosity,
@@ -313,6 +317,7 @@ fn run_event_loop(
                             &project_ctx,
                             &activation_state_dir,
                             removal.orphaned,
+                            teardown_lock,
                         );
                     } else {
                         drop(lock);
@@ -529,20 +534,23 @@ fn handle_process_exited(
             coordinator
                 .ensure_monitoring_pids(other_attached_pids)
                 .context("failed to ensure monitoring PIDs")?;
+            let teardown_lock = acquire_teardown_lock(activation_state_dir)?;
             drop(lock);
 
             // The exited PID may have been the last attachment for its start
             // even though other starts still have attachments. cleanup_pid
             // removed any such start from state.json under its lock; tear
-            // them down now that no lock is held, because their
-            // hook.on-deactivate has no timeout and must not block new
-            // activations.
+            // them down now that the state.json lock is released, because
+            // their hook.on-deactivate has no timeout and must not block
+            // attaching to other starts. The teardown lock, taken before the
+            // release, makes a new start wait for the hooks.
             sweep_orphaned_starts(
                 subsystem_verbosity,
                 initial_attach_ctx,
                 project_ctx,
                 activation_state_dir,
                 orphaned,
+                teardown_lock,
             );
 
             Ok(false)
@@ -763,6 +771,10 @@ fn cleanup_all(
     }
 
     shut_down_process_compose(process_compose_bin, socket_path.as_ref());
+    // Take the teardown lock while still holding the state.json lock, so a
+    // new activation that finds no state after the release below waits for
+    // the hooks before running its own hook.on-activate.
+    let teardown_lock = acquire_teardown_lock(activation_state_dir_path.as_ref())?;
     let cleanup_path = rename_state_for_removal(activation_state_dir_path.as_ref())?;
     // The rename already detached the state from new activations (they
     // recreate the directory under its original name), so the lock guards
@@ -783,6 +795,7 @@ fn cleanup_all(
         project_ctx,
         &cleanup_path,
         orphaned,
+        teardown_lock,
     );
 
     fs::remove_dir_all(&cleanup_path).context("couldn't remove activations dir")?;
