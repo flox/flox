@@ -371,10 +371,8 @@ impl FloxArgs {
             &config.flox.config_dir,
             &config.flox.cache_dir,
         );
-        let uses_token_auth = !matches!(
-            config.flox.floxhub_authn_mode,
-            Some(flox_config::AuthnMode::Kerberos)
-        );
+        let authn_mode = config.effective_authn_mode(&floxhub);
+        let uses_token_auth = matches!(authn_mode, flox_config::AuthnMode::Token);
         let should_store_credentials = uses_token_auth && !self.is_prompt_hook_flow();
         let credential = if should_store_credentials {
             let resolved = stores.resolve(&config);
@@ -390,7 +388,7 @@ impl FloxArgs {
             }
             resolved.context
         } else {
-            auth_context_from_config(&config)
+            auth_context_from_config(&config, &authn_mode)
         };
 
         self.warn_if_logged_out(&config, &credential);
@@ -650,7 +648,8 @@ impl FloxArgs {
     }
 }
 
-/// The credential named by the already-merged config.
+/// The credential named by the already-merged config and the effective
+/// authn mode.
 ///
 /// Kerberos ignores the FloxHub token entirely and resolves a principal from
 /// the ccache instead; every other mode routes the merged `floxhub_token` by
@@ -662,8 +661,8 @@ impl FloxArgs {
 /// it from the environment or a config file — so there is nothing to defer;
 /// the keyring is the expensive case and it is handled by
 /// [CredentialStores::resolve].
-fn auth_context_from_config(config: &Config) -> AuthContext {
-    if let Some(flox_config::AuthnMode::Kerberos) = config.flox.floxhub_authn_mode {
+fn auth_context_from_config(config: &Config, authn_mode: &flox_config::AuthnMode) -> AuthContext {
+    if let flox_config::AuthnMode::Kerberos = authn_mode {
         return AuthContext::new_kerberos();
     }
     AuthContext::new_from_token(
@@ -2305,18 +2304,13 @@ mod auth_context_from_config_tests {
 
     use super::*;
 
-    fn kerberos_config() -> Config {
-        let mut config = Config::default();
-        config.flox.floxhub_authn_mode = Some(flox_config::AuthnMode::Kerberos);
-        config
-    }
-
     /// Kerberos answers every startup question without a ticket, so the GSSAPI
     /// acquire must not happen until something needs a SPNEGO token. Reaching
     /// the ccache here would also make the test depend on a Kerberized host.
     #[test]
     fn kerberos_defers_the_ccache_read() {
-        let credential = auth_context_from_config(&kerberos_config());
+        let credential =
+            auth_context_from_config(&Config::default(), &flox_config::AuthnMode::Kerberos);
 
         assert_eq!(credential.cached_facts(), CachedFacts {
             logged_in: false,
@@ -2343,7 +2337,7 @@ mod auth_context_from_config_tests {
         let mut config = Config::default();
         config.flox.floxhub_token = Some("flox_pat_config-token".to_string());
 
-        let credential = auth_context_from_config(&config);
+        let credential = auth_context_from_config(&config, &flox_config::AuthnMode::Token);
 
         assert_eq!(credential.token_secret(), Some("flox_pat_config-token"));
     }
@@ -2355,7 +2349,7 @@ mod auth_context_from_config_tests {
         let mut config = Config::default();
         config.flox.floxhub_token = Some(String::new());
 
-        let credential = auth_context_from_config(&config);
+        let credential = auth_context_from_config(&config, &flox_config::AuthnMode::Token);
 
         assert!(!credential.cached_facts().logged_in);
         assert!(credential.is_unauthenticated());
