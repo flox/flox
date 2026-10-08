@@ -1577,7 +1577,6 @@ dependencies = [
  "flox-rust-sdk",
  "flox-test-utils",
  "floxhub-client",
- "fslock",
  "futures",
  "http 1.4.0",
  "httpmock",
@@ -1645,7 +1644,6 @@ dependencies = [
  "expect-test",
  "flate2",
  "flox-core",
- "fslock",
  "glob",
  "indoc",
  "is_executable",
@@ -1702,7 +1700,6 @@ dependencies = [
  "blake3",
  "crossterm 0.29.0",
  "derive_more",
- "fslock",
  "indoc",
  "itertools 0.14.0",
  "log",
@@ -1732,7 +1729,7 @@ name = "flox-events"
 version = "0.0.0"
 dependencies = [
  "anyhow",
- "fslock",
+ "flox-core",
  "pretty_assertions",
  "reqwest 0.12.28",
  "serde",
@@ -1789,7 +1786,6 @@ dependencies = [
  "flox-manifest",
  "flox-test-utils",
  "floxhub-client",
- "fslock",
  "futures",
  "git-url-parse",
  "http 1.4.0",
@@ -1927,16 +1923,6 @@ name = "fs_extra"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "42703706b716c37f96a77aea830392ad231f44c9e9a67872fa5548707e11b11c"
-
-[[package]]
-name = "fslock"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04412b8935272e3a9bae6f48c7bfff74c2911f60525404edfdd28e49884c3bfb"
-dependencies = [
- "libc",
- "winapi",
-]
 
 [[package]]
 name = "futures"

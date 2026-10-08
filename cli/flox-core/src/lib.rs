@@ -14,11 +14,11 @@ pub mod vars;
 mod version;
 
 use std::fmt::Display;
+use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
-use fslock::LockFile;
 use serde::Serialize;
 pub use version::Version;
 
@@ -36,6 +36,18 @@ pub fn path_hash(p: impl AsRef<Path>) -> String {
     let mut hash = blake3_hex(p.as_ref().as_os_str().as_bytes());
     hash.truncate(N_HASH_CHARS);
     hash
+}
+
+/// Opens `path` for use as a lock file, creating it if it doesn't exist.
+///
+/// Lock the returned file with [File::lock] or [File::try_lock].
+/// The lock is released when the file is dropped.
+pub fn open_lock_file(path: impl AsRef<Path>) -> std::io::Result<File> {
+    File::options()
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(path)
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -63,15 +75,15 @@ pub enum WriteError {
 ///
 /// First the value is written to a temporary file,
 /// and then it is renamed so the write appears atomic.
-/// This also takes a [LockFile] argument to ensure that the write can only be
+/// This also takes the locked lock file to ensure that the write can only be
 /// performed when the lock is acquired.
-/// It is a bug if you pass a [LockFile] that doesn't correspond to the file, as
+/// It is a bug if you pass a lock file that doesn't correspond to the file, as
 /// that is essentially bypassing the lock.
 /// `path` must have a parent directory.
 pub fn serialize_atomically<T>(
     value: &T,
     path: &impl AsRef<Path>,
-    _lock: LockFile,
+    _lock: File,
 ) -> Result<(), WriteError>
 where
     T: ?Sized + Serialize,

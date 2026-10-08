@@ -4,7 +4,7 @@
 //! including spawning the executive process, running hooks, and
 //! managing process-compose for services.
 
-use std::fs::DirBuilder;
+use std::fs::{DirBuilder, File};
 use std::os::unix::fs::DirBuilderExt;
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -21,7 +21,6 @@ use flox_core::activations::{
     write_activations_json,
 };
 use flox_core::process_compose::manager_responds;
-use fslock::LockFile;
 use indoc::{formatdoc, indoc};
 use nix::sys::signal::{Signal, kill};
 use nix::sys::wait::{WaitPidFlag, WaitStatus, waitpid};
@@ -65,7 +64,7 @@ pub fn start(
     start_id: StartIdentifier,
     activations: &mut ActivationState,
     activations_json_path: &Path,
-    lock: LockFile,
+    lock: File,
 ) -> Result<StartOrAttachResult, anyhow::Error> {
     let start_state_dir = start_id.start_state_dir(&context.activation_state_dir)?;
     DirBuilder::new()

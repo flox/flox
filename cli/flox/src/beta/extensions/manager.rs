@@ -2,7 +2,7 @@
 //!
 //! `install_local`, `remove`, and `list` sit on top of the
 //! [`super::layout`] paths and the [`super::manifest`] types. A small
-//! [`LockGuard`] RAII wrapper around `fslock::LockFile` serializes
+//! [`LockGuard`] RAII wrapper around a locked [`fs::File`] serializes
 //! mutating operations against the same managed directory; `list` is
 //! deliberately lock-free.
 //!
@@ -19,8 +19,8 @@
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 
+use flox_core::open_lock_file;
 use flox_rust_sdk::flox::Flox;
-use fslock::LockFile;
 use thiserror::Error;
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
@@ -45,13 +45,13 @@ pub enum LockError {
     Open {
         path: PathBuf,
         #[source]
-        source: fslock::Error,
+        source: io::Error,
     },
     #[error("failed to acquire lock at {path}: {source}")]
     Acquire {
         path: PathBuf,
         #[source]
-        source: fslock::Error,
+        source: io::Error,
     },
 }
 
@@ -107,7 +107,7 @@ pub enum ListError {
     Io(#[from] io::Error),
 }
 
-/// RAII guard around an `fslock::LockFile`. Drops the lock when dropped.
+/// RAII guard around a locked [`fs::File`]. Drops the lock when dropped.
 ///
 /// The full type-state guard pattern in
 /// [`flox_rust_sdk::providers::upgrade_checks`] is overkill for our use case —
@@ -115,7 +115,7 @@ pub enum ListError {
 /// need separate read/write capabilities at the type level.
 #[derive(Debug)]
 pub struct LockGuard {
-    _lock: LockFile,
+    _lock: fs::File,
     path: PathBuf,
 }
 
@@ -126,10 +126,10 @@ impl LockGuard {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).map_err(|source| LockError::Open {
                 path: path.to_path_buf(),
-                source: fslock::Error::from(source),
+                source,
             })?;
         }
-        let mut lock = LockFile::open(path).map_err(|source| LockError::Open {
+        let lock = open_lock_file(path).map_err(|source| LockError::Open {
             path: path.to_path_buf(),
             source,
         })?;

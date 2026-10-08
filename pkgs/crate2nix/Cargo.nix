@@ -5245,10 +5245,6 @@ rec {
             packageId = "floxhub-client";
           }
           {
-            name = "fslock";
-            packageId = "fslock";
-          }
-          {
             name = "futures";
             packageId = "futures";
           }
@@ -5483,6 +5479,10 @@ rec {
             features = [ "tests" ];
           }
           {
+            name = "http";
+            packageId = "http 1.4.0";
+          }
+          {
             name = "httpmock";
             packageId = "httpmock";
             usesDefaultFeatures = false;
@@ -5571,10 +5571,6 @@ rec {
           {
             name = "flox-core";
             packageId = "flox-core";
-          }
-          {
-            name = "fslock";
-            packageId = "fslock";
           }
           {
             name = "glob";
@@ -5806,10 +5802,6 @@ rec {
             features = [ "as_ref" "deref" "deref_mut" "display" "from" "from_str" ];
           }
           {
-            name = "fslock";
-            packageId = "fslock";
-          }
-          {
             name = "itertools";
             packageId = "itertools 0.14.0";
           }
@@ -5928,8 +5920,8 @@ rec {
             packageId = "anyhow";
           }
           {
-            name = "fslock";
-            packageId = "fslock";
+            name = "flox-core";
+            packageId = "flox-core";
           }
           {
             name = "reqwest";
@@ -6163,10 +6155,6 @@ rec {
           {
             name = "floxhub-client";
             packageId = "floxhub-client";
-          }
-          {
-            name = "fslock";
-            packageId = "fslock";
           }
           {
             name = "futures";
@@ -6706,30 +6694,6 @@ rec {
           "Denis Kurilenko <webdesus@gmail.com>"
         ];
 
-      };
-      "fslock" = rec {
-        crateName = "fslock";
-        version = "0.2.1";
-        edition = "2018";
-        sha256 = "1yrv9j44k3njzpnh8m2jc0gr3hklzyzwfj3gmsdklbi76n4jnh84";
-        dependencies = [
-          {
-            name = "libc";
-            packageId = "libc";
-            usesDefaultFeatures = false;
-            target = { target, features }: (target."unix" or false);
-          }
-          {
-            name = "winapi";
-            packageId = "winapi";
-            target = { target, features }: (target."windows" or false);
-            features = [ "minwindef" "minwinbase" "winbase" "errhandlingapi" "winerror" "winnt" "synchapi" "handleapi" "fileapi" "processthreadsapi" ];
-          }
-        ];
-        features = {
-          "default" = [ "std" ];
-        };
-        resolvedDefaultFeatures = [ "default" "std" ];
       };
       "futures" = rec {
         crateName = "futures";
@@ -21312,7 +21276,7 @@ rec {
         features = {
           "debug" = [ "impl-debug" ];
         };
-        resolvedDefaultFeatures = [ "cfg" "consoleapi" "errhandlingapi" "evntrace" "fileapi" "handleapi" "impl-default" "in6addr" "inaddr" "libloaderapi" "memoryapi" "minwinbase" "minwindef" "ntsecapi" "processenv" "processthreadsapi" "psapi" "synchapi" "winbase" "windef" "winerror" "winioctl" "winnt" "winuser" ];
+        resolvedDefaultFeatures = [ "cfg" "consoleapi" "evntrace" "handleapi" "impl-default" "in6addr" "inaddr" "libloaderapi" "memoryapi" "minwinbase" "ntsecapi" "processenv" "processthreadsapi" "psapi" "synchapi" "winbase" "windef" "winerror" "winioctl" "winuser" ];
       };
       "winapi-i686-pc-windows-gnu" = rec {
         crateName = "winapi-i686-pc-windows-gnu";

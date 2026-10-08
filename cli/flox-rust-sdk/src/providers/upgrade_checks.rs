@@ -1,7 +1,7 @@
-use std::fs;
+use std::fs::{self, File, TryLockError};
 use std::path::{Path, PathBuf};
 
-use fslock::LockFile;
+use flox_core::open_lock_file;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use time::OffsetDateTime;
@@ -12,7 +12,7 @@ use crate::models::environment::UpgradeResult;
 #[derive(Debug, Error)]
 pub enum UpgradeChecksError {
     #[error("Failed to acquire lock")]
-    Lock(#[source] fslock::Error),
+    Lock(#[source] std::io::Error),
     #[error("Failed to read upgrade information")]
     Read(#[source] std::io::Error),
     #[error("Failed to write upgrade information")]
@@ -37,7 +37,7 @@ pub struct UpgradeInformation {
 /// A guard is created in an [Unlocked] state,
 /// in which the upgrade information can be read but not written.
 /// The guard can be locked to gain exclusive access to the file
-/// via a [LockFile] file lock,
+/// via a file lock,
 /// allowing the upgrade information to be mutated
 /// and [Self::commit]ed back to the file.
 #[derive(Debug)]
@@ -60,7 +60,7 @@ pub struct Unlocked;
 /// to the underlying locked upgrade information file.
 #[derive(Debug)]
 pub struct Locked {
-    _lock: LockFile,
+    _lock: File,
 }
 
 /// Operations valid for a guard of any state.
@@ -173,16 +173,16 @@ fn upgrade_information_path(cache_dir: impl AsRef<Path>) -> PathBuf {
 /// Returns [None] if the lock is already taken, without waiting.
 fn try_acquire_lock(
     upgrade_information_path: impl AsRef<Path>,
-) -> Result<Option<LockFile>, UpgradeChecksError> {
+) -> Result<Option<File>, UpgradeChecksError> {
     let lock_path = upgrade_information_path.as_ref().with_extension("lock");
 
-    let mut lock = LockFile::open(&lock_path).map_err(UpgradeChecksError::Lock)?;
+    let lock = open_lock_file(&lock_path).map_err(UpgradeChecksError::Lock)?;
 
-    if !lock.try_lock().map_err(UpgradeChecksError::Lock)? {
-        return Ok(None);
-    };
-
-    Ok(Some(lock))
+    match lock.try_lock() {
+        Ok(()) => Ok(Some(lock)),
+        Err(TryLockError::WouldBlock) => Ok(None),
+        Err(TryLockError::Error(err)) => Err(UpgradeChecksError::Lock(err)),
+    }
 }
 
 /// Reads an [UpgradeInformation] from a file at `upgrade_information_path`.

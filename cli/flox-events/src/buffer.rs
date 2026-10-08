@@ -1,10 +1,10 @@
 use std::collections::VecDeque;
-use std::fs::{File, OpenOptions};
+use std::fs::{File, OpenOptions, TryLockError};
 use std::io::{Read, Write};
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use fslock::LockFile;
+use flox_core::open_lock_file;
 use time::{Duration, OffsetDateTime};
 use tracing::debug;
 
@@ -22,7 +22,7 @@ const MAX_BUFFER_SIZE: usize = 1000;
 #[derive(Debug)]
 pub struct EventsBuffer {
     storage: File,
-    _file_lock: LockFile,
+    _file_lock: File,
     buffer: VecDeque<Event>,
     /// Lines this binary could not parse — almost always an event type
     /// written by a newer flox sharing the data dir. Kept verbatim so a
@@ -42,7 +42,7 @@ impl EventsBuffer {
             )
         })?;
 
-        let mut events_lock = LockFile::open(&data_dir.join(EVENTS_LOCK_FILE_NAME))
+        let events_lock = open_lock_file(data_dir.join(EVENTS_LOCK_FILE_NAME))
             .context("Could not open v2 events lock file")?;
         events_lock
             .lock()
@@ -118,13 +118,14 @@ impl EventsBuffer {
             )
         })?;
 
-        let mut events_lock = LockFile::open(&data_dir.join(EVENTS_LOCK_FILE_NAME))
+        let events_lock = open_lock_file(data_dir.join(EVENTS_LOCK_FILE_NAME))
             .context("Could not open v2 events lock file")?;
-        if !events_lock
-            .try_lock()
-            .context("Could not try-lock v2 events buffer")?
-        {
-            return Ok(None);
+        match events_lock.try_lock() {
+            Ok(()) => {},
+            Err(TryLockError::WouldBlock) => return Ok(None),
+            Err(TryLockError::Error(err)) => {
+                return Err(err).context("Could not try-lock v2 events buffer");
+            },
         }
 
         let buffer_file_path = data_dir.join(EVENTS_BUFFER_FILE_NAME);

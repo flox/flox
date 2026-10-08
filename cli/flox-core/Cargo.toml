@@ -11,7 +11,6 @@ anyhow.workspace = true
 blake3.workspace = true
 crossterm.workspace = true
 derive_more.workspace = true
-fslock.workspace = true
 itertools.workspace = true
 log.workspace = true
 # should be a dev-dependency but test doesn't apply across crates

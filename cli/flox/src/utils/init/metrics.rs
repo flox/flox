@@ -2,7 +2,7 @@ use std::fs;
 use std::path::Path;
 
 use anyhow::Result;
-use fslock::LockFile;
+use flox_core::open_lock_file;
 use indoc::formatdoc;
 use tracing::debug;
 
@@ -18,7 +18,7 @@ pub fn init_telemetry_uuid(data_dir: impl AsRef<Path>, cache_dir: impl AsRef<Pat
 
     // set a lock to avoid initializing telemetry multiple times from concurrent processes
     // the lock is released when the `metrics_lock` is dropped.
-    let mut metrics_lock = LockFile::open(&cache_dir.as_ref().join(METRICS_LOCK_FILE_NAME))?;
+    let metrics_lock = open_lock_file(cache_dir.as_ref().join(METRICS_LOCK_FILE_NAME))?;
     metrics_lock.lock()?;
 
     let uuid_path = data_dir.as_ref().join(METRICS_UUID_FILE_NAME);

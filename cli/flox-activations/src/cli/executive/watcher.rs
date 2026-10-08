@@ -8,12 +8,12 @@
 //! On macOS we slum it and call `/bin/ps` rather than using the private `libproc.h`
 //! API, but mostly for build-complexity reasons.
 
+use std::fs::File;
 use std::path::Path;
 
 use anyhow::Result;
 use flox_core::activations::{ActivationState, StartIdentifier, write_activations_json};
 use flox_core::proc_status::pid_is_running;
-use fslock::LockFile;
 use time::OffsetDateTime;
 use tracing::trace;
 
@@ -22,7 +22,7 @@ type Error = anyhow::Error;
 /// A deserialized state.json together with a lock preventing it from
 /// being modified
 /// TODO: there's probably a cleaner way to do this
-pub type LockedActivationState = (ActivationState, LockFile);
+pub type LockedActivationState = (ActivationState, File);
 
 /// Outcome of [cleanup_pid].
 #[derive(Debug)]

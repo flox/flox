@@ -1,4 +1,4 @@
-use std::fs;
+use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow, bail};
@@ -16,7 +16,6 @@ use flox_core::proc_status::read_pid_status;
 use flox_core::process_compose::manager_responds;
 use flox_core::sentry::init_sentry;
 use flox_core::traceable_path;
-use fslock::LockFile;
 use log_gc::{spawn_heartbeat_log, spawn_logs_gc_threads};
 use nix::sys::signal::Signal::SIGUSR1;
 use nix::sys::signal::kill;
@@ -669,7 +668,7 @@ fn handle_start_services_signal(
 /// first. Returns `Ok` only for the benign case where a new activation has
 /// taken over.
 fn cleanup_on_no_state(
-    _hold_the_lock: LockFile,
+    _hold_the_lock: File,
     discovered_during: &str,
     state_json_path: &Path,
     process_compose_bin: &Path,

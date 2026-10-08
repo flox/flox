@@ -5,8 +5,8 @@ use std::str::FromStr;
 use anyhow::{Context, Result};
 use bpaf::Bpaf;
 use flox_config::{Config, FLOX_CONFIG_FILE, ReadWriteError};
+use flox_core::open_lock_file;
 use flox_rust_sdk::flox::Flox;
-use fslock::LockFile;
 use indoc::indoc;
 use serde::Serialize;
 use serde_json::Value;
@@ -29,8 +29,12 @@ impl ResetMetrics {
     #[instrument(name = "reset-metrics", skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("reset-metrics");
-        let mut metrics_lock = LockFile::open(&flox.cache_dir.join(METRICS_LOCK_FILE_NAME))?;
-        tokio::task::spawn_blocking(move || metrics_lock.lock()).await??;
+        let metrics_lock = open_lock_file(flox.cache_dir.join(METRICS_LOCK_FILE_NAME))?;
+        // Hand the file back out of the closure, so the lock is held while
+        // the metrics files are removed rather than dropped with the closure.
+        let _metrics_lock =
+            tokio::task::spawn_blocking(move || metrics_lock.lock().map(|()| metrics_lock))
+                .await??;
 
         if let Err(err) =
             tokio::fs::remove_file(flox.cache_dir.join(METRICS_EVENTS_FILE_NAME)).await
