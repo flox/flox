@@ -798,10 +798,8 @@ pub fn str_to_package_name(
 }
 
 /// Shown in place of the `detail` of a 401 from `/resolve` that carries none.
-/// Catalog-server always sends one, so these aren't expected to be reached;
-/// they only guard against something in front of the catalog (a proxy or
-/// gateway) answering 401 with a body that isn't an `ErrorResponse`, or an
-/// empty configured message.
+/// Catalog-server always sends one, so these only guard against an empty
+/// configured message.
 const AUTH_REQUIRED_FALLBACK: &str = "Authentication is required to resolve packages.";
 const AUTH_REJECTED_FALLBACK: &str = "the login is invalid, expired, or revoked.";
 
@@ -1750,6 +1748,7 @@ pub mod tests {
             catalog: "nixpkgs".to_string(),
             attr_path: vec!["hello".to_string()],
             build_type: api_types::BuildType::Manifest,
+            deep_overrides: None,
             source: api_types::LockedGitSource {
                 type_: "git".to_string(),
                 url: "https://github.com/NixOS/nixpkgs".to_string(),
@@ -1913,6 +1912,7 @@ pub mod tests {
             base_catalog_rev_date: None,
             build_type: None,
             cache_uri: None,
+            deep_overrides: None,
             derivation: api_types::PackageDerivation {
                 broken: None,
                 description: None,

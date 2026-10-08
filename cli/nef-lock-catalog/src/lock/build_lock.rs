@@ -222,6 +222,7 @@ mod tests {
             attr_path: attr_path.iter().map(|s| s.to_string()).collect(),
             build_type: BuildType::Nef,
             catalog: catalog.to_string(),
+            deep_overrides: None,
             inputs: None,
             locked_inputs_hash: "sha256-test".to_string(),
             source: LockedGitSource {
