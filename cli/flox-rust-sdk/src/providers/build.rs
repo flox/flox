@@ -982,7 +982,8 @@ impl PackageTarget {
 }
 
 pub struct PackageTargets {
-    targets: HashMap<String, PackageTargetKind>,
+    /// Ordered by name, so that listings and build order are deterministic.
+    targets: BTreeMap<String, PackageTargetKind>,
 }
 
 impl PackageTargets {
@@ -1005,7 +1006,7 @@ impl PackageTargets {
         let nix_expression_packages = get_nix_expression_targets(expression_ref)
             .map_err(|e| PackageTargetError::new(e.to_string()))?;
 
-        let mut targets = HashMap::new();
+        let mut targets = BTreeMap::new();
 
         targets.extend(
             environment_packages
@@ -1571,6 +1572,27 @@ mod tests {
     use crate::models::environment::{Environment, copy_dir_recursive};
     use crate::providers::catalog::test_helpers::catalog_replay_client;
     use crate::providers::git::{GitCommandProvider, GitProvider};
+
+    #[test]
+    fn package_targets_select_keeps_the_order_given() {
+        let manifest_build = PackageTargetKind::ManifestBuild { sandbox: None };
+        let targets = PackageTargets {
+            targets: BTreeMap::from([
+                ("hello".to_string(), manifest_build.clone()),
+                ("hello2".to_string(), manifest_build.clone()),
+            ]),
+        };
+
+        for names in [["hello", "hello2"], ["hello2", "hello"]] {
+            let selected: Vec<String> = targets
+                .select(&names)
+                .unwrap()
+                .iter()
+                .map(PackageTarget::to_string)
+                .collect();
+            assert_eq!(selected, names, "selecting {names:?}");
+        }
+    }
 
     #[test]
     fn build_failure_slug_is_namespaced() {

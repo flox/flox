@@ -322,7 +322,6 @@ impl Develop {
             }),
             1 => Ok(expression_targets.remove(0)),
             _ => {
-                expression_targets.sort_by_key(|target| target.name().to_string());
                 let candidates = expression_targets
                     .iter()
                     .map(PackageTarget::to_string)
@@ -729,10 +728,9 @@ mod tests {
         let lockfile: Lockfile = env.lockfile(&flox).unwrap().into();
         let lockfile_manifest = lockfile.migrated_manifest().unwrap();
 
-        // Joined in sorted order ("farewell" before "greet"), not insertion
-        // or `HashMap` iteration order: a `--partial` check for each name
-        // separately would still pass if the sort in `resolve_target` were
-        // deleted, since both names appear either way.
+        // Joined in name order ("farewell" before "greet") rather than the
+        // order the expression directories are found: a check for each name
+        // separately would pass either way.
         let message = Develop::resolve_target(&lockfile_manifest, &expression_ref, None)
             .unwrap_err()
             .to_string();

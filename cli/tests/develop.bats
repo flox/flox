@@ -204,8 +204,8 @@ EOF
 
   run "$FLOX_BIN" develop -d "$PROJECT_DIR"
   assert_failure
-  # Sorted, joined substring: passes iff the candidates are sorted before
-  # being joined, rather than left in `HashMap` iteration order.
+  # Sorted, joined substring: passes iff the candidates are listed in name
+  # order rather than in the order the expression directories are found.
   assert_output --partial "farewell, greet"
 }
 
