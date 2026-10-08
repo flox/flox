@@ -681,7 +681,6 @@ mod tests {
                 auth_context.clone(),
                 Some(Uuid::new_v4()),
                 invocation_id,
-                None,
             )
             .expect("client initializes");
 

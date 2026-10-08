@@ -43,6 +43,8 @@ use floxhub_client::{
     PackageGroup,
     PackageSystem,
     ResolutionMessage,
+    ResolveAuthError,
+    ResolveError,
 };
 use indoc::{formatdoc, indoc};
 use thiserror::Error;
@@ -141,6 +143,10 @@ pub enum RunError {
          {1}"
     )]
     ResolutionMessage(String, String),
+
+    /// Resolution requires a valid FloxHub login.
+    #[error(transparent)]
+    Auth(#[from] ResolveAuthError),
 
     /// Transport/network failure during catalog resolve.
     #[error(
@@ -782,7 +788,10 @@ async fn exec_run(run_args: RunArgs, flox: &Flox) -> Result<()> {
         .floxhub_client
         .resolve(vec![package_group])
         .await
-        .map_err(|_| RunError::CatalogError(pkg_spec.clone()))?;
+        .map_err(|err| match err {
+            ResolveError::Auth(err) => RunError::from(err),
+            ResolveError::FloxhubClientError(_) => RunError::CatalogError(pkg_spec.clone()),
+        })?;
 
     // 4. Extract and classify the resolution result.
     let group = resolved_groups

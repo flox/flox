@@ -28,6 +28,37 @@ pub enum ByCommandError {
 pub enum ResolveError {
     #[error("catalog error")]
     FloxhubClientError(#[from] FloxhubClientError),
+    #[error(transparent)]
+    Auth(#[from] ResolveAuthError),
+}
+
+/// The catalog refused to resolve without a valid FloxHub login (HTTP 401).
+#[derive(Clone, Debug, PartialEq, Error)]
+pub enum ResolveAuthError {
+    /// No usable credential was sent. The first line is the catalog's
+    /// explanation, so the server alone decides whether login is required.
+    #[error(
+        "{detail}\n\
+         For CI and automation, see https://go.flox.dev/auth\n\
+         Log in with 'flox auth login'."
+    )]
+    Required { detail: String },
+    /// The credential's expiry, known locally, has passed.
+    #[error(
+        "Your FloxHub login has expired.\n\
+         For CI and automation, see https://go.flox.dev/auth\n\
+         Log in again with 'flox auth login'."
+    )]
+    Expired,
+    /// A credential was sent and rejected: it is invalid, expired, or
+    /// revoked, which can't always be known locally. The catalog's
+    /// explanation follows the colon.
+    #[error(
+        "Authentication rejected: {detail}\n\
+         For CI and automation, see https://go.flox.dev/auth\n\
+         Log in again with 'flox auth login'."
+    )]
+    Rejected { detail: String },
 }
 
 #[derive(Debug, Error)]

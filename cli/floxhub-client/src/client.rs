@@ -32,7 +32,14 @@ use crate::MapApiErrorExt;
 use crate::accounts::AccountsApiClient;
 use crate::auth::AuthContext;
 use crate::config::FloxhubClientConfig;
-use crate::error::{ByCommandError, FloxhubClientError, ResolveError, SearchError, VersionsError};
+use crate::error::{
+    ByCommandError,
+    FloxhubClientError,
+    ResolveAuthError,
+    ResolveError,
+    SearchError,
+    VersionsError,
+};
 use crate::mock::MockGuard;
 use crate::types::*;
 
@@ -335,15 +342,6 @@ impl CatalogClientTrait for FloxhubClient {
     ) -> Result<Vec<ResolvedPackageGroup>, ResolveError> {
         tracing::debug!(n_groups = package_groups.len(), "resolving package groups");
 
-        // This is the call that will require authentication once catalog auth
-        // gating is enforced server-side, so an unauthenticated request is
-        // reported here — not per command — via the configured hook.
-        if self.config.auth_context.is_unauthenticated()
-            && let Some(hook) = &self.config.on_unauthenticated_resolve
-        {
-            hook.call();
-        }
-
         let package_groups = api_types::PackageGroups {
             items: package_groups
                 .into_iter()
@@ -367,7 +365,18 @@ impl CatalogClientTrait for FloxhubClient {
             .resolve_api_v1_catalog_resolve_post(None, &package_groups)
             .await
             .map_api_error()
-            .await?;
+            .await
+            .map_err(|err| match err {
+                FloxhubClientError::APIError(api)
+                    if api.status() == Some(StatusCode::UNAUTHORIZED) =>
+                {
+                    ResolveError::Auth(classify_unauthorized_resolve(
+                        api,
+                        &self.config.auth_context,
+                    ))
+                },
+                err => ResolveError::from(err),
+            })?;
 
         let api_resolved_package_groups = response.into_inner();
 
@@ -788,6 +797,43 @@ pub fn str_to_package_name(
     })
 }
 
+/// Shown in place of the `detail` of a 401 from `/resolve` that carries none.
+/// Catalog-server always sends one, so these aren't expected to be reached;
+/// they only guard against something in front of the catalog (a proxy or
+/// gateway) answering 401 with a body that isn't an `ErrorResponse`, or an
+/// empty configured message.
+const AUTH_REQUIRED_FALLBACK: &str = "Authentication is required to resolve packages.";
+const AUTH_REJECTED_FALLBACK: &str = "the login is invalid, expired, or revoked.";
+
+/// Classify a 401 from `/resolve`. The status alone means "log in", "your
+/// login expired" and "your login was rejected"; the credential the request
+/// carried tells them apart. The `detail` is never inspected, only shown: the
+/// catalog decides what a logged-out user reads, and explains why it rejected
+/// a login. An expired login gets the CLI's own message, since the catalog
+/// answers it like an anonymous request.
+fn classify_unauthorized_resolve(
+    api: APIError<api_types::ErrorResponse>,
+    auth_context: &AuthContext,
+) -> ResolveAuthError {
+    // Checked first: an expired JWT also counts as unauthenticated.
+    if auth_context.is_expired() {
+        return ResolveAuthError::Expired;
+    }
+    let detail = match api {
+        APIError::ErrorResponse(response) => response.into_inner().detail,
+        _ => String::new(),
+    };
+    let detail = (!detail.trim().is_empty()).then_some(detail);
+    if !auth_context.is_unauthenticated() {
+        return ResolveAuthError::Rejected {
+            detail: detail.unwrap_or_else(|| AUTH_REJECTED_FALLBACK.to_string()),
+        };
+    }
+    ResolveAuthError::Required {
+        detail: detail.unwrap_or_else(|| AUTH_REQUIRED_FALLBACK.to_string()),
+    }
+}
+
 /// Collects a stream of results into a container, returning the total count.
 async fn collect_search_results<T, E>(
     stream: impl Stream<Item = Result<StreamItem<T>, E>>,
@@ -1011,7 +1057,6 @@ pub mod test_helpers {
             auth_context: AuthContext::new_from_token(None),
             user_agent: None,
             stability: None,
-            on_unauthenticated_resolve: None,
         }
     }
 
@@ -1042,7 +1087,7 @@ pub mod tests {
 
     use super::test_helpers::client_config;
     use super::*;
-    use crate::config::UnauthenticatedResolveHook;
+    use crate::auth::test_helpers::FAKE_EXPIRED_TOKEN;
     const SENTRY_TRACE_HEADER: &str = "sentry-trace";
 
     #[tokio::test]
@@ -1258,67 +1303,95 @@ pub mod tests {
         mock.assert();
     }
 
-    /// `resolve()` fires `on_unauthenticated_resolve` before contacting the
-    /// server when no authentication material is available.
-    #[tokio::test]
-    async fn resolve_fires_unauthenticated_hook_when_logged_out() {
-        let server = MockServer::start_async().await;
-        let mock = server.mock(|when, then| {
-            when.method("POST").path("/api/v1/catalog/resolve");
-            then.status(200).json_body(json!({"items": []}));
-        });
-
-        let fired = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let fired_in_hook = std::sync::Arc::clone(&fired);
-        let config = FloxhubClientConfig {
-            on_unauthenticated_resolve: Some(UnauthenticatedResolveHook::new(move || {
-                fired_in_hook.store(true, std::sync::atomic::Ordering::SeqCst);
-            })),
-            ..client_config(&server.base_url())
-        };
-        let client = FloxhubClient::new(config).unwrap();
-        client
-            .resolve(vec![PackageGroup {
-                name: "group".to_string(),
-                descriptors: vec![],
-                stability: None,
-            }])
-            .await
-            .unwrap();
-        mock.assert();
-        assert!(fired.load(std::sync::atomic::Ordering::SeqCst));
+    fn hello_group() -> Vec<PackageGroup> {
+        vec![PackageGroup {
+            name: "group".to_string(),
+            descriptors: vec![],
+            stability: None,
+        }]
     }
 
-    /// `resolve()` does not fire `on_unauthenticated_resolve` when the client
-    /// carries authentication material.
+    /// A logged-out `resolve()` still contacts the catalog, so whether login
+    /// is required is decided server-side and can be backed out there.
     #[tokio::test]
-    async fn resolve_skips_unauthenticated_hook_when_authenticated() {
+    async fn resolve_contacts_catalog_when_logged_out() {
         let server = MockServer::start_async().await;
         let mock = server.mock(|when, then| {
-            when.method("POST").path("/api/v1/catalog/resolve");
+            when.method("POST")
+                .path("/api/v1/catalog/resolve")
+                .header_missing("authorization");
             then.status(200).json_body(json!({"items": []}));
         });
 
-        let fired = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let fired_in_hook = std::sync::Arc::clone(&fired);
+        let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        client.resolve(hello_group()).await.unwrap();
+        mock.assert();
+    }
+
+    /// A 401 to a request without a credential is a login prompt that leads
+    /// with the catalog's own explanation.
+    #[tokio::test]
+    async fn resolve_maps_unauthorized_to_required_login_when_logged_out() {
+        let server = MockServer::start_async().await;
+        server.mock(|when, then| {
+            when.method("POST").path("/api/v1/catalog/resolve");
+            then.status(401)
+                .json_body(json!({"detail": "Authentication is required to resolve packages."}));
+        });
+
+        let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        let ResolveError::Auth(err) = client.resolve(hello_group()).await.unwrap_err() else {
+            panic!("expected an auth error");
+        };
+        assert_eq!(err, ResolveAuthError::Required {
+            detail: "Authentication is required to resolve packages.".to_string(),
+        });
+    }
+
+    /// A 401 to a request carrying a credential whose known expiry has passed
+    /// says the login expired, rather than asking for a first login.
+    #[tokio::test]
+    async fn resolve_maps_unauthorized_to_expired_login() {
+        let server = MockServer::start_async().await;
+        server.mock(|when, then| {
+            when.method("POST").path("/api/v1/catalog/resolve");
+            then.status(401)
+                .json_body(json!({"detail": "Authentication is required to resolve packages."}));
+        });
+
         let config = FloxhubClientConfig {
-            auth_context: AuthContext::new_from_token(Some("flox_pat_test")),
-            on_unauthenticated_resolve: Some(UnauthenticatedResolveHook::new(move || {
-                fired_in_hook.store(true, std::sync::atomic::Ordering::SeqCst);
-            })),
+            auth_context: AuthContext::new_from_token(Some(FAKE_EXPIRED_TOKEN)),
             ..client_config(&server.base_url())
         };
         let client = FloxhubClient::new(config).unwrap();
-        client
-            .resolve(vec![PackageGroup {
-                name: "group".to_string(),
-                descriptors: vec![],
-                stability: None,
-            }])
-            .await
-            .unwrap();
-        mock.assert();
-        assert!(!fired.load(std::sync::atomic::Ordering::SeqCst));
+        let ResolveError::Auth(err) = client.resolve(hello_group()).await.unwrap_err() else {
+            panic!("expected an auth error");
+        };
+        assert_eq!(err, ResolveAuthError::Expired);
+    }
+
+    /// A credential the catalog rejects with 401 is reported as a rejected
+    /// login with the catalog's reason, rather than a raw API error.
+    #[tokio::test]
+    async fn resolve_maps_unauthorized_to_rejected_login() {
+        let server = MockServer::start_async().await;
+        server.mock(|when, then| {
+            when.method("POST").path("/api/v1/catalog/resolve");
+            then.status(401)
+                .json_body(json!({"detail": "Unable to verify token"}));
+        });
+
+        let config = FloxhubClientConfig {
+            auth_context: AuthContext::new_from_token(Some("flox_pat_revoked")),
+            ..client_config(&server.base_url())
+        };
+        let client = FloxhubClient::new(config).unwrap();
+        let ResolveError::Auth(err) = client.resolve(hello_group()).await.unwrap_err() else {
+            panic!("expected an auth error");
+        };
+        assert_eq!(err, ResolveAuthError::Rejected {
+            detail: "Unable to verify token".to_string()
+        });
     }
 
     #[tokio::test]

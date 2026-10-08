@@ -72,10 +72,10 @@ flox config --set 'trusted_environments."owner/name"' trust
 
 `auth_notifications`
 :   Print the advisory FloxHub authentication messages.
-    Set to `false` to quiet both the reminder to log in and the warnings
-    that resolution will soon require authentication.
+    Set to `false` to quiet the reminder to log in.
     Authentication *errors* are unaffected: commands that require a
-    login, such as `flox push`, still fail with an explanation.
+    login, such as `flox push` or any command that resolves packages,
+    still fail with an explanation.
 
     (default: true)
 

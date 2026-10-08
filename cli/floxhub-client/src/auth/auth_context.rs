@@ -100,6 +100,10 @@ impl AuthContext {
         self.cached_facts().is_unauthenticated()
     }
 
+    pub fn is_expired(&self) -> bool {
+        self.cached_facts().is_expired()
+    }
+
     pub fn user_subject(&self) -> Option<String> {
         self.cached_facts().subject
     }
