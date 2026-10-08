@@ -132,10 +132,16 @@ flox config --set 'trusted_environments."owner/name"' trust
 `cache_dir`
 :   Directory where Flox should store ephemeral data
     (default: `$XDG_CACHE_HOME/flox`).
+    The path must be absolute.
+    A relative path is an error.
+    Flox uses the default when the value is empty.
 
 `data_dir`
 :   Directory where Flox should store persistent data
     (default: `$XDG_DATA_HOME/flox`).
+    The path must be absolute.
+    A relative path is an error.
+    Flox uses the default when the value is empty.
 
 `disable_hook`
 :   Don't set up the Flox prompt hook as part of activation.
@@ -177,6 +183,9 @@ flox config --set 'trusted_environments."owner/name"' trust
 :   Directory where Flox should store data that's not critical but also
     shouldn't be able to be freely deleted like data in the cache directory.
     (default: `$XDG_STATE_HOME/flox` e.g. `~/.local/state/flox`)
+    The path must be absolute.
+    A relative path is an error.
+    Flox uses the default when the value is empty.
 
 `trusted_environments`
 :   Remote environments that are trusted for activation.
