@@ -52,6 +52,10 @@ will block the use of the environment commands
 - `flox edit --sync` to commit your local changes to a new generation
 - `flox edit --reset` to discard your local changes and reset to the latest generation
 
+```{.include}
+./include/catalog-auth.md
+```
+
 # OPTIONS
 
 ## Edit Options

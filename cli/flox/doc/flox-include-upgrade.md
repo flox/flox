@@ -26,6 +26,10 @@ If the names of specific included environments are provided, only changes for
 those environments will be fetched. If no names are provided, changes will be
 fetched for all included environments.
 
+```{.include}
+./include/catalog-auth.md
+```
+
 # OPTIONS
 
 `<included environment>`

@@ -35,6 +35,10 @@ Configures a shell with everything defined by the environment:
 * Runs hooks.
 * Starts services (if `--start-services` is specified).
 
+Activating an environment from its cached lockfile does not require a FloxHub
+account. Activating a private remote environment (`-r`) requires login; see
+[`flox-auth(1)`](./flox-auth.md).
+
 `flox activate` may run in one of four modes:
 
 * interactive: `flox activate` when invoked from an interactive shell\

@@ -67,6 +67,10 @@ reference.
 ./include/package-names.md
 ```
 
+```{.include}
+./include/catalog-auth.md
+```
+
 # OPTIONS
 
 ## Install Options

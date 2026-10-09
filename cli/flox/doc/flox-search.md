@@ -22,6 +22,8 @@ flox [<general options>] search
 
 Search for available packages.
 
+`flox search` queries the Flox Catalog and does not require a FloxHub account.
+
 A limited number of search results are reported by default for brevity.
 The full result set can be returned via the `-a` flag.
 

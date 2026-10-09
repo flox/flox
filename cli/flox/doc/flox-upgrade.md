@@ -43,6 +43,10 @@ Stability can be changed with `pkg-groups.<group name>.stability` as described i
 
 See [`manifest.toml(5)`](./manifest.toml.md) for more on using pkg-groups.
 
+```{.include}
+./include/catalog-auth.md
+```
+
 # OPTIONS
 
 ## Upgrade Options

@@ -114,6 +114,10 @@ Downloaded store paths are registered as GC roots under
 `$FLOX_CACHE_DIR/run-gc-roots/`.
 Repeated invocations of the same package skip the download step.
 
+```{.include}
+./include/catalog-auth.md
+```
+
 # OPTIONS
 
 ## Run Options

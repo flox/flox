@@ -19,6 +19,8 @@ flox [<general-options>] show <pkg-path>
 
 Show detailed information about a single package.
 
+`flox show` queries the Flox Catalog and does not require a FloxHub account.
+
 The default output includes the package description,
 available outputs (with defaults marked by `*`),
 and available versions.
