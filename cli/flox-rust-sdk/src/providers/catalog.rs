@@ -563,7 +563,7 @@ pub async fn get_base_nixpkgs_url(
 }
 
 pub mod test_helpers {
-    use floxhub_client::{AuthContext, DEFAULT_CATALOG_URL};
+    use floxhub_client::{AuthContext, DEFAULT_CATALOG_URL, FLOX_MOCK_RECORDING_TOKEN_VAR};
     use pollster::FutureExt;
 
     use super::*;
@@ -662,14 +662,17 @@ pub mod test_helpers {
     /// allow the `MockServer` to run in another thread.
     pub fn auto_recording_catalog_client(filename: &str) -> FloxhubClient {
         let record = get_record_directive();
-        // This client records against the production catalog unauthenticated,
-        // so it must not run the catalog setup, which writes to whichever
-        // server it records against and needs a token to do so.
+        // The catalog requires auth to resolve, so recording sends a token.
+        let token = std::env::var(FLOX_MOCK_RECORDING_TOKEN_VAR)
+            .ok()
+            .filter(|token| !token.is_empty());
+        // The catalog setup writes to whichever server this records against,
+        // which is production, so it must not run.
         auto_recording_client_inner(
             filename,
             DEFAULT_CATALOG_URL,
             PublishTestUser::Unauthenticated,
-            &AuthContext::from_auth0_token(None),
+            &AuthContext::new_from_token(token.as_deref()),
             record,
         )
     }
@@ -743,6 +746,9 @@ pub mod test_helpers {
                 (FloxhubMockMode::Record(path), base_url.to_string())
             },
         };
+        if matches!(mock_mode, FloxhubMockMode::Record(_)) && auth_context.is_unauthenticated() {
+            panic!("{FLOX_MOCK_RECORDING_TOKEN_VAR} must be set to record mocks");
+        }
 
         let catalog_config = FloxhubClientConfig {
             base_url: base_url_str.clone(),

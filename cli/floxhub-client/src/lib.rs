@@ -47,6 +47,9 @@ pub const DEFAULT_CATALOG_URL: &str = "https://api.flox.dev";
 pub const DEFAULT_STABILITY: &str = "stable";
 pub const FLOX_CATALOG_MOCK_DATA_VAR: &str = "_FLOX_USE_CATALOG_MOCK";
 pub const FLOX_CATALOG_DUMP_DATA_VAR: &str = "_FLOX_CATALOG_DUMP_RESPONSE_FILE";
+/// The FloxHub token unit tests send while recording mocks. Test/regen-only.
+/// Keep in sync with `MOCK_RECORDING_TOKEN_VAR` in `cli/mk_data/src/generate.rs`.
+pub const FLOX_MOCK_RECORDING_TOKEN_VAR: &str = "_FLOX_MOCK_RECORDING_TOKEN";
 /// Sets `PackageGroup.stability` on the wire during mock recording runs.
 /// Test/regen-only — not a user-facing interface. See Justfile
 /// `gen-unit-data-no-publish` for usage.

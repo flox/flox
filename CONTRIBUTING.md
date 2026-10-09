@@ -526,6 +526,8 @@ For tests that involve `flox publish` the CLI is configured to make requests to 
 Since those repositories are private, only a Flox employee can produce these recordings.
 
 Instructions for generating the mocks:
+- Set `_FLOX_MOCK_RECORDING_TOKEN` to a FloxHub token, since the catalog requires authentication to resolve packages.
+  Recording refuses to run without it.
 - Check out the `floxhub` repo.
 - Activate the environment in the `floxhub` repo.
 - Run `just catalog-server::serve-for-mocks` in the `floxhub` repo.
