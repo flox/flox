@@ -2193,6 +2193,149 @@ mod pipeline_tests {
         assert!(!client.is_flush_due().unwrap());
     }
 
+    fn client_with_sources(
+        tempdir: &TempDir,
+        sources: &[&str],
+        connection: MockEventsConnection,
+    ) -> EventsClient {
+        let mut metadata = shared_metadata();
+        metadata.invocation_sources = sources.iter().map(|s| s.to_string()).collect();
+        EventsClient::new_with_connection(
+            DEVICE_ID,
+            tempdir.path(),
+            INVOCATION_ID,
+            None,
+            metadata,
+            connection,
+        )
+    }
+
+    fn push_aged_event(tempdir: &TempDir, age: Duration) {
+        let mut event = fixed_event(command_run_kind());
+        event.event_timestamp = OffsetDateTime::now_utc() - age;
+        EventsBuffer::read(tempdir.path())
+            .unwrap()
+            .push(event)
+            .unwrap();
+    }
+
+    /// A client whose data dir has already completed its first send, so the
+    /// age-based expiry applies.
+    fn client_after_first_send(tempdir: &TempDir, sources: &[&str]) -> EventsClient {
+        let mut first = client_with_sources(tempdir, sources, MockEventsConnection::default());
+        first.record_event(command_run_kind()).unwrap();
+        first.try_flush(false).unwrap();
+        client_with_sources(tempdir, sources, MockEventsConnection::default())
+    }
+
+    #[test]
+    fn first_flush_is_due_immediately_until_the_first_send() {
+        for sources in [&["ci"][..], &["shell"][..]] {
+            let tempdir = tempfile::tempdir().unwrap();
+            let mut client =
+                client_with_sources(&tempdir, sources, MockEventsConnection::default());
+
+            assert!(
+                !client.is_flush_due().unwrap(),
+                "{sources:?}: empty buffer is not due"
+            );
+
+            client.record_event(command_run_kind()).unwrap();
+            assert!(
+                client.is_flush_due().unwrap(),
+                "{sources:?}: cached-timestamp path"
+            );
+
+            let mut child = client_with_sources(&tempdir, sources, MockEventsConnection::default());
+            assert!(
+                child.is_flush_due().unwrap(),
+                "{sources:?}: buffer-read path"
+            );
+
+            // The detached sender is a fresh process with its own client.
+            let sender_connection = MockEventsConnection::default();
+            let sender_sent = sender_connection.sent_batches();
+            let mut sender = client_with_sources(&tempdir, sources, sender_connection);
+            assert!(sender.try_flush(false).unwrap());
+            assert_eq!(sender_sent.lock().unwrap().len(), 1, "{sources:?}");
+
+            child.record_event(command_run_kind()).unwrap();
+            assert!(
+                !child.is_flush_due().unwrap(),
+                "{sources:?}: after the first send"
+            );
+        }
+    }
+
+    #[test]
+    fn failed_first_send_stays_due() {
+        for sources in [&["ci"][..], &["shell"][..]] {
+            let tempdir = tempfile::tempdir().unwrap();
+            let connection = MockEventsConnection::default();
+            connection.fail_next_send();
+            let mut client = client_with_sources(&tempdir, sources, connection);
+            client.record_event(command_run_kind()).unwrap();
+
+            client.try_flush(false).expect_err("send should fail");
+            assert!(client.is_flush_due().unwrap(), "{sources:?}");
+            client.try_flush(false).unwrap();
+            assert!(!client.is_flush_due().unwrap(), "{sources:?}");
+        }
+    }
+
+    #[test]
+    fn ci_after_first_send_is_due_past_ten_seconds() {
+        for (age_secs, due) in [(5, false), (11, true)] {
+            let tempdir = tempfile::tempdir().unwrap();
+            let client = client_after_first_send(&tempdir, &["ci"]);
+            push_aged_event(&tempdir, Duration::seconds(age_secs));
+            assert_eq!(client.is_flush_due().unwrap(), due, "age {age_secs}s");
+        }
+    }
+
+    #[test]
+    fn ci_sub_token_and_case_are_recognized() {
+        for source in ["ci.github-actions", "CI"] {
+            let tempdir = tempfile::tempdir().unwrap();
+            let client = client_after_first_send(&tempdir, &[source]);
+            push_aged_event(&tempdir, Duration::seconds(11));
+            assert!(client.is_flush_due().unwrap(), "{source}");
+        }
+    }
+
+    #[test]
+    fn non_ci_after_first_send_keeps_the_two_minute_expiry() {
+        for (age_secs, due) in [(0, false), (11, false), (119, false), (121, true)] {
+            let tempdir = tempfile::tempdir().unwrap();
+            let mut first =
+                client_with_sources(&tempdir, &["shell"], MockEventsConnection::default());
+            first.record_event(command_run_kind()).unwrap();
+            first.try_flush(false).unwrap();
+
+            let connection = MockEventsConnection::default();
+            let sent = connection.sent_batches();
+            let mut client = client_with_sources(&tempdir, &["shell"], connection);
+            push_aged_event(&tempdir, Duration::seconds(age_secs));
+
+            assert_eq!(client.is_flush_due().unwrap(), due, "age {age_secs}s");
+            client.try_flush(false).unwrap();
+            assert_eq!(
+                !sent.lock().unwrap().is_empty(),
+                due,
+                "sent at age {age_secs}s"
+            );
+        }
+    }
+
+    #[test]
+    fn hub_without_client_is_never_due_and_sends_nothing() {
+        // `build_events_client` installs no client when metrics are disabled
+        // (see its own test), so the hub has nothing to flush.
+        let hub = EventsHub::new();
+        assert!(!hub.is_flush_due().unwrap());
+        assert!(hub.try_flush(false).unwrap());
+    }
+
     #[test]
     fn events_client_flush_batches_and_overwrites_buffer_file() {
         let tempdir = tempfile::tempdir().expect("tempdir");

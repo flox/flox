@@ -21,7 +21,7 @@ use flox_core::data::System;
 use flox_core::data::environment_ref::DEFAULT_NAME;
 use flox_core::hook_actions::{PROMPT_HOOK_VERSION_ENV, prompt_hook_version_mismatched};
 use flox_core::traceable_path;
-use flox_events::{CliEnvironmentActivatePayload, EventKind, EventsHub, LifecycleFields};
+use flox_events::{CliEnvironmentActivatePayload, EventKind, EventsHub};
 use flox_manifest::interfaces::{AsLatestSchema, AsWritableManifest, WriteManifest};
 use flox_manifest::lockfile::Lockfile;
 use flox_manifest::parsed::Inner;
@@ -791,33 +791,9 @@ impl ActivateOptions {
         } else {
             debug!("running activation command: {:?}", command);
             // `command.exec()` replaces this process, so the dispatcher's
-            // end-of-`cli_worker` `command_completed` emit will never run;
-            // record it here first, with `exit_code = 0` for the successful
-            // handoff and no duration (the process becomes the shell rather
-            // than completing). `exec` returns only on failure, and by then
-            // this record has set the sticky flag, so the dispatcher's
-            // lifecycle emit is a no-op — that rare exec failure is recorded
-            // optimistically as this success. The buffered events are delivered
-            // by a later invocation unless a forced flush is requested.
-            let hub = flox_events::EventsHub::global();
-            if let Err(err) =
-                hub.record_command_completed("activate".to_string(), LifecycleFields {
-                    exit_code: 0,
-                    duration_ms: None,
-                    error_kind: None,
-                })
-            {
-                debug!(
-                    error = %err,
-                    "Failed to record v2 cli.command_completed event before exec"
-                );
-            }
-            if let Err(err) = hub.flush(flox_events::force_flush_requested()) {
-                debug!(
-                    error = %err,
-                    "Failed to flush v2 events before exec"
-                );
-            }
+            // end-of-`cli_worker` `command_completed` emit will never run.
+            // Sending is left to a detached child, which survives the exec.
+            super::record_completed_and_spawn_if_due(&config, "activate");
             // exec should never return
             // TODO: did this break in-place metrics?
             Err(command.exec().into())

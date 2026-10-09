@@ -15,6 +15,9 @@ setup() {
   unset _FLOX_TESTING_DISABLE_BG_SIDE_EFFECTS _FLOX_FORCE_FLUSH_METRICS
   export _FLOX_METRICS_URL_OVERRIDE="http://127.0.0.1:1/legacy"
   export _FLOX_METRICS_URL_V2_OVERRIDE="http://127.0.0.1:1/v2"
+  # Skip the immediate first send so these tests exercise buffer expiry.
+  mkdir -p "$FLOX_DATA_DIR"
+  touch "$FLOX_DATA_DIR/events-v2-first-send"
 }
 
 wait_for_telemetry_flush() {
