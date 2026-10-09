@@ -54,6 +54,7 @@ teardown() {
   run "$FLOX_BIN" push --owner owner # dummy owner
   assert_failure
   assert_output --partial 'You are not logged in to FloxHub.'
+  refute_output --partial "! You are not logged in to FloxHub."
 }
 
 # bats test_tags=push:h1:expired
@@ -70,6 +71,7 @@ teardown() {
   assert_failure
   assert_output --partial 'Your FloxHub token has expired.'
   assert_output --partial 'To re-authenticate you can either'
+  refute_output --partial "! You are not logged in to FloxHub."
 }
 
 # bats test_tags=push:broken
