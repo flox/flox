@@ -140,6 +140,16 @@ fn lock_from_response(mut response: BuildInputsLookupResponse) -> Result<BuildLo
         return Err(LockError::Unresolvable(group.unresolvable));
     }
 
+    for (reference, advisory) in &group.not_lockable {
+        if advisory.kind != "base_catalog"
+            || (reference != "nixpkgs" && !reference.starts_with("nixpkgs."))
+        {
+            return Err(LockError::Transform(anyhow::anyhow!(
+                "catalog reference '{reference}' cannot be locked"
+            )));
+        }
+    }
+
     let direct = group.matched.keys();
 
     debug!(resolved = group.lock.len(), "all references resolved");
@@ -154,7 +164,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn build_request_maps_references_and_stability() {
+    fn build_request_maps_references() {
         let references = BTreeSet::from([
             CatalogRef::new_unchecked("catalogs.myorg.hello"),
             CatalogRef::new_unchecked("catalogs.myorg.world"),
@@ -175,6 +185,12 @@ mod tests {
             json!(DEFAULT_STABILITY)
         );
         assert!(wire.reference_point.is_none());
+        assert!(
+            serde_json::to_value(&wire)
+                .unwrap()
+                .get("response_version")
+                .is_none()
+        );
     }
 
     #[test]
@@ -185,9 +201,11 @@ mod tests {
         .expect("success fixture deserializes");
 
         let lock = lock_from_response(response).expect("success fixture locks");
-        let value = serde_json::to_value(&lock).unwrap();
+        let value: serde_json::Value =
+            serde_json::from_str(&crate::lock::transform::render_builder_lock(&lock).unwrap())
+                .unwrap();
 
-        assert_eq!(value["version"], json!(1));
+        assert_eq!(value["version"], json!(2));
         assert_eq!(
             value["catalogs"]["myorg"]["packages"]["entries"]["hello"]["build_type"],
             json!("nef")
@@ -204,13 +222,9 @@ mod tests {
         );
     }
 
-    /// The reference that produced the lock must select its entry back out
-    /// of it. The server keys `direct_catalog_inputs` canonically
-    /// (`myorg/hello`) while the reference renders dotted (`myorg.hello`) —
-    /// the two namespaces must never be conflated, and only a fixture-shaped
-    /// lock can catch it.
+    /// The server's canonical keys and dotted reference names must not be conflated.
     #[test]
-    fn success_fixture_subsets_by_its_own_reference() {
+    fn success_fixture_projects_by_its_own_reference() {
         let response: BuildInputsLookupResponse = serde_json::from_str(include_str!(
             "../../test_data/build_inputs_lookup/success.json"
         ))
@@ -218,16 +232,44 @@ mod tests {
         let lock = lock_from_response(response).expect("success fixture locks");
 
         let references = BTreeSet::from([CatalogRef::new_unchecked("catalogs.myorg.hello")]);
-        let subset = lock
-            .subset_direct(&references)
+        let closure = lock
+            .project_package(&references)
             .expect("the lock's own reference is covered");
 
-        assert_eq!(subset.keys().collect::<Vec<_>>(), vec![
-            &"myorg/hello".to_string()
-        ]);
+        assert_eq!(closure.direct_inputs, vec!["myorg/hello".to_string()]);
         assert_eq!(
-            subset["myorg/hello"],
-            lock.direct_catalog_inputs["myorg/hello"]
+            closure.locked_inputs["myorg/hello"],
+            floxhub_client::LockedInputEntry::from(&lock.locked_inputs["myorg/hello"])
+        );
+    }
+
+    #[test]
+    fn wire_nar_hash_survives_write_and_read() {
+        let mut wire: serde_json::Value = serde_json::from_str(include_str!(
+            "../../test_data/build_inputs_lookup/success.json"
+        ))
+        .unwrap();
+        wire["version"] = json!(1);
+        wire["groups"][LOOKUP_GROUP_KEY]["lock"]["myorg/hello"]["source"]["narHash"] =
+            json!("sha256-wire-extra");
+        let response: BuildInputsLookupResponse = serde_json::from_value(wire).unwrap();
+        let lock = lock_from_response(response).unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("catalog.lock");
+        crate::write_lock(&lock, &path).unwrap();
+        let read = crate::read_lock(&path).unwrap();
+        assert_eq!(
+            read.locked_inputs["myorg/hello"].source.extra["narHash"],
+            json!("sha256-wire-extra")
+        );
+        let closure = read
+            .project_package(&BTreeSet::from([CatalogRef::new_unchecked(
+                "catalogs.myorg.hello",
+            )]))
+            .unwrap();
+        assert_eq!(
+            closure.locked_inputs["myorg/hello"].source.extra["narHash"],
+            json!("sha256-wire-extra")
         );
     }
 
@@ -251,5 +293,83 @@ mod tests {
             },
             other => panic!("expected LockError::Unresolvable, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn base_only_wire_locks_without_a_root() {
+        let response: BuildInputsLookupResponse = serde_json::from_value(json!({
+            "version": 1,
+            "groups": {"default": {
+                "lock": {}, "matched": {}, "unresolvable": [],
+                "not_lockable": {"nixpkgs.python3Packages.*": {"kind": "base_catalog"}}
+            }}
+        }))
+        .expect("shared model parses the wire response");
+        assert_eq!(response.version, 1);
+        assert_eq!(
+            response.groups[LOOKUP_GROUP_KEY].not_lockable["nixpkgs.python3Packages.*"].kind,
+            "base_catalog"
+        );
+
+        let lock = lock_from_response(response).expect("base-only group is usable");
+        assert!(lock.direct_inputs.is_empty());
+        assert!(lock.locked_inputs.is_empty());
+        assert_eq!(
+            crate::lock::transform::materialize_catalogs(&lock).unwrap(),
+            json!({})
+        );
+    }
+
+    #[test]
+    fn mixed_group_keeps_only_lockable_roots() {
+        let mut response: serde_json::Value = serde_json::from_str(include_str!(
+            "../../test_data/build_inputs_lookup/success.json"
+        ))
+        .unwrap();
+        response["version"] = json!(1);
+        response["groups"][LOOKUP_GROUP_KEY]["not_lockable"] =
+            json!({"nixpkgs.hello": {"kind": "base_catalog"}});
+        let response: BuildInputsLookupResponse = serde_json::from_value(response).unwrap();
+
+        let lock = lock_from_response(response).expect("mixed group is usable");
+        assert_eq!(
+            lock.direct_inputs,
+            BTreeSet::from(["myorg/hello".to_string()])
+        );
+        assert_eq!(lock.locked_inputs.len(), 1);
+        let value: serde_json::Value =
+            serde_json::from_str(&crate::lock::transform::render_builder_lock(&lock).unwrap())
+                .unwrap();
+        assert!(value["catalogs"].get("nixpkgs").is_none());
+    }
+
+    #[test]
+    fn not_lockable_outside_base_namespace_fails_the_lock() {
+        let response: BuildInputsLookupResponse = serde_json::from_value(json!({
+            "version": 1,
+            "groups": {"default": {
+                "lock": {}, "matched": {},
+                "not_lockable": {"other.hello": {"kind": "future_kind"}}
+            }}
+        }))
+        .unwrap();
+        let error = lock_from_response(response).unwrap_err().to_string();
+        assert!(error.contains("other.hello"), "{error}");
+    }
+
+    #[test]
+    fn unresolvable_still_fails_with_a_base_advisory() {
+        let mut response: serde_json::Value = serde_json::from_str(include_str!(
+            "../../test_data/build_inputs_lookup/partial.json"
+        ))
+        .unwrap();
+        response["version"] = json!(1);
+        response["groups"][LOOKUP_GROUP_KEY]["not_lockable"] =
+            json!({"nixpkgs.hello": {"kind": "base_catalog"}});
+        let response: BuildInputsLookupResponse = serde_json::from_value(response).unwrap();
+        assert!(matches!(
+            lock_from_response(response),
+            Err(LockError::Unresolvable(entries)) if entries.len() == 1
+        ));
     }
 }

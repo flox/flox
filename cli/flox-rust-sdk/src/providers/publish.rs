@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::str::FromStr;
@@ -15,12 +15,13 @@ use floxhub_client::{
     CatalogStoreConfigNixCopy,
     DeepOverridesItemItem,
     FloxhubClientError,
-    LockedInputEntry,
     NarInfos,
     PackageOutput,
     PackageOutputs,
     PackageSystem,
+    PublishReceipt,
     PublishResponse,
+    PublishWarning,
     SourceLineageChange,
     UserBuildPublish,
     UserDerivationInfo,
@@ -29,7 +30,7 @@ use git_url_parse::GitUrl;
 use indexmap::IndexSet;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
-use nef_lock_catalog::NixFlakeref;
+use nef_lock_catalog::{NixFlakeref, PackageClosure};
 use thiserror::Error;
 use tracing::{debug, instrument};
 use url::Url;
@@ -128,6 +129,18 @@ pub enum PublishError {
     InvalidDeepOverrideName(String),
 }
 
+/// Publish outcome that lets the command show warnings before polling.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct PublishOutcome {
+    /// `true` when the caller should wait for an external publisher to
+    /// confirm completion (Publisher mode); `false` when the CLI has
+    /// already populated the catalog directly and no wait is needed
+    /// (NixCopy and MetadataOnly modes).
+    pub needs_publisher_wait: bool,
+    /// Non-fatal server diagnostics to display before completion polling.
+    pub warnings: Vec<PublishWarning>,
+}
+
 /// The `Publish` trait describes the high level behavior of publishing a package to a catalog.
 /// Authentication, upload, builds etc, are implementation details of the specific provider.
 /// Modeling the behavior as a trait allows us to swap out the provider, e.g. a mock for testing.
@@ -140,8 +153,8 @@ pub trait Publisher {
     ) -> Result<PackageCreatedGuard, PublishError>;
     /// Publish a built package.
     ///
-    /// `locked_inputs` is the subset of the project catalog lock the
-    /// package's expression selects, computed at publish time; empty for
+    /// `closure` is this package's selected roots and transitive closure,
+    /// projected from the project catalog lock at publish time; empty for
     /// builds that resolve no catalog inputs.
     ///
     /// `factory_build_token` is forwarded, uninterpreted, from the caller's
@@ -154,11 +167,6 @@ pub trait Publisher {
     /// refusal when confirmation is unavailable. Returning
     /// `Err(PublishError::LineageChangeDeclined)` signals an explicit decline
     /// or cancellation.
-    ///
-    /// Returns `true` when the caller should wait for an external publisher
-    /// to confirm completion (Publisher mode), or `false` when the CLI has
-    /// already populated the catalog directly and no wait is needed
-    /// (NixCopy and MetadataOnly modes).
     #[allow(clippy::too_many_arguments)]
     async fn publish(
         &self,
@@ -166,13 +174,13 @@ pub trait Publisher {
         catalog_name: &str,
         package_created: PackageCreatedGuard,
         build_metadata: &CheckedBuildMetadata,
-        locked_inputs: &BTreeMap<String, LockedInputEntry>,
+        closure: &PackageClosure,
         key_file: Option<PathBuf>,
         metadata_only: bool,
         factory_build_token: Option<&str>,
         allow_lineage_change: bool,
         confirm_lineage_change: impl AsyncFnOnce(&SourceLineageChange) -> Result<bool, PublishError>,
-    ) -> Result<bool, PublishError>;
+    ) -> Result<PublishOutcome, PublishError>;
     async fn wait_for_publish_completion(
         &self,
         client: &impl CatalogClientTrait,
@@ -189,7 +197,7 @@ async fn publish_build_with_confirmation(
     package_name: &str,
     mut build_info: UserBuildPublish,
     confirm: impl AsyncFnOnce(&SourceLineageChange) -> Result<bool, PublishError>,
-) -> Result<(), PublishError> {
+) -> Result<PublishReceipt, PublishError> {
     tracing::debug!(?build_info, "Publishing build in catalog...");
     let result = client
         .publish_build(catalog_name, package_name, &build_info)
@@ -686,9 +694,6 @@ where
     /// Publish a built package.
     ///
     /// [PackageCreatedGuard] must be obtained from [Self::create_package].
-    ///
-    /// Returns `true` when the caller should poll for publisher confirmation,
-    /// `false` when the CLI already populated the catalog (NixCopy/MetadataOnly).
     #[allow(clippy::too_many_arguments)]
     async fn publish(
         &self,
@@ -696,13 +701,13 @@ where
         catalog_name: &str,
         _package_created: PackageCreatedGuard,
         build_metadata: &CheckedBuildMetadata,
-        locked_inputs: &BTreeMap<String, LockedInputEntry>,
+        closure: &PackageClosure,
         key_file: Option<PathBuf>,
         metadata_only: bool,
         factory_build_token: Option<&str>,
         allow_lineage_change: bool,
         confirm_lineage_change: impl AsyncFnOnce(&SourceLineageChange) -> Result<bool, PublishError>,
-    ) -> Result<bool, PublishError> {
+    ) -> Result<PublishOutcome, PublishError> {
         // Step 2 hit /publish
         // Catalogs are configured with their "store".
         // We must request upload information for _this_ catalog to know where
@@ -751,12 +756,9 @@ where
                 version: build_metadata.version.clone(),
             },
             locked_base_catalog_url: Some(self.package_metadata.base_catalog_ref.to_string()),
-            // Record the subset of the project catalog lock this package's
-            // expression selects. Always sent: an empty map when the build
-            // resolved none. Older CLIs that omit the field are coalesced to
-            // empty server-side (floxhub#1791). The wire type is a HashMap;
-            // ordering on the wire is meaningless.
-            locked_inputs: Some(locked_inputs.clone().into_iter().collect()),
+            // Send empty roots too: the server uses their presence to select v2.
+            locked_inputs: Some(closure.locked_inputs.clone().into_iter().collect()),
+            direct_inputs: Some(closure.direct_inputs.clone()),
             base_catalog_rev_count: None,
             base_catalog_rev_date: None,
             url: self.env_metadata.build_repo_meta.url.to_string(),
@@ -796,7 +798,7 @@ where
             build_info = ?build_info,
             "Publishing build in catalog...",
         );
-        publish_build_with_confirmation(
+        let receipt = publish_build_with_confirmation(
             client,
             catalog_name,
             self.package_metadata.package.name().as_ref(),
@@ -805,7 +807,10 @@ where
         )
         .await?;
 
-        Ok(needs_publisher_wait)
+        Ok(PublishOutcome {
+            needs_publisher_wait,
+            warnings: receipt.warnings,
+        })
     }
 
     /// Waits until the narinfos for all store paths are present in the catalog,
@@ -1222,7 +1227,7 @@ fn parse_publishable_remote_url(raw: &str, remote_name: &str) -> Result<Url, Pub
 /// This entails checking that:
 /// - The repo has a remote configured.
 /// - The tracked source files are clean.
-/// - The current revision exists on the tracked remote branch.
+/// - The current revision is reachable from the freshly fetched tracked remote branch.
 #[instrument(skip_all, fields(progress = "Checking repository state"))]
 fn gather_build_repo_meta(
     git: &GitCommandProvider,
@@ -1237,64 +1242,95 @@ fn gather_build_repo_meta(
         ));
     }
 
-    let remote_info = git.get_current_branch_remote_info().map_err(|e| match e {
-        GitCommandGetOriginError::NoUpstream => {
-            let remote_hint = git
-                .remotes()
-                .ok()
-                .and_then(|r| match r.as_slice() {
-                    [single] if !single.is_empty() => Some(single.clone()),
-                    _ => None,
-                })
-                .unwrap_or_else(|| "<remote>".to_string());
+    // A detached HEAD or tag has no branch upstream; suggest checking out a branch.
+    let local_branch_ref = match status.ref_.as_deref() {
+        Some(ref_) if ref_.starts_with("refs/heads/") => ref_,
+        Some(ref_) => {
+            return Err(build_repo_err(&formatdoc! {"
+                '{ref_}' is not a branch.
+                Check out a branch before publishing: git checkout -b <branch-name>"
+            }));
+        },
+        None => {
+            return Err(build_repo_err(&formatdoc! {"
+                Repository is in detached HEAD state.
+                Check out a branch before publishing: git checkout -b <branch-name>"
+            }));
+        },
+    };
 
-            if let Some(branch) = status
-                .ref_
-                .as_deref()
-                .and_then(|r| r.strip_prefix("refs/heads/"))
-            {
+    let remote_info = git
+        .get_current_branch_remote_info(local_branch_ref)
+        .map_err(|e| match e {
+            GitCommandGetOriginError::NoUpstream => {
+                let remote_hint = git
+                    .remotes()
+                    .ok()
+                    .and_then(|r| match r.as_slice() {
+                        [single] if !single.is_empty() => Some(single.clone()),
+                        _ => None,
+                    })
+                    .unwrap_or_else(|| "<remote>".to_string());
+                let branch = local_branch_ref
+                    .strip_prefix("refs/heads/")
+                    .unwrap_or(local_branch_ref);
                 build_repo_err(&formatdoc! {"
                     Current branch '{branch}' has no upstream remote configured.
                     Set one with 'git branch --set-upstream-to={remote_hint}/{branch}'"
                 })
-            } else {
+            },
+            GitCommandGetOriginError::UpstreamNotABranch { upstream } => {
+                let branch = local_branch_ref
+                    .strip_prefix("refs/heads/")
+                    .unwrap_or(local_branch_ref);
                 build_repo_err(&formatdoc! {"
-                    Repository is in detached HEAD state and has no upstream remote configured.
-                    Check out a branch before publishing: \
-                        git checkout -b <branch-name>"
+                    Current branch '{branch}' tracks '{upstream}', which is not a branch.
+                    Configure a branch upstream with 'git branch --set-upstream-to=<remote>/<branch>'"
                 })
-            }
-        },
-        GitCommandGetOriginError::AccessDenied(ref cmd_err) => build_repo_err(&formatdoc! {"
-            Could not access the remote repository: {cmd_err}
-            Check your SSH agent (`ssh-add -l`) or credential configuration."
-        }),
-        GitCommandGetOriginError::Command(ref cmd_err) => build_repo_err(&cmd_err.to_string()),
-    })?;
+            },
+            GitCommandGetOriginError::AmbiguousLocalRef { ref_, rows } => build_repo_err(&formatdoc! {"
+                Found multiple upstream configurations for '{ref_}': {rows:?}"
+            }),
+            GitCommandGetOriginError::AccessDenied(ref cmd_err) => build_repo_err(&formatdoc! {"
+                Could not access the remote repository: {cmd_err}
+                Check your SSH agent (`ssh-add -l`) or credential configuration."
+            }),
+            GitCommandGetOriginError::Command(ref cmd_err) => build_repo_err(&cmd_err.to_string()),
+        })?;
 
-    let rev_on_remote = match git.rev_exists_on_remote(&status.rev, &remote_info.name) {
+    let rev_on_remote = match git.rev_is_on_remote_branch(
+        &status.rev,
+        &remote_info.name,
+        &remote_info.reference,
+    ) {
         Ok(exists) => exists,
+        Err(GitCommandError::MissingRemoteBranch { remote, branch }) => {
+            return Err(build_repo_err(&format!(
+                "Remote branch '{remote}/{branch}' no longer exists. Restore that branch or configure an existing branch upstream before publishing."
+            )));
+        },
         Err(ref cmd_err) if cmd_err.is_access_denied() => {
             return Err(build_repo_err(&formatdoc! {"
-                Could not access remote '{remote_name}' while verifying the local revision: {cmd_err}
+                Could not access remote '{remote_name}' while verifying branch containment: {cmd_err}
                 Check your SSH agent (`ssh-add -l`) or credential configuration.",
                 remote_name = remote_info.name,
             }));
         },
         Err(cmd_err) => {
             return Err(build_repo_err(&formatdoc! {"
-                Failed to check whether local revision exists on remote '{remote_name}/{remote_branch}': {cmd_err}",
+                Could not verify that the local revision is on remote branch '{remote_name}/{remote_branch}': {cmd_err}
+                Fetch the branch and its full history, then retry publishing.",
                 remote_name = remote_info.name,
-                remote_branch = remote_info.reference,
+                remote_branch = remote_info.short_branch(),
             }));
         },
     };
     if !rev_on_remote {
         return Err(build_repo_err(&formatdoc! {"
-            Local revision is not present on remote '{remote_name}/{remote_branch}'.
-            Push your commits with 'git push'",
+            Local revision is not contained in remote branch '{remote_name}/{remote_branch}'.
+            Push this revision with 'git push {remote_name} HEAD:{remote_branch}' before publishing.",
             remote_name = remote_info.name,
-            remote_branch = remote_info.reference,
+            remote_branch = remote_info.short_branch(),
         }));
     }
 
@@ -1334,7 +1370,9 @@ fn url_for_remote_containing_current_rev(
     // Check the configured remotes, once each, in order of..
     let mut ordered_remotes = IndexSet::new();
     // 1. Tracked remote for branch, if configured.
-    if let Ok(tracked_remote) = git.get_current_branch_remote_info() {
+    if let Some(local_branch_ref) = status.ref_.as_deref()
+        && let Ok(tracked_remote) = git.get_current_branch_remote_info(local_branch_ref)
+    {
         ordered_remotes.insert(tracked_remote.name);
     }
     // 2. Preferred remotes, if they are present.
@@ -1512,6 +1550,7 @@ pub mod tests {
 
     // Matches SourceLineageChanged.details from floxhub#2456.
     const LINEAGE_CHANGE_DETAIL: &str = "test/hello is registered to github.com/org/original (ref main); this publish is from github.com/org/moved (ref release). Retry with allow_lineage_change=true to replace the registered source.";
+    const INPUT_LINEAGE_WARNING: &str = "dependency moved to a newer source lineage";
 
     async fn exercise_lineage_publish(
         status: u16,
@@ -1519,7 +1558,8 @@ pub mod tests {
         allow_lineage_change: bool,
         confirm: bool,
         retry_status: u16,
-    ) -> (usize, usize, usize, Result<(), String>) {
+        warn_on_success: bool,
+    ) -> (usize, usize, usize, Result<Vec<String>, String>) {
         let server = httpmock::MockServer::start_async().await;
         let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
         let build: UserBuildPublish = serde_json::from_value(serde_json::json!({
@@ -1560,15 +1600,28 @@ pub mod tests {
                     }
                 }
             },
+            "direct_inputs": ["dependency"],
             "locked_base_catalog_url": "https://github.com/flox/nixpkgs?rev=abc123"
         }))
         .unwrap();
+        let response_body = if warn_on_success {
+            serde_json::json!({"warnings": [{
+                "code": "input_lineage_changed",
+                "input": "dependency",
+                "message": INPUT_LINEAGE_WARNING
+            }]})
+        } else {
+            serde_json::json!({})
+        };
         let initial = server.mock(|when, then| {
             when.method(httpmock::Method::POST)
                 .path("/api/v1/catalog/catalogs/test/packages/hello/builds")
                 .json_body_obj(&build);
-            then.status(status)
-                .json_body(serde_json::json!({"detail": detail}));
+            then.status(status).json_body(if status == 200 {
+                response_body.clone()
+            } else {
+                serde_json::json!({"detail": detail})
+            });
         });
         // With the override already set, a retry would resend the initial body,
         // so only `initial` can match and it counts every request.
@@ -1579,8 +1632,11 @@ pub mod tests {
                 when.method(httpmock::Method::POST)
                     .path("/api/v1/catalog/catalogs/test/packages/hello/builds")
                     .json_body_obj(&replacement);
-                then.status(retry_status)
-                    .json_body(serde_json::json!({"detail": detail}));
+                then.status(retry_status).json_body(if retry_status == 200 {
+                    response_body.clone()
+                } else {
+                    serde_json::json!({"detail": detail})
+                });
             })
         });
         let mut confirmations = 0;
@@ -1594,18 +1650,62 @@ pub mod tests {
                 Ok(confirm)
             })
             .await
+            .map(|receipt| {
+                receipt
+                    .warnings
+                    .into_iter()
+                    .map(|warning| warning.message)
+                    .collect()
+            })
             .map_err(|err| err.to_string());
         let retries = retry.map_or(0, |mock| mock.calls());
         (confirmations, initial.calls(), retries, result)
     }
 
     #[tokio::test]
+    async fn publish_sends_empty_closure_when_given_one() {
+        let server = httpmock::MockServer::start_async().await;
+        let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        let mock = server.mock(|when, then| {
+            when.method(httpmock::Method::POST)
+                .path("/api/v1/catalog/catalogs/test/packages/hello/builds")
+                .json_body_includes(
+                    serde_json::json!({"locked_inputs": {}, "direct_inputs": []}).to_string(),
+                );
+            then.status(200).json_body(serde_json::json!({}));
+        });
+        let build: UserBuildPublish = serde_json::from_value(serde_json::json!({
+            "derivation": {
+                "drv_path": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-hello.drv",
+                "name": "hello", "outputs": [], "system": "x86_64-linux"
+            },
+            "url": "https://github.com/org/repo", "ref": "main", "rev": "abc123",
+            "rev_count": 1, "rev_date": "2026-01-01T00:00:00Z",
+            "narinfos": {},
+            "locked_inputs": {}, "direct_inputs": [],
+            "locked_base_catalog_url": "https://github.com/flox/nixpkgs?rev=abc123"
+        }))
+        .unwrap();
+
+        publish_build_with_confirmation(&client, "test", "hello", build, async |_| {
+            panic!("a successful base-only publish needs no confirmation")
+        })
+        .await
+        .unwrap();
+        mock.assert();
+    }
+
+    #[tokio::test]
     async fn publish_lineage_confirmation_retries_only_when_accepted() {
-        let accepted = exercise_lineage_publish(409, LINEAGE_CHANGE_DETAIL, false, true, 200).await;
-        assert_eq!(accepted, (1, 1, 1, Ok(())));
+        let accepted =
+            exercise_lineage_publish(409, LINEAGE_CHANGE_DETAIL, false, true, 200, true).await;
+        assert_eq!(
+            accepted,
+            (1, 1, 1, Ok(vec![INPUT_LINEAGE_WARNING.to_owned()]))
+        );
 
         let declined =
-            exercise_lineage_publish(409, LINEAGE_CHANGE_DETAIL, false, false, 200).await;
+            exercise_lineage_publish(409, LINEAGE_CHANGE_DETAIL, false, false, 200, true).await;
         let refusal = SourceLineageChange {
             registered: "github.com/org/original (ref main)".to_owned(),
             requested: "github.com/org/moved (ref release)".to_owned(),
@@ -1615,20 +1715,32 @@ pub mod tests {
 
         // Even a second lineage refusal must terminate, not prompt or loop again.
         let refused_retry =
-            exercise_lineage_publish(409, LINEAGE_CHANGE_DETAIL, false, true, 409).await;
+            exercise_lineage_publish(409, LINEAGE_CHANGE_DETAIL, false, true, 409, true).await;
         assert_eq!(refused_retry, (1, 1, 1, Err(refusal)));
     }
 
     #[tokio::test]
     async fn publish_lineage_flag_sends_override_without_confirmation() {
-        let outcome = exercise_lineage_publish(200, "", true, false, 200).await;
-        assert_eq!(outcome, (0, 1, 0, Ok(())));
+        let outcome = exercise_lineage_publish(200, "", true, false, 200, true).await;
+        assert_eq!(
+            outcome,
+            (0, 1, 0, Ok(vec![INPUT_LINEAGE_WARNING.to_owned()]))
+        );
+    }
+
+    #[tokio::test]
+    async fn publish_success_carries_input_lineage_warning_without_a_conflict() {
+        let outcome = exercise_lineage_publish(200, "", false, false, 200, true).await;
+        assert_eq!(
+            outcome,
+            (0, 1, 0, Ok(vec![INPUT_LINEAGE_WARNING.to_owned()]))
+        );
     }
 
     #[tokio::test]
     async fn publish_lineage_confirmation_ignores_other_responses() {
-        let success = exercise_lineage_publish(200, "", false, true, 200).await;
-        assert_eq!(success, (0, 1, 0, Ok(())));
+        let success = exercise_lineage_publish(200, "", false, true, 200, false).await;
+        assert_eq!(success, (0, 1, 0, Ok(vec![])));
         for (status, detail, expected) in [
             (
                 409,
@@ -1646,7 +1758,7 @@ pub mod tests {
                 format!("400 Bad Request: {LINEAGE_CHANGE_DETAIL}"),
             ),
         ] {
-            let outcome = exercise_lineage_publish(status, detail, false, true, 200).await;
+            let outcome = exercise_lineage_publish(status, detail, false, true, 200, false).await;
             assert_eq!(outcome, (0, 1, 0, Err(expected)));
         }
     }
@@ -2103,7 +2215,7 @@ pub mod tests {
                 &catalog_name,
                 package_created,
                 &build_metadata,
-                &BTreeMap::new(),
+                &PackageClosure::default(),
                 None,
                 false,
                 None,
@@ -2115,7 +2227,7 @@ pub mod tests {
         assert!(res.is_ok(), "Expected publish to succeed, got: {:?}", res);
         // MetadataOnly submits narinfos directly — no external publisher to wait for.
         assert_eq!(
-            res.unwrap(),
+            res.unwrap().needs_publisher_wait,
             false,
             "MetadataOnly should not require publisher wait"
         );
@@ -2175,7 +2287,7 @@ pub mod tests {
                 &catalog_name,
                 package_created,
                 &build_metadata,
-                &BTreeMap::new(),
+                &PackageClosure::default(),
                 None,
                 false,
                 Some("factory:abc123"),
@@ -2453,7 +2565,7 @@ pub mod tests {
                 &catalog_name,
                 package_created,
                 &build_metadata,
-                &BTreeMap::new(),
+                &PackageClosure::default(),
                 None,
                 false,
                 None,
@@ -2609,7 +2721,7 @@ pub mod tests {
                 &catalog_name,
                 package_created,
                 &build_metadata,
-                &BTreeMap::new(),
+                &PackageClosure::default(),
                 cache.local_signing_key_path(),
                 false,
                 None,
@@ -2894,7 +3006,7 @@ pub mod tests {
                 &user_handle,
                 packaged_created_guard,
                 &build_meta,
-                &BTreeMap::new(),
+                &PackageClosure::default(),
                 None,
                 // Server returns meta-only store config; narinfo collected
                 // from FIXED_TEST_STORE_PATH in the local daemon store.
@@ -2938,7 +3050,7 @@ pub mod tests {
                 TEST_READ_WRITE_CATALOG_NAME,
                 packaged_created_guard,
                 &build_meta,
-                &BTreeMap::new(),
+                &PackageClosure::default(),
                 None,
                 // Server returns meta-only store config; narinfo collected
                 // from FIXED_TEST_STORE_PATH in the local daemon store.
@@ -3009,7 +3121,7 @@ pub mod tests {
                 TEST_READ_WRITE_CATALOG_NAME,
                 packaged_created_guard,
                 &build_meta,
-                &BTreeMap::new(),
+                &PackageClosure::default(),
                 None,
                 // Server returns meta-only store config; narinfo collected
                 // from FIXED_TEST_STORE_PATH in the local daemon store.
@@ -3028,7 +3140,7 @@ pub mod tests {
                 // a new one.
                 PackageCreatedGuard { _private: () },
                 &build_meta,
-                &BTreeMap::new(),
+                &PackageClosure::default(),
                 None,
                 // Server returns meta-only store config; narinfo collected
                 // from FIXED_TEST_STORE_PATH in the local daemon store.
@@ -3072,7 +3184,7 @@ pub mod tests {
                 &user_handle,
                 PackageCreatedGuard { _private: () },
                 &build_meta,
-                &BTreeMap::new(),
+                &PackageClosure::default(),
                 None,
                 // Server returns meta-only store config; narinfo collected
                 // from FIXED_TEST_STORE_PATH in the local daemon store.
@@ -3444,8 +3556,63 @@ pub mod tests {
             "Expected 'origin/main' in message, got: {msg}"
         );
         assert!(
-            msg.contains("git push"),
-            "Expected 'git push' suggestion, got: {msg}"
+            msg.contains("git push origin HEAD:main"),
+            "Expected an explicit upstream branch in the push suggestion, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn gather_repo_meta_reports_deleted_remote_branch() {
+        let (git, _tempdir) = init_temp_repo(false);
+        let _remotes = create_remotes(&git, &["origin"]);
+        git.checkout("main", true).unwrap();
+        commit_file(&git, "base.txt");
+        git.push_ref("origin", "main", false).unwrap();
+        GitCommandProvider::run_command(git.new_command().args(["fetch", "origin", "main"]))
+            .unwrap();
+        GitCommandProvider::run_command(git.new_command().args([
+            "branch",
+            "--set-upstream-to=origin/main",
+            "main",
+        ]))
+        .unwrap();
+        GitCommandProvider::run_command(git.new_command().args([
+            "push",
+            "origin",
+            ":refs/heads/main",
+        ]))
+        .unwrap();
+        let error = gather_build_repo_meta(&git).unwrap_err().to_string();
+        assert!(error.contains("no longer exists"), "{error}");
+        assert!(!error.contains("full history"), "{error}");
+    }
+
+    #[test]
+    fn gather_repo_meta_refuses_a_revision_only_on_a_sibling_branch() {
+        let (git, _tempdir) = init_temp_repo(false);
+        let _remotes = create_remotes(&git, &["origin"]);
+        git.checkout("main", true).unwrap();
+        commit_file(&git, "base.txt");
+        let base = git.status().unwrap().rev;
+        git.push_ref("origin", "main", false).unwrap();
+        git.create_branch("sibling", &base).unwrap();
+        git.checkout("sibling", false).unwrap();
+        commit_file(&git, "sibling.txt");
+        git.push_ref("origin", "sibling", false).unwrap();
+        GitCommandProvider::run_command(git.new_command().args(["fetch", "origin", "main"]))
+            .unwrap();
+        GitCommandProvider::run_command(git.new_command().args([
+            "branch",
+            "--set-upstream-to=origin/main",
+            "sibling",
+        ]))
+        .unwrap();
+
+        let err = gather_build_repo_meta(&git).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("not contained in remote branch 'origin/main'"),
+            "{msg}"
         );
     }
 
@@ -3469,5 +3636,128 @@ pub mod tests {
             msg.contains("dirty"),
             "Expected 'dirty' in message, got: {msg}"
         );
+    }
+    #[tokio::test]
+    async fn publish_keeps_source_declarations_separate_from_the_input_closure() {
+        for declare_own_overrides in [false, true] {
+            let (mut flox, _temp_dir_handle) = flox_instance();
+            let (_tempdir_handle, _remote_repo, remote_uri) = example_git_remote_repo();
+            let (env, build_repo) = example_path_environment(&flox, Some(&remote_uri));
+
+            let own_paths = if declare_own_overrides {
+                vec![vec!["nested", "wheel"], vec!["zlib"]]
+            } else {
+                vec![]
+            };
+            for path in &own_paths {
+                let directory = path
+                    .iter()
+                    .fold(env.dot_flox_path().join("pkgs"), |p, name| p.join(name));
+                std::fs::create_dir_all(&directory).unwrap();
+                std::fs::write(directory.join("default.nix"), "{ }: null").unwrap();
+                std::fs::write(directory.join("deep-override"), "").unwrap();
+            }
+            if declare_own_overrides {
+                build_repo
+                    .add(&[&env.dot_flox_path().join("pkgs")])
+                    .unwrap();
+                build_repo.commit("Declare source overrides").unwrap();
+                build_repo.push("origin", false).unwrap();
+            }
+            let closure = PackageClosure {
+            direct_inputs: vec!["dep/root".to_string()],
+            locked_inputs: serde_json::from_value(serde_json::json!({
+                "dep/root": {
+                    "attr_path": ["root"], "build_type": "nef", "catalog": "dep",
+                    "inputs": ["dep/child"], "locked_inputs_hash": "sha256-root",
+                    "source": {"type": "git", "url": "https://example.com/dependency",
+                               "rev": "dependency-revision", "ref": "refs/heads/main", "dir": "."},
+                    "deep_overrides": []
+                },
+                "dep/child": {
+                    "attr_path": ["child"], "build_type": "nef", "catalog": "dep",
+                    "inputs": [], "locked_inputs_hash": "sha256-child",
+                    "source": {"type": "git", "url": "https://example.com/transitive",
+                               "rev": "transitive-revision", "ref": "refs/heads/main", "dir": "."},
+                    "deep_overrides": [["openssl"]]
+                }
+        })).unwrap(),
+        };
+
+            set_test_auth(&mut flox, "test");
+            let catalog_name = "test".to_string();
+
+            let env_metadata = check_environment_metadata(&flox, &env).unwrap();
+            let package_metadata = check_package_metadata(
+                Some(&mock_base_catalog_url()),
+                env_metadata.toplevel_catalog_ref.as_ref(),
+                EXAMPLE_MANIFEST_PACKAGE_TARGET.clone(),
+            )
+            .unwrap();
+
+            let build_metadata = check_build_metadata(
+                &flox,
+                env_metadata.toplevel_catalog_ref.as_ref().unwrap(),
+                None,
+                &env_metadata,
+                &package_metadata.package,
+                None,
+            )
+            .unwrap();
+
+            let auth = NixAuth::from_flox(&flox).unwrap();
+            let publish_provider = PublishProvider::new(env_metadata, package_metadata, auth);
+
+            let mut catalog = MockClient::new();
+            reset_mocks(&mut catalog, vec![
+                Response::CreatePackage,
+                Response::Publish(PublishResponse {
+                    ingress_uri: None,
+                    ingress_auth: None,
+                    catalog_store_config: CatalogStoreConfig::MetaOnly,
+                }),
+                Response::PublishBuild,
+            ]);
+
+            let package_created = publish_provider
+                .create_package_and_possibly_user_catalog(&catalog, &catalog_name)
+                .await
+                .unwrap();
+            publish_provider
+                .publish(
+                    &catalog,
+                    &catalog_name,
+                    package_created,
+                    &build_metadata,
+                    &closure,
+                    None,
+                    false,
+                    None,
+                    false,
+                    async |_| Ok(false),
+                )
+                .await
+                .expect("expected publish to succeed");
+
+            let sent = catalog
+                .last_publish_build_info
+                .lock()
+                .expect("couldn't acquire mock lock")
+                .clone()
+                .expect("publish_build was called");
+            let body = serde_json::to_value(sent).unwrap();
+            assert_eq!(
+                (
+                    body["deep_overrides"].clone(),
+                    body["locked_inputs"].clone(),
+                    body["direct_inputs"].clone()
+                ),
+                (
+                    serde_json::json!(own_paths),
+                    serde_json::to_value(&closure.locked_inputs).unwrap(),
+                    serde_json::json!(["dep/root"])
+                ),
+            );
+        }
     }
 }
