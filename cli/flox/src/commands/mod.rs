@@ -581,9 +581,9 @@ impl FloxArgs {
 
     /// Remind a user who is not logged in — no credential, or one whose `exp`
     /// claim has passed — to run 'flox auth login'. The reminder is suppressed
-    /// for `flox auth` subcommands, the prompt-hook flow, invocations nested
-    /// inside an activation, and when the `auth_notifications` config key is
-    /// set to `false`.
+    /// for `flox auth`, `push`, and `publish` subcommands, the prompt-hook
+    /// flow, invocations nested inside an activation, and when the
+    /// `auth_notifications` config key is set to `false`.
     ///
     /// The credential is not consumed when the configured authn mode does not
     /// use it (e.g. Kerberos), so warning about its state never happens there.
@@ -603,23 +603,25 @@ impl FloxArgs {
     /// one reminder.
     fn warn_if_logged_out(&self, config: &Config, credential: &AuthContext) {
         if credential.is_unauthenticated() {
-            // Every `flox auth` subcommand either logs the user in
-            // (`login`) or already reports the logged-out state itself
-            // (`status`, `logout`, `token`), so the reminder would be
-            // redundant there.
-            let is_auth_command =
-                matches!(self.command, Some(Commands::Admin(AdminCommands::Auth(_))));
-            // The logged-out state is account-global, so the reminder only
-            // needs to appear once per shell session. The outermost activation
-            // surfaces it; any `flox` invocation already running inside an
-            // activation — a nested `flox activate`, or a command in an
+            // These commands report authentication state themselves or require
+            // authentication, so the startup reminder would be redundant.
+            let reports_auth = matches!(
+                self.command,
+                Some(Commands::Admin(AdminCommands::Auth(_)))
+                    | Some(Commands::Share(
+                        ShareCommands::Push(_) | ShareCommands::Publish(_)
+                    ))
+            );
+            // The outermost activation surfaces the reminder; any `flox`
+            // invocation already running inside an activation — a nested
+            // `flox activate`, or a command in an
             // activated shell whose rc re-activates an environment — stays
             // quiet. Activations export `_FLOX_ACTIVE_ENVIRONMENTS` into the
             // shell, including in-place `eval "$(flox activate)"` ones, so
             // it is a reliable signal even across the parent shell.
             let nested = activated_environments().last_active().is_some();
             let quieted = !config.flox.auth_notifications.unwrap_or(true);
-            if !is_auth_command && !self.is_prompt_hook_flow() && !nested && !quieted {
+            if !reports_auth && !self.is_prompt_hook_flow() && !nested && !quieted {
                 message::warning(
                     "You are not logged in to FloxHub. Run 'flox auth login' to log in.",
                 );
