@@ -815,7 +815,7 @@ impl CoreEnvironment<ReadOnly> {
             self.env_dir.display(),
             transaction_backup.display()
         );
-        fs::rename(&self.env_dir, &transaction_backup)
+        move_dir(&self.env_dir, &transaction_backup)
             .map_err(CoreEnvironmentError::BackupTransaction)?;
         // try to restore the backup if the move fails
         debug!(
@@ -831,7 +831,7 @@ impl CoreEnvironment<ReadOnly> {
                 self.env_dir.display(),
             );
             fs::remove_dir_all(&self.env_dir).map_err(CoreEnvironmentError::AbortTransaction)?;
-            fs::rename(transaction_backup, &self.env_dir)
+            move_dir(&transaction_backup, &self.env_dir)
                 .map_err(CoreEnvironmentError::AbortTransaction)?;
             return Err(CoreEnvironmentError::Move(err));
         }
@@ -1361,6 +1361,48 @@ pub mod test_helpers {
     }
 }
 
+/// Move the directory at `from` to `to` on the same filesystem.
+///
+/// On overlayfs, which Docker's overlay2 driver and podman use for container
+/// filesystems, renaming a directory that comes from a lower image layer fails
+/// with EXDEV unless the mount has `redirect_dir=on`. That is the case for
+/// `.flox/env` when `flox init` ran in an earlier image layer or the project
+/// was copied into the image. Fall back to copying the directory and removing
+/// the original, as `mv` does.
+fn move_dir(from: &Path, to: &Path) -> Result<(), std::io::Error> {
+    move_dir_with(from, to, |from, to| fs::rename(from, to))
+}
+
+/// [move_dir] with the rename it tries first passed in, so tests can make it
+/// fail the way overlayfs does.
+fn move_dir_with(
+    from: &Path,
+    to: &Path,
+    rename: impl Fn(&Path, &Path) -> Result<(), std::io::Error>,
+) -> Result<(), std::io::Error> {
+    match rename(from, to) {
+        Err(err) if err.kind() == std::io::ErrorKind::CrossesDevices => {
+            debug!(
+                from = %from.display(),
+                to = %to.display(),
+                "rename crosses devices, copying instead"
+            );
+        },
+        result => return result,
+    }
+
+    // Copy, and leave nothing half-copied behind if that fails.
+    if let Err(err) = copy_dir_recursive(from, to, true) {
+        let _ = fs::remove_dir_all(to);
+        return Err(err);
+    }
+
+    // Removing the source may fail after deleting some contents.
+    // Preserve the complete destination copy for recovery on failure.
+    fs::remove_dir_all(from)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs::OpenOptions;
@@ -1612,6 +1654,36 @@ mod tests {
             .expect_err("Should fail if backup exists");
 
         assert!(matches!(err, CoreEnvironmentError::PriorTransaction(_)));
+    }
+
+    /// On overlayfs, as in Docker and podman containers, renaming a directory
+    /// that comes from a lower image layer fails with EXDEV. Moving the
+    /// environment out of the way for a transaction must still work there.
+    /// Simulates that rename failure and checks the directory and its
+    /// contents end up at the destination and are gone from the source.
+    #[test]
+    fn move_dir_falls_back_to_copy_on_cross_device_rename() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let from = tempdir.path().join("env");
+        let to = tempdir.path().join("env.tmp");
+        fs::create_dir_all(from.join("subdir")).unwrap();
+        fs::write(from.join(MANIFEST_FILENAME), "version = 1\n").unwrap();
+        fs::write(from.join("subdir").join("file"), "contents").unwrap();
+
+        move_dir_with(&from, &to, |_, _| {
+            Err(std::io::Error::from(std::io::ErrorKind::CrossesDevices))
+        })
+        .unwrap();
+
+        assert!(!from.exists(), "the source should be removed");
+        assert_eq!(
+            fs::read_to_string(to.join(MANIFEST_FILENAME)).unwrap(),
+            "version = 1\n"
+        );
+        assert_eq!(
+            fs::read_to_string(to.join("subdir").join("file")).unwrap(),
+            "contents"
+        );
     }
 
     /// creating backup should fail if env is readonly

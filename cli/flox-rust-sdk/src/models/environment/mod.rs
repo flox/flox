@@ -1104,19 +1104,22 @@ pub(crate) fn copy_dir_recursive(
     keep_permissions: bool,
 ) -> Result<(), std::io::Error> {
     if !to.as_ref().exists() {
-        std::fs::create_dir(&to).unwrap();
+        std::fs::create_dir(&to)?;
     }
     for entry in WalkDir::new(&from).into_iter().skip(1) {
-        let entry = entry.unwrap();
-        let new_path = to.as_ref().join(entry.path().strip_prefix(&from).unwrap());
+        let entry = entry?;
+        let new_path = to.as_ref().join(
+            entry
+                .path()
+                .strip_prefix(&from)
+                .map_err(std::io::Error::other)?,
+        );
         match entry.file_type() {
             file_type if file_type.is_dir() => {
-                std::fs::create_dir(new_path).unwrap();
+                std::fs::create_dir(new_path)?;
             },
             file_type if file_type.is_symlink() => {
-                let target = std::fs::read_link(entry.path())
-                // we know the path exists and is a symlink
-                .unwrap();
+                let target = std::fs::read_link(entry.path())?;
                 // If target is a relative symlink, this will potentially orphan
                 // it. But we're assuming it's absolute since we only copy links
                 // to the Nix store.
@@ -1127,7 +1130,8 @@ pub(crate) fn copy_dir_recursive(
                 if keep_permissions {
                     fs::copy(entry.path(), &new_path)?;
                 } else {
-                    copy_file_without_permissions(entry.path(), &new_path).unwrap();
+                    copy_file_without_permissions(entry.path(), &new_path)
+                        .map_err(std::io::Error::other)?;
                 }
             },
         }
