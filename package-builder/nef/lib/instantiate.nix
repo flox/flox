@@ -10,6 +10,19 @@ let
     in
     sourceInfo // lib.optionalAttrs (source ? dir) { inherit (source) dir; };
 
+  # A human-readable source label for a locked source. `collectDeepOverrides`
+  # keys sources by it, and its errors print it.
+  #
+  # The source label keeps `dir`, unlike `fetchSource`. One repository can
+  # hold several package directories at the same revision. Without
+  # `dir` they would share a key, and `listToAttrs` keeps only the
+  # first.
+  #
+  # `builtins.flakeRefToString` in Nix 2.31.5 throws "attribute 'path'
+  # is a thunk" on an attrset with unforced values, so `deepSeq`
+  # forces `source` first.
+  labelSource = source: builtins.flakeRefToString (builtins.deepSeq source source);
+
   # Fetch a floxhub based catalog
   #
   # {
@@ -70,6 +83,7 @@ let
     };
 in
 {
+  inherit fetchSource labelSource;
 
   /**
     This function takes a locked `floxhub` catalog
@@ -145,6 +159,12 @@ in
     in
     instantiatedCatalogsClosure;
 
+  # `collectDeepOverrides`/`applyDeepOverrides` live in `lib.nef.deepOverrides`
+  # (`deepOverrides.nix`); re-exported here so every existing caller of
+  # `lib.nef.instantiate.collectDeepOverrides`/`applyDeepOverrides` keeps
+  # working unchanged.
+  inherit (lib.nef.deepOverrides) collectDeepOverrides applyDeepOverrides;
+
   /**
     Instantiate a NEF project from a given sourceInfo.
 
@@ -181,7 +201,12 @@ in
       nixpkgsWithCatalogs = nixpkgs.extend catalogOverlay;
 
       # step 1 collect packages
-      collectedPackages = lib.nef.dirToAttrs pkgsDir;
+      # A package marked with a `deep-override` file is applied to the
+      # shared base by `applyDeepOverrides`, not by this repository's
+      # own instantiation; excluding it here keeps it from being
+      # applied twice under two different scopes.
+      collectedPackagesRaw = lib.nef.dirToAttrs pkgsDir;
+      collectedPackages = (lib.nef.deepOverrides.partitionPkgsTree collectedPackagesRaw).shallowTree;
 
       # Extend nixpkgs, with collectedPackages.
       # `attrPath` and `currentScope` remain empty as this is the toplevel attrset.

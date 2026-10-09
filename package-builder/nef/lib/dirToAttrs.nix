@@ -75,16 +75,23 @@
 
           directoryAsSubset =
             let
+              # `fileType` is `readDir`'s own type ("regular", "directory", ...),
+              # kept for the sort below. `listToAttrs` ignores it.
               entries = lib.attrValues (
-                lib.mapAttrs (
-                  name: _: lib.nameValuePair (lib.removeSuffix ".nix" name) (pathToEntries "${fileOrDir}/${name}")
-                ) (builtins.readDir fileOrDir)
+                lib.mapAttrs (name: fileType: {
+                  name = lib.removeSuffix ".nix" name;
+                  value = pathToEntries "${fileOrDir}/${name}";
+                  inherit fileType;
+                }) (builtins.readDir fileOrDir)
               );
               validEntries = lib.filter (v: (v ? value && v.value != null && v.value != { })) entries;
 
               # Regular files should be preferred over directories, so that e.g.
-              # foo.nix can be used to declare a further import of the foo directory
-              entryAttrs = lib.listToAttrs (lib.sort (a: b: a.value.type == "regular") validEntries);
+              # foo.nix can be used to declare a further import of the foo directory.
+              # `listToAttrs` keeps the first entry for a name, so files sort first.
+              entryAttrs = lib.listToAttrs (
+                lib.sort (a: b: a.fileType == "regular" && b.fileType != "regular") validEntries
+              );
 
             in
             if builtins.length validEntries > 0 then

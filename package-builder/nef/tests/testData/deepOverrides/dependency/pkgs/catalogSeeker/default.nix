@@ -1,0 +1,1 @@
+{ catalogs, ... }: builtins.attrNames catalogs

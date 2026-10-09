@@ -1759,6 +1759,7 @@ pub mod tests {
             },
             inputs: None,
             locked_inputs_hash: "sha256:aabbcc".to_string(),
+            deep_overrides: None,
         };
         let mut locked_inputs = HashMap::new();
         locked_inputs.insert("dep-key".to_string(), entry);
@@ -1913,6 +1914,7 @@ pub mod tests {
             base_catalog_rev_date: None,
             build_type: None,
             cache_uri: None,
+            deep_overrides: None,
             derivation: api_types::PackageDerivation {
                 broken: None,
                 description: None,

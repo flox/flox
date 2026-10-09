@@ -1,6 +1,53 @@
 { lib, nef }:
 {
   /*
+    Build a `callPackage`-like function against `scope`, using the
+    convention the package set provides: `newScope`, `extend` plus
+    `callPackage`, or neither. `selfBinding` always wins. `currentScope`
+    is used only when `scope` provides neither, so a package set's own
+    members are never shadowed by a parent's names.
+
+    Shared by `mkOverlay`'s "nix" case below and by the deep-override
+    overlay in `lib.nef.deepOverrides`.
+
+    # Type
+
+    ```
+    callPackageIn :: Attrs -> Attrs -> Attrs -> (Path -> Attrs -> a)
+    ```
+  */
+  callPackageIn =
+    # the package set to call against
+    scope:
+    # the union of all parent attr sets, used only by the fallback below
+    currentScope:
+    # bindings that always win, typically the recursion guard for the
+    # attribute being defined
+    selfBinding:
+    # Examples of such sets are:
+    # - agdaPackages
+    if scope ? newScope then
+      scope.newScope selfBinding
+    # Some package sets are using `makeExtensible` instead of `makeScope`
+    # which provides them with an `extend` function to apply an overlay.
+    # We still want a `callPackage` function to confidently call the function,
+    # with the overlay applied.
+    #
+    # Examples of such sets are:
+    # - beamPackages
+    else if scope ? callPackage && scope ? extend then
+      (scope.extend (_: _: selfBinding)).callPackage
+    else
+      # attrset that is not defined with `makeScope`
+      # and neither with `makeExtensible` and `callPackage`.
+      # In this case we can only build our own `callPackage`
+      # from the current scope hierarchy.
+      #
+      # Examples of such sets are:
+      # - nodePackages (as node packages are individually shrinkwrapped via a node2nix tool)
+      lib.callPackageWith (currentScope // scope // selfBinding);
+
+  /*
     Create an overlay function
 
          final: prev: { ... }
@@ -65,48 +112,9 @@
                 An expression can only access its own attribute path to override its existing value.
               '';
 
-              # Find or build a `callPackage` function that replaces infinite recursion errors with an error
-              callPackage =
-
-                # Examples of such sets are:
-                # - agdaPackages
-                if final ? newScope then
-                  final.newScope {
-                    ${name} = prev.${name} or recursionGuardError;
-                  }
-                # probably equivalent to the above but structurally more similar to the `extend` case below
-                # else if final ? overrideScope then
-                #   (final.overrideScope (
-                #     _: _: { ${name} = prev.${name} or recursionGuardError; }
-                #   )).callPackage
-
-                # Some package sets are using `makeExtensible` instead of `makeScope`
-                # which provides them with an `extend` function to apply an overlay.
-                # We still want a `callPackage` function to confidently call the function,
-                # with the overlay applied.
-                #
-                # Examples of such sets are:
-                # - beamPackages
-                #
-                # Todo: If a set can be extended but does not provide a `callPackage`,
-                # we should still try to use the `extend` it and build our own `callPackage` as below.
-                else if final ? callPackage && final ? extend then
-                  (final.extend (_: _: { ${name} = prev.${name} or recursionGuardError; })).callPackage
-                else
-                  # attrset that is not defined with `makeScope`
-                  # and neither with `makeExtensible` and `callPackage`.
-                  # In this case we can only build our own `callPackage`
-                  # from the current scope hierarchy.
-                  #
-                  # Examples of such sets are:
-                  # - nodePackages (as node packages are individually shrinkwrapped via a node2nix tool)
-                  lib.callPackageWith (
-                    currentScope
-                    // final
-                    // {
-                      ${name} = prev.${name} or recursionGuardError;
-                    }
-                  );
+              callPackage = nef.callPackageIn final currentScope {
+                ${name} = prev.${name} or recursionGuardError;
+              };
 
               errorContext =
                 let

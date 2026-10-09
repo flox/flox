@@ -13,6 +13,7 @@ use floxhub_client::{
     CatalogClientTrait,
     CatalogStoreConfig,
     CatalogStoreConfigNixCopy,
+    DeepOverridesItemItem,
     FloxhubClientError,
     LockedInputEntry,
     NarInfos,
@@ -41,6 +42,7 @@ use super::build::{
     PackageTarget,
     PackageTargetError,
     PackageTargetKind,
+    deep_override_attr_paths_in,
     find_toplevel_group_nixpkgs,
 };
 use super::buildenv::BuildEnvOutputs;
@@ -117,6 +119,13 @@ pub enum PublishError {
     /// The user declined to replace the package's registered source.
     #[error("Publish canceled. The registered source was not changed.")]
     LineageChangeDeclined,
+
+    /// A deep override attribute name failed the catalog's non-empty-name
+    /// constraint. `deep_override_attr_paths_in` scans real directory and
+    /// file names, which are never empty, so this should not occur in
+    /// practice.
+    #[error("deep override attribute name is empty: {0:?}")]
+    InvalidDeepOverrideName(String),
 }
 
 /// The `Publish` trait describes the high level behavior of publishing a package to a catalog.
@@ -773,6 +782,14 @@ where
                 .into_owned(),
             allow_lineage_change,
             factory_build_token: factory_build_token.map(str::to_string),
+            // Always sent, mirroring `locked_inputs` above: an empty list
+            // states that the repository declares no overrides, rather
+            // than leaving the field unstated for the server to guess at.
+            deep_overrides: Some(deep_overrides_for_wire(deep_override_attr_paths_in(
+                self.env_metadata
+                    .repo_root_path
+                    .join(&self.env_metadata.rel_expression_build_base_dir),
+            ))?),
         };
 
         tracing::debug!(
@@ -899,6 +916,28 @@ fn get_client_side_catalog_store_config(
         },
     };
     Ok(config)
+}
+
+/// Convert scanned deep override attribute paths to the wire type.
+///
+/// Each component must satisfy the catalog's non-empty-name constraint on
+/// [DeepOverridesItemItem]. No component this function has ever seen fails
+/// that constraint in practice, but a failure is reported as a publish
+/// error rather than silently dropping the entry.
+fn deep_overrides_for_wire(
+    paths: Vec<Vec<String>>,
+) -> Result<Vec<Vec<DeepOverridesItemItem>>, PublishError> {
+    paths
+        .into_iter()
+        .map(|path| {
+            path.into_iter()
+                .map(|name| {
+                    DeepOverridesItemItem::try_from(name.as_str())
+                        .map_err(|_| PublishError::InvalidDeepOverrideName(name))
+                })
+                .collect()
+        })
+        .collect()
 }
 
 /// Convert a [BuildResult] into a form that can more easily fill the publish api request.
@@ -1998,6 +2037,19 @@ pub mod tests {
         assert_eq!(meta.pname, EXAMPLE_PACKAGE_NAME.to_string());
         assert_eq!(meta.system.to_string(), flox.system);
         assert_eq!(meta.version, Some("1.0.2a".to_string()));
+    }
+
+    /// An empty attribute name fails the catalog's non-empty-name
+    /// constraint and is reported as a publish error, rather than being
+    /// dropped from the submitted list.
+    #[test]
+    fn deep_overrides_for_wire_rejects_empty_name() {
+        let result = deep_overrides_for_wire(vec![vec!["".to_string()]]);
+
+        assert!(matches!(
+            result,
+            Err(PublishError::InvalidDeepOverrideName(name)) if name.is_empty()
+        ));
     }
 
     #[tokio::test]
