@@ -51,6 +51,7 @@ use thiserror::Error;
 use toml_edit::Key;
 use tracing::{debug, info_span};
 
+use crate::commands::ensure_auth;
 use crate::commands::general::{remove_config_key_with_query, update_config_with_query};
 use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Select};
@@ -147,6 +148,11 @@ pub enum RunError {
     /// Resolution requires a valid FloxHub login.
     #[error(transparent)]
     Auth(#[from] ResolveAuthError),
+
+    /// No valid FloxHub login to disambiguate between packages at the prompt.
+    /// Carries the message from [`ensure_auth`], which names `flox auth login`.
+    #[error("{0}")]
+    NotLoggedIn(String),
 
     /// Transport/network failure during catalog resolve.
     #[error(
@@ -278,7 +284,7 @@ pub struct Run {
 impl Run {
     /// Entry point: parse args with POSIX stop-at-first-positional semantics,
     /// then resolve, download, and exec.
-    pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
+    pub async fn handle(self, mut config: Config, mut flox: Flox) -> Result<()> {
         subcommand_metric!("run");
 
         // Re-read raw OS args. bpaf has already consumed the first `--`, so
@@ -318,7 +324,7 @@ impl Run {
             ParsedArgs::Run(run_args) => run_args,
         };
 
-        let pkg_spec = resolve_command(&run_args, &config, &flox)
+        let pkg_spec = resolve_command(&run_args, &config, &mut flox)
             .await
             .map_err(anyhow::Error::from)?;
         let resolved = RunArgs {
@@ -544,13 +550,14 @@ pub fn validate_plain_package(pkg: &CatalogPackage, raw: &str) -> Result<(), Run
 ///    - `listing_known=true`, empty providers → `NoCommandProvider`.
 /// 4. Single provider → return its `attr_path` silently.
 /// 5. Exactly one `exact_name_match=true` → return its `attr_path` silently.
-/// 6. Multiple candidates and a TTY → disambiguation prompt; the selection
-///    persists to `run_preferences`. Only this branch ever writes.
+/// 6. Multiple candidates and a TTY → require login, then disambiguation
+///    prompt; the selection persists to `run_preferences`. Only this branch
+///    requires auth, and only this branch ever writes.
 /// 7. Multiple candidates, no TTY → `AmbiguousCommandNonInteractive`.
 async fn resolve_command(
     run_args: &RunArgs,
     config: &Config,
-    flox: &Flox,
+    flox: &mut Flox,
 ) -> Result<String, RunError> {
     // Branch 1: -p supplied — bypass resolver entirely.
     if let Some(pkg) = &run_args.package {
@@ -606,8 +613,8 @@ async fn resolve_command(
         return Ok(exact[0].attr_path.clone());
     }
 
-    // Branch 6: multiple candidates and a TTY — prompt, then persist the
-    // selection. This is the only branch that writes a preference.
+    // Branch 6: multiple candidates and a TTY — require login, then prompt and
+    // persist the selection. This is the only branch that writes a preference.
     if Dialog::can_prompt() {
         debug!(
             branch = "prompt",
@@ -615,6 +622,14 @@ async fn resolve_command(
             count = result.providers.len(),
             "resolve_command"
         );
+        // Require a FloxHub login before prompting: a logged-out or expired
+        // user should authenticate up front rather than choose a package and
+        // then hit a login wall at resolve. The gate is confined to this
+        // interactive branch — every other path stays catalog-driven, so the
+        // catalog still decides whether resolution needs auth (see #4787).
+        ensure_auth(flox)
+            .await
+            .map_err(|e| RunError::NotLoggedIn(e.to_string()))?;
         let attr_path =
             prompt_for_command_provider(&command, &result.providers, result.total_count as u64)
                 .await?;
@@ -1899,7 +1914,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn return_package_spec_when_dash_p_supplied() {
         // No catalog call — client is never exercised here.
-        let (flox, _dir) = flox_instance();
+        let (mut flox, _dir) = flox_instance();
         let config = make_config(Default::default());
         let run_args = RunArgs {
             package: Some("curl".to_string()),
@@ -1907,14 +1922,16 @@ mod tests {
             args: vec![],
         };
 
-        let result = resolve_command(&run_args, &config, &flox).await.unwrap();
+        let result = resolve_command(&run_args, &config, &mut flox)
+            .await
+            .unwrap();
         assert_eq!(result, "curl");
     }
 
     // Branch 2: saved preference — the resolver returns it without a network call.
     #[tokio::test(flavor = "multi_thread")]
     async fn return_saved_preference_when_present() {
-        let (flox, _dir) = flox_instance();
+        let (mut flox, _dir) = flox_instance();
         let mut prefs = std::collections::HashMap::new();
         prefs.insert("vi".to_string(), "vim".to_string());
         let config = make_config(prefs);
@@ -1924,7 +1941,9 @@ mod tests {
             args: vec![],
         };
 
-        let result = resolve_command(&run_args, &config, &flox).await.unwrap();
+        let result = resolve_command(&run_args, &config, &mut flox)
+            .await
+            .unwrap();
         assert_eq!(result, "vim");
     }
 
@@ -1942,7 +1961,7 @@ mod tests {
             args: vec![],
         };
 
-        let err = resolve_command(&run_args, &config, &flox)
+        let err = resolve_command(&run_args, &config, &mut flox)
             .await
             .unwrap_err();
         assert!(
@@ -1965,7 +1984,7 @@ mod tests {
             args: vec![],
         };
 
-        let err = resolve_command(&run_args, &config, &flox)
+        let err = resolve_command(&run_args, &config, &mut flox)
             .await
             .unwrap_err();
         assert!(
@@ -1989,7 +2008,7 @@ mod tests {
             args: vec![],
         };
 
-        let err = resolve_command(&run_args, &config, &flox)
+        let err = resolve_command(&run_args, &config, &mut flox)
             .await
             .unwrap_err();
         assert!(
@@ -2012,7 +2031,9 @@ mod tests {
             args: vec![],
         };
 
-        let result = resolve_command(&run_args, &config, &flox).await.unwrap();
+        let result = resolve_command(&run_args, &config, &mut flox)
+            .await
+            .unwrap();
         assert_eq!(result, "curlFull");
     }
 
@@ -2030,7 +2051,9 @@ mod tests {
             args: vec![],
         };
 
-        let result = resolve_command(&run_args, &config, &flox).await.unwrap();
+        let result = resolve_command(&run_args, &config, &mut flox)
+            .await
+            .unwrap();
         assert_eq!(result, "curlFull");
     }
 
@@ -2049,7 +2072,7 @@ mod tests {
             args: vec![],
         };
 
-        let err = resolve_command(&run_args, &config, &flox)
+        let err = resolve_command(&run_args, &config, &mut flox)
             .await
             .unwrap_err();
         assert!(
@@ -2073,7 +2096,7 @@ mod tests {
             args: vec![],
         };
 
-        let err = resolve_command(&run_args, &config, &flox)
+        let err = resolve_command(&run_args, &config, &mut flox)
             .await
             .unwrap_err();
         assert!(
@@ -2098,7 +2121,7 @@ mod tests {
             args: vec![],
         };
 
-        let err = resolve_command(&run_args, &config, &flox)
+        let err = resolve_command(&run_args, &config, &mut flox)
             .await
             .unwrap_err();
         let msg = err.to_string();
@@ -2191,7 +2214,7 @@ mod tests {
     // surface InvalidCommandName, not LookupUnavailable or CommandNotIndexed.
     #[tokio::test(flavor = "multi_thread")]
     async fn single_char_command_gives_invalid_name_error() {
-        let (flox, _dir) = flox_instance();
+        let (mut flox, _dir) = flox_instance();
         let config = make_config(Default::default());
         let run_args = RunArgs {
             package: None,
@@ -2199,7 +2222,7 @@ mod tests {
             args: vec![],
         };
 
-        let err = resolve_command(&run_args, &config, &flox)
+        let err = resolve_command(&run_args, &config, &mut flox)
             .await
             .unwrap_err();
         assert!(
