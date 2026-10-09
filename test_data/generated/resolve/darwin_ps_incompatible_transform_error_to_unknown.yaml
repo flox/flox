@@ -6,13 +6,13 @@ then:
   status: 200
   header:
     - name: date
-      value: Tue, 29 Sep 2026 23:16:56 GMT
+      value: Thu, 08 Oct 2026 22:24:14 GMT
     - name: content-type
       value: application/json
     - name: server
       value: uvicorn
     - name: apigw-requestid
-      value: EfAEXhvSIAMESeg=
+      value: E8iyUg3RoAMEY1w=
   body: '{"items":[{"name":"toplevel","page":null,"candidate_pages":null,"messages":[{"level":"error","type":"unknown","message":"unknown
     message","context":{"attr_path":"darwin.ps","install_id":"ps","valid_systems":"x86_64-darwin"}},{"level":"trace","type":"unknown","message":"unknown
     message","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not
@@ -32,7 +32,7 @@ then:
   status: 200
   header:
     - name: date
-      value: Tue, 29 Sep 2026 23:16:56 GMT
+      value: Thu, 08 Oct 2026 22:24:14 GMT
     - name: content-type
       value: application/json
     - name: content-length
@@ -40,6 +40,6 @@ then:
     - name: server
       value: uvicorn
     - name: apigw-requestid
-      value: EfAEaj9nIAMESIQ=
+      value: E8iyWjnBoAMEYrg=
   body: '{"items":[{"name":"toplevel","page":{"page":1027867,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"darwin.ps","pkg_path":"darwin.ps","derivation":"/nix/store/1lxwksmv3iqynp7h8r8ig35ggxr4shjk-adv_cmds-237.drv","name":"adv_cmds-237","pname":"ps","version":"237","system":"x86_64-darwin","outputs":[{"name":"ps","store_path":"/nix/store/4kcgncdydqmm6ndj8vw9mi21xrsnnxja-adv_cmds-237-ps"},{"name":"man","store_path":"/nix/store/mdz3vh5n3xfyvqqb16mw5n13qmm2lr7z-adv_cmds-237-man"},{"name":"out","store_path":"/nix/store/0xyh5lfvp82w3pnx1mxm9kjr6qyr7py6-adv_cmds-237"}],"outputs_to_install":["man","out"],"description":"Advanced
     commands package for Darwin","license":"[ APSL-1.0, APSL-2.0 ]","locked_url":"https://github.com/flox/nixpkgs?rev=d407951447dcd00442e97087bf374aad70c04cea","rev":"d407951447dcd00442e97087bf374aad70c04cea","rev_count":1027867,"rev_date":"2026-07-05T04:06:12Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["staging","unstable"],"scrape_date":"2026-07-06T04:09:00.739332Z","cache_uri":null,"install_id":"ps"}],"messages":[],"complete":true},"candidate_pages":null,"messages":[]}]}'

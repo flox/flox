@@ -6,7 +6,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Tue, 29 Sep 2026 23:16:44 GMT
+    value: Thu, 08 Oct 2026 22:24:44 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -14,5 +14,5 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: EfACjgpuoAMEVUg=
+    value: E8i3CjftIAMEYZg=
   body: '{"items":[{"name":"toplevel","page":{"page":870157,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"rubyPackages_3_2.rails","pkg_path":"rubyPackages_3_2.rails","derivation":"/nix/store/ignsjwa6vvjvqhkz8jv0068zvj54g32q-ruby3.2-rails-0.9.5.drv","name":"ruby3.2-rails-0.9.5","pname":"rails","version":"0.9.5","system":"aarch64-darwin","outputs":[{"name":"out","store_path":"/nix/store/plivi4di1mr1mhz7ql5lly1myssdsvlf-ruby3.2-rails-0.9.5"}],"outputs_to_install":["out"],"description":null,"license":null,"locked_url":"https://github.com/flox/nixpkgs?rev=7df7ff7d8e00218376575f0acdcc5d66741351ee","rev":"7df7ff7d8e00218376575f0acdcc5d66741351ee","rev_count":870157,"rev_date":"2025-10-02T04:57:58Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["staging","unstable"],"scrape_date":"2025-10-03T04:41:41.581569Z","cache_uri":null,"install_id":"rails"},{"catalog":"nixpkgs","attr_path":"rubyPackages_3_2.rails","pkg_path":"rubyPackages_3_2.rails","derivation":"/nix/store/pky6cjpdbd64c0lxhc8qzamrvaifirvc-ruby3.2-rails-0.9.5.drv","name":"ruby3.2-rails-0.9.5","pname":"rails","version":"0.9.5","system":"aarch64-linux","outputs":[{"name":"out","store_path":"/nix/store/71lzzmw8yi2mavip5l5yp10abhwxp0vv-ruby3.2-rails-0.9.5"}],"outputs_to_install":["out"],"description":null,"license":null,"locked_url":"https://github.com/flox/nixpkgs?rev=7df7ff7d8e00218376575f0acdcc5d66741351ee","rev":"7df7ff7d8e00218376575f0acdcc5d66741351ee","rev_count":870157,"rev_date":"2025-10-02T04:57:58Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["staging","unstable"],"scrape_date":"2025-10-03T04:58:44.405615Z","cache_uri":null,"install_id":"rails"},{"catalog":"nixpkgs","attr_path":"rubyPackages_3_2.rails","pkg_path":"rubyPackages_3_2.rails","derivation":"/nix/store/27dqf4sgmb6l5mrzpym2khfg40cq4187-ruby3.2-rails-0.9.5.drv","name":"ruby3.2-rails-0.9.5","pname":"rails","version":"0.9.5","system":"x86_64-linux","outputs":[{"name":"out","store_path":"/nix/store/f4vpvfqb6y5k2nn575n15m9kqldr11in-ruby3.2-rails-0.9.5"}],"outputs_to_install":["out"],"description":null,"license":null,"locked_url":"https://github.com/flox/nixpkgs?rev=7df7ff7d8e00218376575f0acdcc5d66741351ee","rev":"7df7ff7d8e00218376575f0acdcc5d66741351ee","rev_count":870157,"rev_date":"2025-10-02T04:57:58Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["staging","unstable"],"scrape_date":"2025-10-03T05:29:42.318144Z","cache_uri":null,"install_id":"rails"}],"messages":[],"complete":true},"candidate_pages":null,"messages":[]}]}'

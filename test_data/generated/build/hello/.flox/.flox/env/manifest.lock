@@ -1,7 +1,7 @@
 {
   "lockfile-version": 1,
   "manifest": {
-    "schema-version": "1.17.0",
+    "schema-version": "1.19.0",
     "install": {
       "gcc": {
         "pkg-path": "gcc",
@@ -21,30 +21,30 @@
     {
       "attr_path": "gcc",
       "broken": false,
-      "derivation": "/nix/store/v50v2lbapq4y17l44a8i8m7w10x3in3l-gcc-wrapper-15.3.0.drv",
-      "description": "GNU Compiler Collection, version 15.3.0 (wrapper script)",
+      "derivation": "/nix/store/b9sj5k5147bqv005bgby3xiq090bbll7-gcc-wrapper-16.2.0.drv",
+      "description": "GNU Compiler Collection, version 16.2.0 (wrapper script)",
       "install_id": "gcc",
       "license": "GPL-3.0-or-later",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=7a0f122f5090cf4c2ade2a13a0e229d4e19ba71f",
-      "name": "gcc-wrapper-15.3.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=151fa4e8ddfdd8dd25d945ad94ed54a13de9f6e4",
+      "name": "gcc-wrapper-16.2.0",
       "pname": "gcc",
-      "rev": "7a0f122f5090cf4c2ade2a13a0e229d4e19ba71f",
-      "rev_count": 1080855,
-      "rev_date": "2026-09-28T06:58:16Z",
-      "scrape_date": "2026-09-29T04:58:28.776037Z",
+      "rev": "151fa4e8ddfdd8dd25d945ad94ed54a13de9f6e4",
+      "rev_count": 1086391,
+      "rev_date": "2026-10-06T04:29:54Z",
+      "scrape_date": "2026-10-07T04:59:38.491786Z",
       "stabilities": [
         "unstable"
       ],
       "unfree": false,
-      "version": "15.3.0",
+      "version": "16.2.0",
       "outputs_to_install": [
         "man",
         "out"
       ],
       "outputs": {
-        "info": "/nix/store/28qvf7dmva1ms9cm937qmm6xsxrvwpy0-gcc-wrapper-15.3.0-info",
-        "man": "/nix/store/c14af1gr7g4cr89yxj9i7hl8n3izv75l-gcc-wrapper-15.3.0-man",
-        "out": "/nix/store/r2rxcj66b6jkyzn68pk42frmh8zybzkp-gcc-wrapper-15.3.0"
+        "info": "/nix/store/c6h3s4vv77ifmdsxd43198cjwafby0b2-gcc-wrapper-16.2.0-info",
+        "man": "/nix/store/lx66zprkzw9qc2w2khrim7kx9k2gl33m-gcc-wrapper-16.2.0-man",
+        "out": "/nix/store/sc0yfj74svyg3addnjkqkhk0c9xzb2rr-gcc-wrapper-16.2.0"
       },
       "system": "aarch64-darwin",
       "group": "toplevel",
@@ -53,22 +53,22 @@
     {
       "attr_path": "gcc",
       "broken": false,
-      "derivation": "/nix/store/27pyw666mq7gcya5zskf4lnhbds89092-gcc-wrapper-15.3.0.drv",
-      "description": "GNU Compiler Collection, version 15.3.0 (wrapper script)",
+      "derivation": "/nix/store/m5z7qjlfzjqrya90krpxvb3v7chz6gpk-gcc-wrapper-16.2.0.drv",
+      "description": "GNU Compiler Collection, version 16.2.0 (wrapper script)",
       "install_id": "gcc",
       "license": "GPL-3.0-or-later",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=7a0f122f5090cf4c2ade2a13a0e229d4e19ba71f",
-      "name": "gcc-wrapper-15.3.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=151fa4e8ddfdd8dd25d945ad94ed54a13de9f6e4",
+      "name": "gcc-wrapper-16.2.0",
       "pname": "gcc",
-      "rev": "7a0f122f5090cf4c2ade2a13a0e229d4e19ba71f",
-      "rev_count": 1080855,
-      "rev_date": "2026-09-28T06:58:16Z",
-      "scrape_date": "2026-09-29T05:30:01.638423Z",
+      "rev": "151fa4e8ddfdd8dd25d945ad94ed54a13de9f6e4",
+      "rev_count": 1086391,
+      "rev_date": "2026-10-06T04:29:54Z",
+      "scrape_date": "2026-10-07T05:31:53.806893Z",
       "stabilities": [
         "unstable"
       ],
       "unfree": false,
-      "version": "15.3.0",
+      "version": "16.2.0",
       "outputs_to_install": [
         "man",
         "out",
@@ -76,9 +76,9 @@
         "out"
       ],
       "outputs": {
-        "info": "/nix/store/x17rgagvkg5s7mqbv7mqp1asa6xyhc8p-gcc-wrapper-15.3.0-info",
-        "man": "/nix/store/4vw8y282g8p3f58rfxkn9k4z84rv10s9-gcc-wrapper-15.3.0-man",
-        "out": "/nix/store/z2qkl46kv87zcs2sfwfjgc75nq0hbzhf-gcc-wrapper-15.3.0"
+        "info": "/nix/store/322qdsgm2r9cay8hy5pamf5zb9wnspm9-gcc-wrapper-16.2.0-info",
+        "man": "/nix/store/f6d10df52dpp9scf73gaingmmaz3k09g-gcc-wrapper-16.2.0-man",
+        "out": "/nix/store/99zij8qfs8wzbb2njrj18ys8hpnrcj3p-gcc-wrapper-16.2.0"
       },
       "system": "aarch64-linux",
       "group": "toplevel",
@@ -87,34 +87,32 @@
     {
       "attr_path": "gcc",
       "broken": false,
-      "derivation": "/nix/store/lyb848yjq8pnlwkqnzlnkvjzqa4cvaqh-gcc-wrapper-15.3.0.drv",
-      "description": "GNU Compiler Collection, version 15.3.0 (wrapper script)",
+      "derivation": "/nix/store/6h0ljahcs7q79rxz48qsimb1krybmiwh-gcc-wrapper-16.2.0.drv",
+      "description": "GNU Compiler Collection, version 16.2.0 (wrapper script)",
       "install_id": "gcc",
       "license": "GPL-3.0-or-later",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=7a0f122f5090cf4c2ade2a13a0e229d4e19ba71f",
-      "name": "gcc-wrapper-15.3.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=151fa4e8ddfdd8dd25d945ad94ed54a13de9f6e4",
+      "name": "gcc-wrapper-16.2.0",
       "pname": "gcc",
-      "rev": "7a0f122f5090cf4c2ade2a13a0e229d4e19ba71f",
-      "rev_count": 1080855,
-      "rev_date": "2026-09-28T06:58:16Z",
-      "scrape_date": "2026-09-29T06:06:02.420758Z",
+      "rev": "151fa4e8ddfdd8dd25d945ad94ed54a13de9f6e4",
+      "rev_count": 1086391,
+      "rev_date": "2026-10-06T04:29:54Z",
+      "scrape_date": "2026-10-07T06:08:38.221716Z",
       "stabilities": [
         "unstable"
       ],
       "unfree": false,
-      "version": "15.3.0",
+      "version": "16.2.0",
       "outputs_to_install": [
         "man",
-        "man",
-        "out",
         "out",
         "out",
         "out"
       ],
       "outputs": {
-        "info": "/nix/store/gja6ahm2ivajy5crhjqrbcws2khxnkaa-gcc-wrapper-15.3.0-info",
-        "man": "/nix/store/x30anv345f9v2ilfm901g18rlcprbpd1-gcc-wrapper-15.3.0-man",
-        "out": "/nix/store/z4c6k0mrlkwl3s4w9ysxc8vq1wylm3ms-gcc-wrapper-15.3.0"
+        "info": "/nix/store/d9sclwji6aqjdgs56p9mcjrq5p0859wl-gcc-wrapper-16.2.0-info",
+        "man": "/nix/store/2k4gc6qmvqrglbfs5xbgx2b3rdbkcd96-gcc-wrapper-16.2.0-man",
+        "out": "/nix/store/j1938gsbvbhkyz4kbmvjk56r479mkw3s-gcc-wrapper-16.2.0"
       },
       "system": "x86_64-linux",
       "group": "toplevel",

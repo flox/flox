@@ -1,7 +1,7 @@
 {
   "lockfile-version": 1,
   "manifest": {
-    "schema-version": "1.17.0",
+    "schema-version": "1.19.0",
     "install": {
       "clang": {
         "pkg-path": "clang",
@@ -55,6 +55,7 @@
       "unfree": false,
       "version": "21.1.8",
       "outputs_to_install": [
+        "out",
         "out",
         "out",
         "out",

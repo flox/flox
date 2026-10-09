@@ -761,6 +761,7 @@ where
             // This is the version of the narinfo being submitted.  Until we
             // define changes, we'll use the service defaults.
             narinfos_source_version: None,
+            deep_overrides: None,
             build_type: match self.package_metadata.package.kind() {
                 PackageTargetKind::ExpressionBuild(_) => BuildType::Nef,
                 PackageTargetKind::ManifestBuild { .. } => BuildType::Manifest,

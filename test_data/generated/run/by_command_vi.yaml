@@ -5,7 +5,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Tue, 29 Sep 2026 23:18:37 GMT
+    value: Thu, 08 Oct 2026 22:27:52 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -13,5 +13,5 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: EfAUQjRgIAMEb8g=
+    value: E8jUViiCoAMEa-w=
   body: '{"command_name":"vi","providers":[{"attr_path":"busybox","pname":"busybox","exact_name_match":false,"system":"x86_64-linux"},{"attr_path":"nvi","pname":"nvi","exact_name_match":false,"system":"x86_64-linux"},{"attr_path":"open-watcom-bin","pname":"open-watcom-bin","exact_name_match":false,"system":"x86_64-linux"},{"attr_path":"open-watcom-v2","pname":"open-watcom-v2","exact_name_match":false,"system":"x86_64-linux"},{"attr_path":"tests.vim.test-all-plugins-have-vimPlugin-true","pname":"test-all-plugins-have-vimPlugin-true","exact_name_match":false,"system":"x86_64-linux"},{"attr_path":"vim","pname":"vim","exact_name_match":false,"system":"x86_64-linux"},{"attr_path":"vim_configurable","pname":"vim_configurable","exact_name_match":false,"system":"x86_64-linux"},{"attr_path":"vim-full","pname":"vim-full","exact_name_match":false,"system":"x86_64-linux"},{"attr_path":"vimHugeX","pname":"vimHugeX","exact_name_match":false,"system":"x86_64-linux"}],"total_count":9,"listing_known":true}'

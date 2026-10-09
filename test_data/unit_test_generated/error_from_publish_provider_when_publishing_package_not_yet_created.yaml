@@ -6,7 +6,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Fri, 14 Aug 2026 22:17:12 GMT
+    value: Thu, 08 Oct 2026 22:44:59 GMT
   - name: server
     value: uvicorn
   - name: content-length
@@ -19,7 +19,8 @@ when:
   path: /api/v1/catalog/catalogs/test1/packages/error_from_publish_provider_when_publishing_package_not_yet_created/builds
   method: POST
   json_body_includes:
-  - build_type: manifest
+  - allow_lineage_change: false
+    build_type: manifest
     derivation:
       broken: false
       description: dummy
@@ -51,7 +52,7 @@ then:
   status: 404
   header:
   - name: date
-    value: Fri, 14 Aug 2026 22:17:12 GMT
+    value: Thu, 08 Oct 2026 22:44:59 GMT
   - name: server
     value: uvicorn
   - name: content-length
