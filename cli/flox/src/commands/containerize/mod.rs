@@ -120,8 +120,12 @@ impl Containerize {
                 });
             // this method is only executed on linux
             #[cfg_attr(not(target_os = "linux"), allow(deprecated))]
-            let builder =
-                MkContainerNix::new(built_environment.for_mode(&mode), mode, container_config);
+            let builder = MkContainerNix::new(
+                built_environment.for_mode(&mode),
+                mode,
+                manifest.options.cuda_detection.unwrap_or(true),
+                container_config,
+            );
 
             builder.create_container_source(&flox, env_name.as_ref(), output_tag)?
         } else {
