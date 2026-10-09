@@ -12,6 +12,10 @@ use tracing::{debug, trace};
 
 use crate::{Cli, Error};
 
+/// The FloxHub token commands use to resolve while recording.
+/// Keep in sync with `FLOX_MOCK_RECORDING_TOKEN_VAR` in `cli/floxhub-client/src/lib.rs`.
+pub const MOCK_RECORDING_TOKEN_VAR: &str = "_FLOX_MOCK_RECORDING_TOKEN";
+
 /// The config file for the mock data to generate.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
@@ -321,7 +325,14 @@ pub fn execute_job(
             ignore_errors,
             "running pre_cmd"
         );
-        run_pre_cmd(pre_cmd, vars, job.tmp_dir.path(), ignore_errors).context("pre_cmd failed")?;
+        run_pre_cmd(
+            &job.category,
+            pre_cmd,
+            vars,
+            job.tmp_dir.path(),
+            ignore_errors,
+        )
+        .context("pre_cmd failed")?;
     }
     let ignore_errors = job.spec.ignore_cmd_errors.unwrap_or(false);
     debug!(
@@ -331,6 +342,7 @@ pub fn execute_job(
         "running cmd"
     );
     run_cmd(
+        &job.category,
         job.spec.cmd.as_ref(),
         vars,
         job.tmp_dir.path(),
@@ -360,6 +372,7 @@ pub fn execute_job(
 
 /// Runs the `pre_cmd` for a given job.
 fn run_pre_cmd(
+    category: &str,
     pre_cmd: &str,
     vars: &Option<HashMap<String, String>>,
     dir: &Path,
@@ -376,6 +389,7 @@ fn run_pre_cmd(
             cmd.env(key, value);
         }
     }
+    set_recording_auth(&mut cmd, category)?;
     debug!("pre_cmd: {:?}", cmd);
     let output = cmd.output().context("couldn't call command")?;
     if !output.status.success() && !ignore_errors {
@@ -428,8 +442,29 @@ fn copy_files(files: &[PathBuf], input_dir: &Path, working_dir: &Path) -> Result
     Ok(())
 }
 
+/// Sets the credentials a job's commands run with.
+///
+/// The catalog requires auth to resolve, so most jobs use the recording token.
+/// Search and show don't require auth and would list the token account's
+/// custom catalogs, so they run logged out.
+/// Disabling the keyring stops a keyring login from being used instead.
+fn set_recording_auth(cmd: &mut Command, category: &str) -> Result<(), Error> {
+    cmd.env("_FLOX_DISABLE_KEYRING", "true");
+    if matches!(category, "search" | "show") {
+        cmd.env("FLOX_FLOXHUB_TOKEN", "");
+        return Ok(());
+    }
+    let token = std::env::var(MOCK_RECORDING_TOKEN_VAR)
+        .ok()
+        .filter(|token| !token.is_empty())
+        .with_context(|| format!("{MOCK_RECORDING_TOKEN_VAR} must be set to record mocks"))?;
+    cmd.env("FLOX_FLOXHUB_TOKEN", token);
+    Ok(())
+}
+
 /// Runs the `cmd` for a given job.
 pub fn run_cmd(
+    category: &str,
     gen_cmd: &str,
     vars: &Option<HashMap<String, String>>,
     dir: &Path,
@@ -448,10 +483,7 @@ pub fn run_cmd(
         }
     }
 
-    // Don't leak custom catalogs from the current user.
-    cmd.env("FLOX_FLOXHUB_TOKEN", "");
-    // Keep mock generation off the developer's global OS keyring.
-    cmd.env("_FLOX_DISABLE_KEYRING", "true");
+    set_recording_auth(&mut cmd, category)?;
     cmd.env("_FLOX_CATALOG_DUMP_RESPONSE_FILE", output_file);
     debug!("cmd: {:?}", cmd);
     let output = cmd.output().context("couldn't call command")?;
