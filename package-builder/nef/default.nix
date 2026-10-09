@@ -6,7 +6,9 @@
   system ? builtins.currentSystem or null,
 }:
 let
-  # The NEF overlay exposes this same pinned instance as `catalogs.nixpkgs`.
+  # The pinned instance. Deep overrides are folded into it below
+  # (`nixpkgsWithDeepOverrides`), and the NEF overlay exposes that result as
+  # `catalogs.nixpkgs`, so every package sees the same base.
   nixpkgs = import nixpkgs-flake {
     inherit system;
     config = {
