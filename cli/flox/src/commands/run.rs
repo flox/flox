@@ -725,7 +725,9 @@ async fn download_custom_catalog_package(
             debug!(error = ?e, "get_store_info failed");
             match e {
                 StoreInfoError::Auth(auth_err) => RunError::Auth(auth_err),
-                StoreInfoError::FloxhubClientError(_) => RunError::CatalogError(pkg_spec.to_string()),
+                StoreInfoError::FloxhubClientError(_) => {
+                    RunError::CatalogError(pkg_spec.to_string())
+                },
             }
         })?;
 

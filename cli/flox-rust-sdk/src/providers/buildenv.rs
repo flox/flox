@@ -21,7 +21,13 @@ use flox_manifest::lockfile::{
 };
 use flox_manifest::parsed::Inner;
 use flox_manifest::parsed::latest::SelectedOutputs;
-use floxhub_client::{CatalogClientTrait, FloxhubClientError, ResolveAuthError, StoreInfo, StoreInfoError};
+use floxhub_client::{
+    CatalogClientTrait,
+    FloxhubClientError,
+    ResolveAuthError,
+    StoreInfo,
+    StoreInfoError,
+};
 use pollster::FutureExt as _;
 use rsevents_extra::Semaphore;
 use serde::{Deserialize, Serialize};
@@ -475,8 +481,7 @@ pub fn copy_from_custom_catalog_locations(
                     // Use Required (rather than Expired or Rejected) because
                     // we only know a token is absent, not that one expired.
                     return Err(BuildEnvError::DownloadAuth(ResolveAuthError::Required {
-                        detail: "Authentication is required to download this package."
-                            .to_string(),
+                        detail: "Authentication is required to download this package.".to_string(),
                     }));
                 }
             }

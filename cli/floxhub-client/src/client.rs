@@ -1502,7 +1502,10 @@ pub mod tests {
         });
 
         let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
-        let err = client.get_store_info(store_derivations()).await.unwrap_err();
+        let err = client
+            .get_store_info(store_derivations())
+            .await
+            .unwrap_err();
         assert!(
             matches!(err, StoreInfoError::FloxhubClientError(_)),
             "expected a FloxhubClientError, got {err:?}"
