@@ -86,7 +86,7 @@ impl List {
             .await
             .map_err(|e| super::user_facing_error(e, None))?;
 
-        let output = render(builds.results, self.json)?;
+        let output = render(builds.results, self.json, Utc::now())?;
 
         // JSON is for scripting: never route it through the pager, even on a
         // TTY. The human table is paged unless `--no-pager` is given.
@@ -180,13 +180,30 @@ fn back_from(now: DateTime<Utc>, interval: Interval) -> Option<DateTime<Utc>> {
 /// Render the builds as either pretty-printed JSON or a table.
 ///
 /// The depaging client returns every matching build, so the JSON form is the
-/// full array of builds, with no pagination envelope to report.
-fn render(builds: Vec<BuildResponse>, json: bool) -> Result<String> {
+/// full array of builds, with no pagination envelope to report. The table
+/// shows each build's age relative to `now`; JSON keeps exact timestamps.
+fn render(builds: Vec<BuildResponse>, json: bool, now: DateTime<Utc>) -> Result<String> {
     if json {
         Ok(format!("{}\n", serde_json::to_string_pretty(&builds)?))
     } else {
-        Ok(BuildListDisplay::from(builds).to_string())
+        Ok(BuildListDisplay::new(builds, now).to_string())
     }
+}
+
+/// Format the time elapsed from `then` to `now` in its largest whole unit,
+/// such as `5m ago`, so a table column stays narrow and quick to scan.
+///
+/// A `then` after `now`, from clock skew between the Factory and this host,
+/// reads as `0s ago` rather than a negative age.
+fn format_age(then: DateTime<Utc>, now: DateTime<Utc>) -> String {
+    let age = (now - then).max(TimeDelta::zero());
+    let (n, unit) = match age {
+        a if a < TimeDelta::minutes(1) => (a.num_seconds(), "s"),
+        a if a < TimeDelta::hours(1) => (a.num_minutes(), "m"),
+        a if a < TimeDelta::days(1) => (a.num_hours(), "h"),
+        a => (a.num_days(), "d"),
+    };
+    format!("{n}{unit} ago")
 }
 
 /// Human-readable build list table row.
@@ -196,20 +213,20 @@ struct BuildRowDisplay {
     attr_path: String,
     system: String,
     status: String,
-    updated_at: String,
+    updated: String,
 }
 
-impl From<BuildResponse> for BuildRowDisplay {
-    fn from(b: BuildResponse) -> Self {
+impl BuildRowDisplay {
+    fn new(b: BuildResponse, now: DateTime<Utc>) -> Self {
         let status = effective_status(&b);
-        let updated_at = effective_updated_at(&b);
+        let updated = format_age(effective_updated_at(&b), now);
 
         BuildRowDisplay {
             build_id: b.build_id,
             attr_path: b.attr_path,
             system: b.system,
             status,
-            updated_at,
+            updated,
         }
     }
 }
@@ -220,10 +237,13 @@ struct BuildListDisplay {
     rows: Vec<BuildRowDisplay>,
 }
 
-impl From<Vec<BuildResponse>> for BuildListDisplay {
-    fn from(builds: Vec<BuildResponse>) -> Self {
+impl BuildListDisplay {
+    fn new(builds: Vec<BuildResponse>, now: DateTime<Utc>) -> Self {
         BuildListDisplay {
-            rows: builds.into_iter().map(BuildRowDisplay::from).collect(),
+            rows: builds
+                .into_iter()
+                .map(|b| BuildRowDisplay::new(b, now))
+                .collect(),
         }
     }
 }
@@ -241,7 +261,7 @@ impl fmt::Display for BuildListDisplay {
             writeln!(
                 tw,
                 "{}\t{}\t{}\t{}\t{}",
-                row.build_id, row.attr_path, row.system, row.status, row.updated_at,
+                row.build_id, row.attr_path, row.system, row.status, row.updated,
             )
             .map_err(|_| fmt::Error)?;
         }
@@ -273,11 +293,11 @@ mod tests {
             ),
             make_build(2, "aarch64-darwin", "ripgrep", None),
         ];
-        let display = BuildListDisplay::from(builds);
+        let display = BuildListDisplay::new(builds, utc("2025-01-01T00:01:00Z"));
         assert_eq!(display.to_string(), indoc! {"
             BUILD ID  ATTR PATH  SYSTEM          STATUS   UPDATED
-            1         hello      x86_64-linux    running  2025-01-01T00:00:01+00:00
-            2         ripgrep    aarch64-darwin  pending  2025-01-01T00:00:00+00:00
+            1         hello      x86_64-linux    running  59s ago
+            2         ripgrep    aarch64-darwin  pending  1m ago
         "});
     }
 
@@ -307,13 +327,41 @@ mod tests {
                 Some(EffectiveBuildStatus::Unknown("frobnicated".to_string())),
             ),
         ];
-        let display = BuildListDisplay::from(builds);
+        let display = BuildListDisplay::new(builds, utc("2025-01-01T00:01:00Z"));
         assert_eq!(display.to_string(), indoc! {"
             BUILD ID  ATTR PATH  SYSTEM          STATUS                UPDATED
-            3         curl       x86_64-linux    timed_out             2025-01-01T00:00:01+00:00
-            4         jq         aarch64-darwin  cancelled             2025-01-01T00:00:00+00:00
-            5         wget       x86_64-linux    unknown: frobnicated  2025-01-01T00:00:00+00:00
+            3         curl       x86_64-linux    timed_out             59s ago
+            4         jq         aarch64-darwin  cancelled             1m ago
+            5         wget       x86_64-linux    unknown: frobnicated  1m ago
         "});
+    }
+
+    /// The age reads in its largest whole unit, truncating rather than
+    /// rounding, and a timestamp ahead of `now` reads as no age at all.
+    #[test]
+    fn format_age_uses_largest_whole_unit() {
+        let now = utc("2025-06-01T00:00:00Z");
+        let cases = [
+            ("2025-06-01T00:00:00Z", "0s ago"),
+            ("2025-05-31T23:59:01Z", "59s ago"),
+            ("2025-05-31T23:59:00Z", "1m ago"),
+            ("2025-05-31T23:00:01Z", "59m ago"),
+            ("2025-05-31T23:00:00Z", "1h ago"),
+            ("2025-05-31T00:01:00Z", "23h ago"),
+            ("2025-05-31T00:00:00Z", "1d ago"),
+            ("2024-04-27T00:00:00Z", "400d ago"),
+            ("2025-06-01T00:00:05Z", "0s ago"),
+        ];
+
+        let actual: Vec<_> = cases
+            .iter()
+            .map(|(then, _)| (*then, format_age(utc(then), now)))
+            .collect();
+        let expected: Vec<_> = cases
+            .iter()
+            .map(|(then, age)| (*then, age.to_string()))
+            .collect();
+        assert_eq!(actual, expected);
     }
 
     #[tokio::test]

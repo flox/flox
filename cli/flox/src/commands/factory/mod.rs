@@ -10,6 +10,7 @@ mod status;
 
 use anyhow::{Result, anyhow};
 use bpaf::Bpaf;
+use chrono::{DateTime, Utc};
 use flox_rust_sdk::flox::Flox;
 use floxhub_client::{BuildResponse, EffectiveBuildStatus, FactoryClientError};
 use indoc::indoc;
@@ -29,20 +30,18 @@ fn effective_status(build: &BuildResponse) -> String {
     }
 }
 
-/// Compute the effective "last updated" timestamp for a build, as an RFC 3339
-/// string.
+/// Compute the effective "last updated" timestamp for a build.
 ///
 /// A dispatched build reports its task's `updated_at`, which tracks lifecycle
 /// progress. An undispatched build has no task, so it falls back to the
 /// build's own `created_at`. This is the "updated, or created if never
 /// updated" value shown in the `UPDATED` column.
-fn effective_updated_at(build: &BuildResponse) -> String {
+fn effective_updated_at(build: &BuildResponse) -> DateTime<Utc> {
     build
         .task
         .as_ref()
         .map(|task| task.updated_at)
         .unwrap_or(build.created_at)
-        .to_rfc3339()
 }
 
 /// Rewrite a [`FactoryClientError`] as a product-level error, so an operator
