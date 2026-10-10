@@ -1,4 +1,5 @@
 use std::fmt;
+use std::io::Write;
 use std::str::FromStr;
 
 use anyhow::{Result, anyhow, bail};
@@ -15,6 +16,7 @@ use floxhub_client::{
 };
 use interim::{Dialect, Interval, parse_date_string, parse_duration};
 use serde::Serialize;
+use tabwriter::TabWriter;
 use tracing::instrument;
 
 use super::{effective_status, effective_updated_at};
@@ -233,43 +235,19 @@ impl fmt::Display for BuildListDisplay {
             return Ok(());
         }
 
-        // Column widths with minimums sized to header labels.
-        let id_width = "BUILD ID".len().max(
-            self.rows
-                .iter()
-                .map(|r| r.build_id.to_string().len())
-                .max()
-                .unwrap_or(0),
-        );
-        let attr_width = "ATTR PATH".len().max(
-            self.rows
-                .iter()
-                .map(|r| r.attr_path.len())
-                .max()
-                .unwrap_or(0),
-        );
-        let system_width = "SYSTEM"
-            .len()
-            .max(self.rows.iter().map(|r| r.system.len()).max().unwrap_or(0));
-        let status_width = "STATUS"
-            .len()
-            .max(self.rows.iter().map(|r| r.status.len()).max().unwrap_or(0));
-
-        writeln!(
-            f,
-            "{:<id_width$}  {:<attr_width$}  {:<system_width$}  {:<status_width$}  UPDATED",
-            "BUILD ID", "ATTR PATH", "SYSTEM", "STATUS",
-        )?;
-
+        let mut tw = TabWriter::new(Vec::new()).padding(2);
+        writeln!(tw, "BUILD ID\tATTR PATH\tSYSTEM\tSTATUS\tUPDATED").map_err(|_| fmt::Error)?;
         for row in &self.rows {
             writeln!(
-                f,
-                "{:<id_width$}  {:<attr_width$}  {:<system_width$}  {:<status_width$}  {}",
+                tw,
+                "{}\t{}\t{}\t{}\t{}",
                 row.build_id, row.attr_path, row.system, row.status, row.updated_at,
-            )?;
+            )
+            .map_err(|_| fmt::Error)?;
         }
 
-        Ok(())
+        let table = tw.into_inner().map_err(|_| fmt::Error)?;
+        f.write_str(&String::from_utf8(table).map_err(|_| fmt::Error)?)
     }
 }
 

@@ -21,11 +21,7 @@ impl List {
             return Ok(());
         }
 
-        println!("{}", super::format::render_header());
-        for ext in &extensions {
-            let row = super::format::row_from_extension(ext);
-            println!("{}", super::format::render_row(&row));
-        }
+        print!("{}", super::format::render_table(&extensions)?);
         Ok(())
     }
 }

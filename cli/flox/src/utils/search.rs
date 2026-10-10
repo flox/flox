@@ -1,8 +1,10 @@
-use std::fmt::Display;
+use std::fmt::{self, Display};
+use std::io::Write;
 
 use anyhow::Result;
 use crossterm::style::Stylize;
 use floxhub_client::{SearchResult, SearchResults};
+use tabwriter::TabWriter;
 
 pub const DEFAULT_DESCRIPTION: &'_ str = "<no description provided>";
 
@@ -109,14 +111,8 @@ impl Display for DisplaySearchResults {
             }
         };
 
-        let column_width = self
-            .display_items
-            .iter()
-            .map(|d| d.to_string().len())
-            .max()
-            .unwrap_or_default();
-
-        // Finally print something
+        // The bolded search term must not count towards the name's width.
+        let mut tw = TabWriter::new(Vec::new()).padding(2).ansi(true);
         let mut items = self.display_items.iter().peekable();
 
         while let Some(d) = items.next() {
@@ -126,17 +122,16 @@ impl Display for DisplaySearchResults {
                 d.description.as_deref().unwrap()
             };
             let name = format_name(&d.to_string());
-            let width = column_width + (name.len() - d.to_string().len());
 
-            // The two spaces here provide visual breathing room.
-            write!(f, "{name:<width$}  {desc}")?;
+            write!(tw, "{name}\t{desc}").map_err(|_| fmt::Error)?;
             // Only print a newline if there are more items to print
             if items.peek().is_some() {
-                writeln!(f)?;
+                writeln!(tw).map_err(|_| fmt::Error)?;
             }
         }
 
-        Ok(())
+        let table = tw.into_inner().map_err(|_| fmt::Error)?;
+        f.write_str(&String::from_utf8(table).map_err(|_| fmt::Error)?)
     }
 }
 
@@ -161,7 +156,7 @@ mod tests {
     use std::str::FromStr;
 
     use flox_rust_sdk::providers::catalog::SystemEnum;
-    use indoc::indoc;
+    use indoc::{formatdoc, indoc};
 
     use super::*;
 
@@ -220,6 +215,31 @@ mod tests {
         let expected = indoc! {"
             pkg1  <no description provided>
             pkg2  <no description provided>
+            "};
+        assert_eq!(expected, format!("{}\n", display));
+    }
+
+    #[test]
+    fn display_search_result_aligns_bolded_search_term() {
+        // Only one name contains the search term, so only that one carries
+        // escape codes that must not count towards its width.
+        let search_results = vec![
+            stub_search_result("pkg1", Some("description of pkg1")),
+            stub_search_result("ripgrep", Some("mentions pkg1")),
+        ];
+
+        let display = DisplaySearchResults {
+            search_term: "pkg1".to_string(),
+            count: Some(search_results.len() as u64),
+            display_items: search_results.into(),
+            n_results: 2,
+            use_bold: true,
+        };
+
+        let bold = "pkg1".bold();
+        let expected = formatdoc! {"
+            {bold}     description of pkg1
+            ripgrep  mentions pkg1
             "};
         assert_eq!(expected, format!("{}\n", display));
     }

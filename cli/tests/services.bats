@@ -1436,7 +1436,7 @@ EOF
   run "$FLOX_BIN" activate -- bash -c "$SCRIPT"
   assert_success # only a success because we ignore the error from start
   assert_output --partial "Service 'invalid' does not exist."
-  assert_output --partial "one        Stopped"
+  assert_output --partial "one   Stopped"
 }
 
 @test "start: errors if service not available" {
@@ -1463,8 +1463,8 @@ EOF
   run "$FLOX_BIN" activate -- bash -c "$SCRIPT"
   assert_success # only a success because we ignore the error from start
   assert_output --partial "Service 'invalid' is not available on '$NIX_SYSTEM'."
-  assert_output --partial "invalid    Stopped"
-  assert_output --partial "one        Stopped"
+  assert_output --partial "invalid  Stopped"
+  assert_output --partial "one      Stopped"
 }
 
 # Also tests service names with spaces in them, because starting them is handled
@@ -1497,9 +1497,9 @@ EOF
   assert_success
   assert_output --partial "Service 'no_space' started."
   assert_output --partial "Service 'with space' started."
-  assert_output --partial "no_space   Running"
-  assert_output --partial "with space Running"
-  assert_output --partial "skip       Disabled"
+  assert_output --partial "no_space    Running"
+  assert_output --partial "with space  Running"
+  assert_output --partial "skip        Disabled"
 }
 
 @test "start: only starts supported services" {
@@ -1527,7 +1527,7 @@ EOF
   run "$FLOX_BIN" activate -- bash -c "$SCRIPT" 3>&-
   assert_success
   assert_output --partial "Service 'one' started."
-  assert_output --partial "one        Running"
+  assert_output --partial "one   Running"
 }
 
 @test "start: defaults to all services" {
@@ -1557,8 +1557,8 @@ EOF
   assert_success
   assert_output --partial "Service 'one' started."
   assert_output --partial "Service 'two' started."
-  assert_output --partial "one        Running"
-  assert_output --partial "two        Running"
+  assert_output --partial "one   Running"
+  assert_output --partial "two   Running"
 }
 
 @test "start: status still works when activation starts a single shortlived service" {
@@ -1701,7 +1701,7 @@ EOF
   assert_success
 
   # The added service should be running.
-  assert_output --partial "two        Running"
+  assert_output --partial "two   Running"
   # The updated value of FOO should be printed
   assert_output --partial "foo_two"
 }
