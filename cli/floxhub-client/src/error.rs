@@ -32,6 +32,19 @@ pub enum ResolveError {
     Auth(#[from] ResolveAuthError),
 }
 
+/// Error from `get_store_info`, mirroring [`ResolveError`].
+///
+/// Separates a 401 response (requiring re-authentication) from all other
+/// catalog failures, so callers can surface a clean `flox auth login` prompt
+/// rather than a raw API error string.
+#[derive(Debug, Error)]
+pub enum StoreInfoError {
+    #[error("catalog error")]
+    FloxhubClientError(#[from] FloxhubClientError),
+    #[error(transparent)]
+    Auth(#[from] ResolveAuthError),
+}
+
 /// The catalog refused to resolve without a valid FloxHub login (HTTP 401).
 #[derive(Clone, Debug, PartialEq, Error)]
 pub enum ResolveAuthError {
