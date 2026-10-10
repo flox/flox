@@ -138,7 +138,8 @@ pub fn start(
 /// Start services with a new process-compose instance.
 ///
 /// The CLI has already decided that a new process-compose is needed.
-/// This function starts process-compose and then starts the specified services.
+/// This function starts process-compose and then starts the specified services,
+/// unless another activation started one for this build since the CLI looked.
 pub fn start_services_with_new_process_compose(
     activation_state_dir: &Path,
     project: &AttachProjectCtx,
@@ -147,8 +148,24 @@ pub fn start_services_with_new_process_compose(
     let (activations_opt, lock) = read_activations_json(&activations_json_path)?;
     let activations = activations_opt.expect("state.json should exist");
     let executive_pid = activations.executive_pid();
+    let reuse = can_reuse_process_compose(
+        &activations,
+        manager_responds(&project.flox_services_socket),
+    );
     // Don't hold a lock because the executive will need it when starting `process-compose`
     drop(lock);
+
+    // Start the services in the running process-compose. Services that are
+    // already running in it are left alone.
+    if reuse {
+        debug!("starting services in the running process-compose");
+        start_services_via_socket(
+            &project.process_compose_bin,
+            &project.flox_services_socket,
+            &project.services_to_start,
+        )?;
+        return Ok(());
+    }
 
     debug!("starting new process-compose for services");
     signal_new_process_compose(project, executive_pid)?;
@@ -378,5 +395,61 @@ fn wait_for_executive(child_pid: Pid, mut signals: Signals) -> Result<(), anyhow
         } else {
             unreachable!("Received unexpected signal or empty iterator over signals");
         }
+    }
+}
+
+/// Whether this activation can start its services in the `process-compose`
+/// that is already running instead of replacing it.
+///
+/// The CLI decided to start services before this activation took the
+/// state.json lock. Another activation of the same build may have started a
+/// `process-compose` since, and replacing it would stop and restart the
+/// services that activation is using. That is the case when state.json says
+/// the current `process-compose` was started for the ready start, and it
+/// answers.
+fn can_reuse_process_compose(activations: &ActivationState, manager_answers: bool) -> bool {
+    manager_answers && activations.process_compose_is_current(None)
+}
+
+#[cfg(test)]
+mod tests {
+    use flox_core::activate::mode::ActivateMode;
+
+    use super::*;
+
+    /// Two `flox activate --start-services` at once: the second must start
+    /// its services in the process-compose the first one just started rather
+    /// than replace it. Builds state where process-compose was started for
+    /// the ready start and checks it is reused only while it answers, and
+    /// not when it was started for an older build of the environment.
+    #[test]
+    fn reuses_a_process_compose_started_for_the_ready_start() {
+        let mut activations =
+            ActivationState::new(&ActivateMode::default(), Some(".flox"), ".flox/run/test");
+        let StartOrAttachResult::Start { start_id } =
+            activations.start_or_attach(1, "/nix/store/new-environment")
+        else {
+            panic!("expected a new start");
+        };
+        activations.set_ready(&start_id);
+        assert!(
+            !can_reuse_process_compose(&activations, true),
+            "no process-compose was started for the start yet"
+        );
+
+        activations.set_current_process_compose_start_id(start_id);
+        assert!(can_reuse_process_compose(&activations, true));
+        assert!(
+            !can_reuse_process_compose(&activations, false),
+            "a process-compose that doesn't answer can't be reused"
+        );
+
+        activations.set_current_process_compose_start_id(StartIdentifier::new(
+            "/nix/store/old-environment",
+        ));
+        assert!(
+            !can_reuse_process_compose(&activations, true),
+            "a process-compose started for an older build is replaced"
+        );
     }
 }
