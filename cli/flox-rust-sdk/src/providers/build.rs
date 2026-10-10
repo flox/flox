@@ -888,16 +888,15 @@ fn get_nix_expression_targets(
 }
 
 #[derive(Debug, Error)]
-#[error("{message}")]
-pub struct PackageTargetError {
-    pub(crate) message: String,
-}
-impl PackageTargetError {
-    fn new(message: impl Into<String>) -> Self {
-        Self {
-            message: message.into(),
-        }
-    }
+pub enum PackageTargetError {
+    #[error("Package '{name}' not found.\nAvailable packages: {}", available.join(", "))]
+    NotFound {
+        name: String,
+        available: Vec<String>,
+    },
+
+    #[error("{0}")]
+    Catchall(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -982,7 +981,8 @@ impl PackageTarget {
 }
 
 pub struct PackageTargets {
-    targets: HashMap<String, PackageTargetKind>,
+    /// Ordered by name, so that listings and build order are deterministic.
+    targets: BTreeMap<String, PackageTargetKind>,
 }
 
 impl PackageTargets {
@@ -1003,9 +1003,9 @@ impl PackageTargets {
         let environment_packages = &manifest.as_latest_schema().build;
 
         let nix_expression_packages = get_nix_expression_targets(expression_ref)
-            .map_err(|e| PackageTargetError::new(e.to_string()))?;
+            .map_err(|e| PackageTargetError::Catchall(e.to_string()))?;
 
-        let mut targets = HashMap::new();
+        let mut targets = BTreeMap::new();
 
         targets.extend(
             environment_packages
@@ -1020,7 +1020,7 @@ impl PackageTargets {
 
         for (expression_build_target, expression_build_metadata) in nix_expression_packages {
             if targets.contains_key(&expression_build_target) {
-                return Err(PackageTargetError::new(formatdoc! {"
+                return Err(PackageTargetError::Catchall(formatdoc! {"
                     '{expression_build_target}' is defined in the manifest and as a Nix expression.
                     Rename or delete either the package definition
                     in the 'pkgs/' dir located in '{expression_ref}'
@@ -1054,7 +1054,10 @@ impl PackageTargets {
             .map(|target_name| {
                 let target_name = target_name.as_ref();
                 let (name, kind) = self.targets.get_key_value(target_name).ok_or_else(|| {
-                    PackageTargetError::new(format!("Target '{target_name}' not found."))
+                    PackageTargetError::NotFound {
+                        name: target_name.to_string(),
+                        available: self.targets.keys().cloned().collect(),
+                    }
                 })?;
                 Ok(PackageTarget {
                     name: name.to_string(),
@@ -1571,6 +1574,46 @@ mod tests {
     use crate::models::environment::{Environment, copy_dir_recursive};
     use crate::providers::catalog::test_helpers::catalog_replay_client;
     use crate::providers::git::{GitCommandProvider, GitProvider};
+
+    #[test]
+    fn package_targets_select_keeps_the_order_given() {
+        let manifest_build = PackageTargetKind::ManifestBuild { sandbox: None };
+        let targets = PackageTargets {
+            targets: BTreeMap::from([
+                ("hello".to_string(), manifest_build.clone()),
+                ("hello2".to_string(), manifest_build.clone()),
+            ]),
+        };
+
+        for names in [["hello", "hello2"], ["hello2", "hello"]] {
+            let selected: Vec<String> = targets
+                .select(&names)
+                .unwrap()
+                .iter()
+                .map(PackageTarget::to_string)
+                .collect();
+            assert_eq!(selected, names, "selecting {names:?}");
+        }
+    }
+
+    #[test]
+    fn package_targets_select_lists_available_packages_when_not_found() {
+        let manifest_build = PackageTargetKind::ManifestBuild { sandbox: None };
+        let targets = PackageTargets {
+            targets: BTreeMap::from([
+                ("hello".to_string(), manifest_build.clone()),
+                ("hello2".to_string(), manifest_build.clone()),
+            ]),
+        };
+
+        let not_found = indoc! {"
+            Package 'typo' not found.
+            Available packages: hello, hello2"};
+        for names in [vec!["typo"], vec!["hello", "typo"], vec!["typo", "hello"]] {
+            let err = targets.select(&names).unwrap_err();
+            assert_eq!(err.to_string(), not_found, "selecting {names:?}");
+        }
+    }
 
     #[test]
     fn build_failure_slug_is_namespaced() {
