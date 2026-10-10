@@ -1,0 +1,11 @@
+when:
+  method: POST
+  path: /api/v1/catalog/store
+then:
+  status: 401
+  header:
+  - name: content-type
+    value: application/json
+  - name: www-authenticate
+    value: Bearer
+  body: '{"detail":"Authentication is required to download this package."}'
