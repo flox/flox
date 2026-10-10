@@ -109,6 +109,8 @@ pub use factory::{
 pub use factory_api_v1::types::{
     AttrPathItem,
     BuildResponse,
+    BuildTrigger,
+    BuildTriggerKind,
     EffectiveBuildStatus,
     ErrorResponse as FactoryErrorResponse,
     SourceCommitShaItem,

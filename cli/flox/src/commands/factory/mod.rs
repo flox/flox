@@ -44,6 +44,26 @@ fn effective_updated_at(build: &BuildResponse) -> DateTime<Utc> {
         .unwrap_or(build.created_at)
 }
 
+/// Compute the label describing what scheduled a build.
+fn trigger_label(build: &BuildResponse) -> String {
+    let Some(trigger) = &build.trigger else {
+        return "-".to_string();
+    };
+    // Empty predates trigger reporting.
+    let kind = trigger.kind.as_deref().map_or("-", String::as_str);
+
+    if trigger.stabilities.is_empty() {
+        return kind.to_string();
+    }
+
+    // The stabilities that named the build's nixpkgs revision when it was
+    // scheduled follow in parentheses which explain why one package can be
+    // built more than once per system. They sit inside the trigger label rather
+    // than in a column of their own so they are not read as the revision's
+    // current stability.
+    format!("{kind} ({})", trigger.stabilities.join(","))
+}
+
 /// Rewrite a [`FactoryClientError`] as a product-level error, so an operator
 /// never sees raw client or transport output.
 ///
@@ -185,7 +205,8 @@ pub(crate) mod test_helpers {
             created_at: chrono::Utc.with_ymd_and_hms(2025, 1, 1, 0, 0, 0).unwrap(),
             exit_code: None,
             task,
-            // Trigger provenance isn't under test here.
+            // A build from a Factory that predates trigger reporting; tests
+            // covering the trigger set it on the result.
             trigger: None,
         }
     }
@@ -345,6 +366,59 @@ mod parser_tests {
             Err(other) => panic!("expected factory help output, got error {other:?}"),
             Ok(_) => panic!("expected factory help output, parsed a command instead"),
         }
+    }
+}
+
+#[cfg(test)]
+mod trigger_label_tests {
+    use floxhub_client::{BuildResponse, BuildTrigger};
+    use pretty_assertions::assert_eq;
+
+    use super::test_helpers::make_build;
+    use super::trigger_label;
+
+    #[test]
+    fn trigger_label_combines_kind_and_stabilities() {
+        let trigger = |kind: Option<&str>, stabilities: &[&str]| BuildTrigger {
+            kind: kind.map(|kind| kind.to_string().into()),
+            stabilities: stabilities.iter().map(|s| s.to_string()).collect(),
+        };
+        let cases = [
+            ("not reported", None, "-"),
+            ("empty", Some(trigger(None, &[])), "-"),
+            (
+                "kind only",
+                Some(trigger(Some("source_push"), &[])),
+                "source_push",
+            ),
+            (
+                "stabilities only",
+                Some(trigger(None, &["staging"])),
+                "- (staging)",
+            ),
+            (
+                "kind and stabilities",
+                Some(trigger(Some("source_push"), &["stable", "staging"])),
+                "source_push (stable,staging)",
+            ),
+        ];
+
+        let actual: Vec<_> = cases
+            .iter()
+            .map(|(name, trigger, _)| {
+                let build = BuildResponse {
+                    trigger: trigger.clone(),
+                    ..make_build(1, "x86_64-linux", "hello", None)
+                };
+                (*name, trigger_label(&build))
+            })
+            .collect();
+        let expected: Vec<_> = cases
+            .iter()
+            .map(|(name, _, label)| (*name, label.to_string()))
+            .collect();
+
+        assert_eq!(actual, expected);
     }
 }
 
