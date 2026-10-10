@@ -38,6 +38,7 @@ use crate::error::{
     ResolveAuthError,
     ResolveError,
     SearchError,
+    StoreInfoError,
     VersionsError,
 };
 use crate::mock::MockGuard;
@@ -299,10 +300,14 @@ pub trait CatalogClientTrait {
     ) -> Result<(), FloxhubClientError>;
 
     /// Get store info for a list of derivations.
+    ///
+    /// A 401 response is classified into a [`StoreInfoError::Auth`] variant so
+    /// callers can surface a clean `flox auth login` prompt rather than a raw
+    /// API error string.
     async fn get_store_info(
         &self,
         derivations: Vec<String>,
-    ) -> Result<HashMap<String, Vec<StoreInfo>>, FloxhubClientError>;
+    ) -> Result<HashMap<String, Vec<StoreInfo>>, StoreInfoError>;
 
     /// Checks whether the provided store paths have been successfully
     /// published.
@@ -697,7 +702,7 @@ impl CatalogClientTrait for FloxhubClient {
     async fn get_store_info(
         &self,
         derivations: Vec<String>,
-    ) -> Result<HashMap<String, Vec<StoreInfo>>, FloxhubClientError> {
+    ) -> Result<HashMap<String, Vec<StoreInfo>>, StoreInfoError> {
         let body = StoreInfoRequest {
             outpaths: derivations.iter().map(|s| s.to_string()).collect(),
         };
@@ -706,7 +711,18 @@ impl CatalogClientTrait for FloxhubClient {
             .get_store_info_api_v1_catalog_store_post(&body)
             .await
             .map_api_error()
-            .await?;
+            .await
+            .map_err(|err| match err {
+                FloxhubClientError::APIError(api)
+                    if api.status() == Some(StatusCode::UNAUTHORIZED) =>
+                {
+                    StoreInfoError::Auth(classify_unauthorized_resolve(
+                        api,
+                        &self.config.auth_context,
+                    ))
+                },
+                err => StoreInfoError::from(err),
+            })?;
         let store_info = response.into_inner();
         Ok(store_info.items)
     }
@@ -1390,6 +1406,110 @@ pub mod tests {
         assert_eq!(err, ResolveAuthError::Rejected {
             detail: "Unable to verify token".to_string()
         });
+    }
+
+    // ---------------------------------------------------------------------------
+    // get_store_info 401 classification tests
+    // ---------------------------------------------------------------------------
+
+    fn store_derivations() -> Vec<String> {
+        vec!["/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-test".to_string()]
+    }
+
+    /// A 401 with no credential is classified as Required (logged-out user).
+    #[tokio::test]
+    async fn get_store_info_maps_unauthorized_to_required_login_when_logged_out() {
+        let server = MockServer::start_async().await;
+        server.mock(|when, then| {
+            when.method("POST").path("/api/v1/catalog/store");
+            then.status(401)
+                .json_body(json!({"detail": "Authentication is required."}));
+        });
+
+        let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        let StoreInfoError::Auth(err) = client
+            .get_store_info(store_derivations())
+            .await
+            .unwrap_err()
+        else {
+            panic!("expected an auth error");
+        };
+        assert_eq!(err, ResolveAuthError::Required {
+            detail: "Authentication is required.".to_string(),
+        });
+    }
+
+    /// A 401 with an expired token is classified as Expired.
+    #[tokio::test]
+    async fn get_store_info_maps_unauthorized_to_expired_login() {
+        let server = MockServer::start_async().await;
+        server.mock(|when, then| {
+            when.method("POST").path("/api/v1/catalog/store");
+            then.status(401)
+                .json_body(json!({"detail": "Authentication is required."}));
+        });
+
+        let config = FloxhubClientConfig {
+            auth_context: AuthContext::new_from_token(Some(FAKE_EXPIRED_TOKEN)),
+            ..client_config(&server.base_url())
+        };
+        let client = FloxhubClient::new(config).unwrap();
+        let StoreInfoError::Auth(err) = client
+            .get_store_info(store_derivations())
+            .await
+            .unwrap_err()
+        else {
+            panic!("expected an auth error");
+        };
+        assert_eq!(err, ResolveAuthError::Expired);
+    }
+
+    /// A credential rejected by the catalog with 401 is classified as Rejected.
+    #[tokio::test]
+    async fn get_store_info_maps_unauthorized_to_rejected_login() {
+        let server = MockServer::start_async().await;
+        server.mock(|when, then| {
+            when.method("POST").path("/api/v1/catalog/store");
+            then.status(401)
+                .json_body(json!({"detail": "Unable to verify token"}));
+        });
+
+        let config = FloxhubClientConfig {
+            auth_context: AuthContext::new_from_token(Some("flox_pat_revoked")),
+            ..client_config(&server.base_url())
+        };
+        let client = FloxhubClient::new(config).unwrap();
+        let StoreInfoError::Auth(err) = client
+            .get_store_info(store_derivations())
+            .await
+            .unwrap_err()
+        else {
+            panic!("expected an auth error");
+        };
+        assert_eq!(err, ResolveAuthError::Rejected {
+            detail: "Unable to verify token".to_string()
+        });
+    }
+
+    /// Non-401 catalog errors remain as `FloxhubClientError`, not auth errors.
+    #[tokio::test]
+    async fn get_store_info_keeps_non_auth_errors_as_catalog_error() {
+        let server = MockServer::start_async().await;
+        server.mock(|when, then| {
+            when.method("POST").path("/api/v1/catalog/store");
+            then.status(500)
+                .json_body(json!({"detail": "internal error"}));
+        });
+
+        let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        let err = client
+            .get_store_info(store_derivations())
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, StoreInfoError::FloxhubClientError(_)),
+            "expected a FloxhubClientError, got {err:?}"
+        );
     }
 
     #[tokio::test]

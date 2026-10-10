@@ -45,6 +45,7 @@ use floxhub_client::{
     ResolutionMessage,
     ResolveAuthError,
     ResolveError,
+    StoreInfoError,
 };
 use indoc::{formatdoc, indoc};
 use thiserror::Error;
@@ -722,7 +723,12 @@ async fn download_custom_catalog_package(
         .await
         .map_err(|e| {
             debug!(error = ?e, "get_store_info failed");
-            RunError::CatalogError(pkg_spec.to_string())
+            match e {
+                StoreInfoError::Auth(auth_err) => RunError::Auth(auth_err),
+                StoreInfoError::FloxhubClientError(_) => {
+                    RunError::CatalogError(pkg_spec.to_string())
+                },
+            }
         })?;
 
     {

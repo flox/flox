@@ -21,7 +21,13 @@ use flox_manifest::lockfile::{
 };
 use flox_manifest::parsed::Inner;
 use flox_manifest::parsed::latest::SelectedOutputs;
-use floxhub_client::{CatalogClientTrait, FloxhubClientError, StoreInfo};
+use floxhub_client::{
+    CatalogClientTrait,
+    FloxhubClientError,
+    ResolveAuthError,
+    StoreInfo,
+    StoreInfoError,
+};
 use pollster::FutureExt as _;
 use rsevents_extra::Semaphore;
 use serde::{Deserialize, Serialize};
@@ -185,6 +191,13 @@ pub enum BuildEnvError {
 
     #[error("authentication error")]
     Auth(#[source] AuthError),
+
+    /// A catalog call during download failed with a 401 that classifies as
+    /// "not logged in" or "login expired". The inner [`ResolveAuthError`] message
+    /// names `flox auth login` directly; the variant is transparent so callers
+    /// see that message rather than an intermediate wrapper.
+    #[error(transparent)]
+    DownloadAuth(#[from] ResolveAuthError),
 
     /// An error occurred while performing nix copy
     /// The contained string should be stderr, which may be a bit too much
@@ -464,7 +477,12 @@ pub fn copy_from_custom_catalog_locations(
                 if let Some(ref netrc_path) = maybe_netrc_path {
                     copy_command.arg("--netrc-file").arg(netrc_path);
                 } else if no_netrc_is_error {
-                    return Err(BuildEnvError::Auth(AuthError::NoToken));
+                    // No credential is present: the user is logged out.
+                    // Use Required (rather than Expired or Rejected) because
+                    // we only know a token is absent, not that one expired.
+                    return Err(BuildEnvError::DownloadAuth(ResolveAuthError::Required {
+                        detail: "Authentication is required to download this package.".to_string(),
+                    }));
                 }
             }
         }
@@ -617,7 +635,10 @@ where
             let store_locations = client
                 .get_store_info(all_custom_pkg_store_paths)
                 .block_on()
-                .map_err(BuildEnvError::CatalogError)?;
+                .map_err(|err| match err {
+                    StoreInfoError::Auth(auth_err) => BuildEnvError::DownloadAuth(auth_err),
+                    StoreInfoError::FloxhubClientError(e) => BuildEnvError::CatalogError(e),
+                })?;
             Some(store_locations)
         };
 
@@ -1968,6 +1989,84 @@ mod realise_nixpkgs_tests {
     #[ignore = "insecure packages are not yet supported by the CLI"]
     fn nixpkgs_build_insecure() {
         todo!()
+    }
+}
+
+/// Tests that both auth error paths produce a message containing `flox auth login`.
+///
+/// These are unit tests over the error surface, not integration tests: they
+/// confirm message rendering without invoking nix copy or the catalog API.
+#[cfg(test)]
+mod auth_error_rendering_tests {
+    use flox_manifest::lockfile::test_helpers::locked_published_package;
+    use floxhub_client::{ResolveAuthError, StoreInfo};
+
+    use super::*;
+
+    const AUTH_LOGIN_HINT: &str = "flox auth login";
+
+    /// When no FloxHub token exists (logged-out user) and the store URL
+    /// requires auth, `copy_from_custom_catalog_locations` returns
+    /// `DownloadAuth(Required)`, whose message names `flox auth login`.
+    #[test]
+    fn no_netrc_returns_download_auth_with_login_hint() {
+        let (locked_package, _) = locked_published_package(None);
+        let fake_store_path = locked_package.outputs["out"].clone();
+        // Use a URL on a FloxHub-authenticated hostname so `store_needs_auth` triggers.
+        let store_locations = {
+            let mut map = HashMap::new();
+            map.insert(fake_store_path.clone(), vec![StoreInfo {
+                url: Some("https://publisher.flox.dev/store".to_string()),
+                auth: None,
+                catalog: None,
+                package: None,
+                public_keys: None,
+            }]);
+            map
+        };
+
+        let err = copy_from_custom_catalog_locations(
+            &[fake_store_path],
+            "mycatalog/hello",
+            "hello",
+            &store_locations,
+            /* no_netrc_is_error = */ true,
+            /* maybe_netrc_path = */ None,
+        )
+        .unwrap_err();
+
+        assert!(
+            matches!(err, BuildEnvError::DownloadAuth(_)),
+            "expected DownloadAuth, got {err:?}"
+        );
+        assert!(
+            err.to_string().contains(AUTH_LOGIN_HINT),
+            "error message should name 'flox auth login'; got: {err}"
+        );
+    }
+
+    /// A `StoreInfoError::Auth` mapped through the buildenv call site renders
+    /// a message that names `flox auth login`.
+    #[test]
+    fn store_info_auth_error_renders_login_hint() {
+        let auth_err = BuildEnvError::DownloadAuth(ResolveAuthError::Required {
+            detail: "Authentication is required to resolve packages.".to_string(),
+        });
+        assert!(
+            auth_err.to_string().contains(AUTH_LOGIN_HINT),
+            "DownloadAuth(Required) message should name 'flox auth login'; got: {auth_err}"
+        );
+    }
+
+    /// An expired token maps to `DownloadAuth(Expired)`, which also names
+    /// `flox auth login`.
+    #[test]
+    fn store_info_expired_auth_error_renders_login_hint() {
+        let auth_err = BuildEnvError::DownloadAuth(ResolveAuthError::Expired);
+        assert!(
+            auth_err.to_string().contains(AUTH_LOGIN_HINT),
+            "DownloadAuth(Expired) message should name 'flox auth login'; got: {auth_err}"
+        );
     }
 }
 

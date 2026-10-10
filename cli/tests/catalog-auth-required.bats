@@ -20,6 +20,12 @@ AUTH_REQUIRED="Authentication is required to resolve packages."
 UNAUTHORIZED_MOCK="$MANUALLY_GENERATED/resolve/unauthorized.yaml"
 # A 401 with the catalog's reason for rejecting a token.
 REJECTED_MOCK="$MANUALLY_GENERATED/resolve/rejected.yaml"
+# A 401 from the store info endpoint, triggered during custom-package download.
+STORE_UNAUTHORIZED_MOCK="$MANUALLY_GENERATED/store/unauthorized.yaml"
+# Fixture: a locked environment containing a custom-catalog package whose store
+# paths are absent from the local Nix store, so activation must consult the
+# catalog for download locations.
+CUSTOM_CATALOG_HELLO_DIR="$MANUALLY_GENERATED/custom_catalog_hello"
 
 assert_auth_required_error() {
   assert_output --partial - << 'EOF'
@@ -124,6 +130,21 @@ hello.pkg-path = "hello"' > .flox/env/manifest.toml
   assert_failure
   assert_auth_required_error
   refute_output --partial "Check your network connection"
+}
+
+# When a custom-catalog package is not in the local Nix store, activate must
+# call the catalog for download locations. A 401 from that endpoint should
+# produce a clean 'flox auth login' prompt rather than a raw API error.
+@test "'flox activate' with custom catalog package shows login prompt when logged out" {
+  unset FLOX_FLOXHUB_TOKEN
+  "$FLOX_BIN" init
+  cp "$CUSTOM_CATALOG_HELLO_DIR/manifest.toml" .flox/env/manifest.toml
+  cp "$CUSTOM_CATALOG_HELLO_DIR/manifest.lock" .flox/env/manifest.lock
+  export _FLOX_USE_CATALOG_MOCK="$STORE_UNAUTHORIZED_MOCK"
+  run "$FLOX_BIN" activate -- true
+  assert_failure
+  assert_output --partial "flox auth login"
+  refute_output --partial "Unexpected error calling the catalog client"
 }
 
 # ---------------------------------------------------------------------------- #
