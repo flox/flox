@@ -1,0 +1,35 @@
+#!/bin/sh
+#
+# ExecStart for flox@<instance>.service: activate the environment with its
+# services and follow their logs in the foreground.
+#
+# Process supervision belongs to Flox; systemd supervises this log follower.
+set -eu
+
+# Resolve the shared library next to this script, so the entry points work
+# both installed under /usr/libexec/flox and straight from a checkout.
+FLOX_LIBEXEC=${FLOX_LIBEXEC:-$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)}
+. "$FLOX_LIBEXEC/flox-common.sh"
+
+name=${1:?usage: flox-activate <instance>}
+flox_load_conf "$name"
+
+# The service environment is applied here rather than in the unit so that
+# every caller gets it from one definition - the units under ../units, the
+# NixOS module in ../../nixos, and a script run by hand all behave alike.
+flox_export_token_from_credential
+flox_clear_stale_sockets
+
+# The argument lists are shell-quoted in the conf file, so the command is
+# assembled with a single eval; the fixed parts stay quoted and are expanded
+# by it rather than being interpolated.
+trust=
+if [ "$FLOX_TRUST" = 1 ]; then
+  trust=--trust
+fi
+
+eval "set -- \"\$FLOX_BIN\" $FLOX_ARGS activate --dir \"\$flox_workdir\" \
+  $trust $FLOX_ACTIVATE_ARGS --start-services \
+  -- \"\$FLOX_BIN\" $FLOX_ARGS services logs --follow"
+
+exec env $(flox_service_env) "$@"

@@ -1,7 +1,7 @@
 { lib, ... }:
 
 let
-  inherit (lib) boolToString mkOption types;
+  inherit (lib) mkOption types;
 
   # Options shared by both the Services method (`services.flox.activations`)
   # and the Overrides method (`systemd.services.<name>.flox`). The
@@ -119,28 +119,7 @@ let
     };
   };
 
-  # Environment for every process that invokes flox on behalf of a service.
-  # USER must match the passwd name of the invoking uid: when it does not
-  # (e.g. under setpriv or a oneshot unit), flox resets HOME from the
-  # passwd database, discarding the working-directory HOME set here. The
-  # XDG variables are additionally pinned beneath the working directory so
-  # flox state stays with the service even if HOME is reset anyway.
-  # The pinned XDG_CONFIG_HOME gives each service an empty Flox
-  # configuration directory, so FLOX_DISABLE_METRICS is the only way
-  # `services.flox.metrics.enable` can reach it.
-  serviceEnvironment = shell: workingDirectory: user: metrics: [
-    "FLOX_DISABLE_METRICS=${boolToString (!metrics)}"
-    "HOME=${workingDirectory}"
-    "LOGNAME=${user}"
-    "SHELL=${shell}"
-    "USER=${user}"
-    "XDG_CACHE_HOME=${workingDirectory}/.cache"
-    "XDG_CONFIG_HOME=${workingDirectory}/.config"
-    "XDG_DATA_HOME=${workingDirectory}/.local/share"
-    "XDG_STATE_HOME=${workingDirectory}/.local/state"
-  ];
-
 in
 {
-  inherit floxServiceOpts floxModuleOpts serviceEnvironment;
+  inherit floxServiceOpts floxModuleOpts;
 }
