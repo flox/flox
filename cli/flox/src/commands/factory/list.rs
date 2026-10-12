@@ -14,7 +14,6 @@ use floxhub_client::{
     SystemItem,
 };
 use interim::{Dialect, Interval, parse_date_string, parse_duration};
-use serde::Serialize;
 use tracing::instrument;
 
 use super::{effective_status, effective_updated_at};
@@ -188,7 +187,7 @@ fn render(builds: Vec<BuildResponse>, json: bool) -> Result<String> {
 }
 
 /// Human-readable build list table row.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug)]
 struct BuildRowDisplay {
     build_id: i64,
     attr_path: String,

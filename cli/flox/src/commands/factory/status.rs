@@ -2,7 +2,6 @@ use anyhow::Result;
 use bpaf::Bpaf;
 use floxhub_client::{BuildId, BuildResponse, FactoryClientTrait};
 use indoc::formatdoc;
-use serde::Serialize;
 use tracing::instrument;
 
 use super::effective_status;
@@ -54,7 +53,7 @@ fn render(build: BuildResponse, json: bool) -> Result<String> {
 }
 
 /// Human-readable single-build status table.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug)]
 struct BuildStatusDisplay {
     build_id: i64,
     system: String,
