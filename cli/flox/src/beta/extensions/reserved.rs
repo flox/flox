@@ -24,6 +24,7 @@ pub const RESERVED_COMMAND_NAMES: &[&str] = &[
     "init",
     "envs",
     "delete",
+    "global",
     // Use
     "activate",
     "deactivate",
