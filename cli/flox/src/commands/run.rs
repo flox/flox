@@ -745,7 +745,10 @@ async fn download_custom_catalog_package(
             no_netrc_is_error,
             netrc_path,
         )
-        .map_err(|e| RunError::BuildFailed(pkg_spec.to_string(), e))?;
+        .map_err(|e| match e {
+            BuildEnvError::DownloadAuth(auth_err) => RunError::Auth(auth_err),
+            other => RunError::BuildFailed(pkg_spec.to_string(), other),
+        })?;
     }
 
     // TODO: wrap the nix copy + GC root sequence in a materialise_with_retry

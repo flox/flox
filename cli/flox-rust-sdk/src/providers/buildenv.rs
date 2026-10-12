@@ -1992,14 +1992,45 @@ mod realise_nixpkgs_tests {
     }
 }
 
-/// Tests that both auth error paths produce a message containing `flox auth login`.
-///
-/// These are unit tests over the error surface, not integration tests: they
-/// confirm message rendering without invoking nix copy or the catalog API.
+/// Tests that auth error paths in the custom-catalog download flow produce a
+/// message containing `flox auth login`.
 #[cfg(test)]
 mod auth_error_rendering_tests {
-    use flox_manifest::lockfile::test_helpers::locked_published_package;
-    use floxhub_client::{ResolveAuthError, StoreInfo};
+    use std::num::NonZeroU32;
+
+    use flox_core::Version;
+    use flox_manifest::interfaces::AsTypedOnlyManifest;
+    use flox_manifest::lockfile::test_helpers::{
+        fake_catalog_package_lock_with_outputs,
+        locked_published_package,
+    };
+    use flox_manifest::parsed::latest::ManifestLatest;
+    use floxhub_client::{
+        BaseCatalogInfo,
+        BuildInputsLookupRequest,
+        BuildInputsLookupResponse,
+        ByCommandError,
+        ByCommandResult,
+        CheckBuildQuery,
+        CheckBuildResponse,
+        FloxhubClientError,
+        LockedSourceItem,
+        PackageDetails,
+        PackageGroup,
+        PackageSystem,
+        PublishResponse,
+        ResolveAuthError,
+        ResolveError,
+        ResolvedPackageGroup,
+        ResultsPage,
+        SearchError,
+        SearchLimit,
+        SearchResults,
+        StoreInfo,
+        StoreInfoError,
+        UserBuildPublish,
+        VersionsError,
+    };
 
     use super::*;
 
@@ -2045,27 +2076,155 @@ mod auth_error_rendering_tests {
         );
     }
 
-    /// A `StoreInfoError::Auth` mapped through the buildenv call site renders
-    /// a message that names `flox auth login`.
+    /// `StoreInfoError::Auth` returned by `get_store_info` is mapped to
+    /// `BuildEnvError::DownloadAuth` at the call site in `realise_lockfile`
+    /// (the `.map_err` block at buildenv.rs:638-641).
+    ///
+    /// This test drives that mapping end-to-end: it runs `realise_lockfile`
+    /// with a lockfile that contains a custom catalog package not present in
+    /// the Nix store, against a minimal client stub that returns
+    /// `StoreInfoError::Auth`, and asserts the resulting error is
+    /// `DownloadAuth` with a `flox auth login` hint.
     #[test]
-    fn store_info_auth_error_renders_login_hint() {
-        let auth_err = BuildEnvError::DownloadAuth(ResolveAuthError::Required {
-            detail: "Authentication is required to resolve packages.".to_string(),
-        });
-        assert!(
-            auth_err.to_string().contains(AUTH_LOGIN_HINT),
-            "DownloadAuth(Required) message should name 'flox auth login'; got: {auth_err}"
+    fn get_store_info_auth_error_maps_to_download_auth() {
+        // Build a lockfile with a custom catalog package (pkg_path "mycatalog/hello"
+        // triggers is_from_custom_catalog()) locked for the current system.
+        let (descriptor, mut locked) =
+            fake_catalog_package_lock_with_outputs("hello", "mycatalog/hello", &["out"]);
+        locked.system = env!("NIX_TARGET_SYSTEM").to_string();
+        // Replace outputs with a path that is definitely absent so realise_lockfile
+        // calls get_store_info rather than skipping the download.
+        locked.outputs.insert(
+            "out".to_string(),
+            "/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-definitely-absent".to_string(),
         );
-    }
 
-    /// An expired token maps to `DownloadAuth(Expired)`, which also names
-    /// `flox auth login`.
-    #[test]
-    fn store_info_expired_auth_error_renders_login_hint() {
-        let auth_err = BuildEnvError::DownloadAuth(ResolveAuthError::Expired);
+        let mut manifest = ManifestLatest::default();
+        manifest
+            .install
+            .inner_mut()
+            .insert("hello".to_string(), descriptor);
+        let lockfile = Lockfile {
+            version: Version::<1>,
+            manifest: manifest.as_typed_only(),
+            packages: vec![locked.into()],
+            compose: None,
+        };
+
+        // A minimal CatalogClientTrait stub: only get_store_info is called;
+        // all other methods are unreachable for this code path.
+        struct StoreInfoAuthClient;
+        impl CatalogClientTrait for StoreInfoAuthClient {
+            async fn resolve(
+                &self,
+                _: Vec<PackageGroup>,
+            ) -> Result<Vec<ResolvedPackageGroup>, ResolveError> {
+                unimplemented!()
+            }
+
+            async fn search(
+                &self,
+                _: impl AsRef<str> + Send + Sync,
+                _: PackageSystem,
+                _: SearchLimit,
+            ) -> Result<SearchResults, SearchError> {
+                unimplemented!()
+            }
+
+            async fn by_command(
+                &self,
+                _: impl AsRef<str> + Send + Sync,
+                _: PackageSystem,
+                _: Option<NonZeroU32>,
+            ) -> Result<ByCommandResult, ByCommandError> {
+                unimplemented!()
+            }
+
+            async fn package_versions(
+                &self,
+                _: impl AsRef<str> + Send + Sync,
+            ) -> Result<PackageDetails, VersionsError> {
+                unimplemented!()
+            }
+
+            async fn publish_info(
+                &self,
+                _: impl AsRef<str> + Send + Sync,
+                _: impl AsRef<str> + Send + Sync,
+            ) -> Result<PublishResponse, FloxhubClientError> {
+                unimplemented!()
+            }
+
+            async fn get_catalog_locked_sources(
+                &self,
+                _: impl AsRef<str> + Send + Sync,
+            ) -> Result<ResultsPage<LockedSourceItem>, FloxhubClientError> {
+                unimplemented!()
+            }
+
+            async fn build_inputs_lookup(
+                &self,
+                _: BuildInputsLookupRequest,
+            ) -> Result<BuildInputsLookupResponse, FloxhubClientError> {
+                unimplemented!()
+            }
+
+            async fn create_package(
+                &self,
+                _: impl AsRef<str> + Send + Sync,
+                _: impl AsRef<str> + Send + Sync,
+                _: impl AsRef<str> + Send + Sync,
+            ) -> Result<(), FloxhubClientError> {
+                unimplemented!()
+            }
+
+            async fn publish_build(
+                &self,
+                _: impl AsRef<str> + Send + Sync,
+                _: impl AsRef<str> + Send + Sync,
+                _: &UserBuildPublish,
+            ) -> Result<(), FloxhubClientError> {
+                unimplemented!()
+            }
+
+            async fn get_store_info(
+                &self,
+                _: Vec<String>,
+            ) -> Result<HashMap<String, Vec<StoreInfo>>, StoreInfoError> {
+                Err(StoreInfoError::Auth(ResolveAuthError::Required {
+                    detail: "Authentication is required".to_string(),
+                }))
+            }
+
+            async fn is_publish_complete(&self, _: &[String]) -> Result<bool, FloxhubClientError> {
+                unimplemented!()
+            }
+
+            async fn get_base_catalog_info(&self) -> Result<BaseCatalogInfo, FloxhubClientError> {
+                unimplemented!()
+            }
+
+            async fn check_build_already_recorded(
+                &self,
+                _: CheckBuildQuery<'_>,
+            ) -> Result<CheckBuildResponse, FloxhubClientError> {
+                unimplemented!()
+            }
+        }
+
+        let buildenv = test_helpers::buildenv_instance();
+        let system = env!("NIX_TARGET_SYSTEM").to_string();
+        let err = buildenv
+            .realise_lockfile(&StoreInfoAuthClient, &lockfile, &system)
+            .unwrap_err();
+
         assert!(
-            auth_err.to_string().contains(AUTH_LOGIN_HINT),
-            "DownloadAuth(Expired) message should name 'flox auth login'; got: {auth_err}"
+            matches!(err, BuildEnvError::DownloadAuth(_)),
+            "expected DownloadAuth, got {err:?}"
+        );
+        assert!(
+            err.to_string().contains(AUTH_LOGIN_HINT),
+            "error message should name 'flox auth login'; got: {err}"
         );
     }
 }
