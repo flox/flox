@@ -602,8 +602,14 @@ EOF
   mkdir "$DEFAULTS_PROBE/bin"
   cat > "$DEFAULTS_PROBE/bin/flox" <<'EOF'
 #!/bin/sh
+sleep 30 &
+worker_pid=$!
+printf '%s\n' "$worker_pid" > "$DEFAULTS_PROBE/interrupt-worker.pid"
+trap 'printf "%s\n" SIGINT > "$DEFAULTS_PROBE/interrupt-signal"; kill "$worker_pid"; wait "$worker_pid"; exit 130' INT
+# Announce readiness only after the worker and interrupt cleanup are ready.
+# Otherwise Ctrl-C can orphan a sleeper that keeps command substitution open.
 printf '%s\n' producer-ready >&2
-sleep 30
+wait "$worker_pid"
 EOF
   chmod +x "$DEFAULTS_PROBE/bin/flox"
   export PATH="$DEFAULTS_PROBE/bin:$PATH"
@@ -642,7 +648,10 @@ EOF
     { printf '%s\n' "$prompt"; "$FLOX_BIN" defaults setup --shell "$shell_name" --print; } > "$rc"
     run expect "$DEFAULTS_PROBE/interrupt.exp" "$(command -v "$shell_name")" -i
     assert_success
+    assert_equal "$(cat "$DEFAULTS_PROBE/interrupt-signal")" SIGINT
+    run kill -0 "$(cat "$DEFAULTS_PROBE/interrupt-worker.pid")"
+    assert_failure
     assert_equal "$(cat "$DEFAULTS_PROBE/interrupted.state")" '[]'
-    rm "$DEFAULTS_PROBE/interrupted.state"
+    rm "$DEFAULTS_PROBE/interrupted.state" "$DEFAULTS_PROBE/interrupt-signal"
   done
 }
