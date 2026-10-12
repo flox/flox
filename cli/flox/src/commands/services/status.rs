@@ -1,5 +1,6 @@
 use std::cmp::max;
-use std::fmt::Display;
+use std::fmt::{self, Display};
+use std::io::Write;
 
 use anyhow::{Result, anyhow};
 use bpaf::Bpaf;
@@ -21,6 +22,7 @@ use crate::commands::services::{ServicesEnvironment, guard_service_commands_avai
 use crate::commands::{EnvironmentSelect, environment_select};
 use crate::environment_subcommand_metric;
 use crate::utils::events::env_detail_from_concrete;
+use crate::utils::table::{table_string, table_writer};
 
 #[derive(Bpaf, Debug, Clone)]
 pub struct Status {
@@ -188,7 +190,7 @@ impl FromIterator<ProcessState> for ProcessStatesDisplay {
 
 /// Formats `ProcessStates` as a table for display in the CLI.
 impl Display for ProcessStatesDisplay {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fn display_status(proc: &ProcessStateDisplay) -> String {
             if let Some(exit_code) = proc.exit_code {
                 format!("{} ({})", proc.status, exit_code)
@@ -197,36 +199,30 @@ impl Display for ProcessStatesDisplay {
             }
         }
 
-        // TODO: Use a table writer library if we add any more variable width calculations.
-        let name_width_min = 10;
-        let name_width = max(
-            name_width_min,
-            self.0.iter().map(|proc| proc.name.len()).max().unwrap_or(0),
+        // TabWriter can't right-align a single column.
+        let pid_width = max(
+            "PID".len(),
+            self.0
+                .iter()
+                .map(|proc| proc.pid_display().len())
+                .max()
+                .unwrap_or(0),
         );
 
-        let status_width = self
-            .0
-            .iter()
-            .map(|proc| display_status(proc).len())
-            .max()
-            .unwrap_or(6);
-
-        writeln!(
-            f,
-            "{:<name_width$} {:<status_width$} {:>8}",
-            "NAME", "STATUS", "PID",
-        )?;
-
+        let mut tw = table_writer(Vec::new());
+        writeln!(tw, "NAME\tSTATUS\t{:>pid_width$}", "PID").map_err(|_| fmt::Error)?;
         for proc in &self.0 {
             writeln!(
-                f,
-                "{:<name_width$} {:<status_width$} {:>8}",
+                tw,
+                "{}\t{}\t{:>pid_width$}",
                 proc.name,
                 display_status(proc),
                 proc.pid_display(),
-            )?;
+            )
+            .map_err(|_| fmt::Error)?;
         }
-        Ok(())
+
+        f.write_str(&table_string(tw))
     }
 }
 
@@ -252,11 +248,11 @@ mod tests {
         ]);
         let states_display: ProcessStatesDisplay = states.into();
         assert_eq!(format!("{states_display}"), indoc! {"
-            NAME       STATUS       PID
-            aaa        Running      123
-            bbb        Running      123
-            ccc        Running      123
-            zzz        Running      123
+            NAME  STATUS   PID
+            aaa   Running  123
+            bbb   Running  123
+            ccc   Running  123
+            zzz   Running  123
         "});
     }
 
@@ -268,9 +264,9 @@ mod tests {
         ]);
         let states_display: ProcessStatesDisplay = states.into();
         assert_eq!(format!("{states_display}"), indoc! {"
-            NAME                 STATUS       PID
-            longlonglonglonglong Running      123
-            short                Running      123
+            NAME                  STATUS   PID
+            longlonglonglonglong  Running  123
+            short                 Running  123
         "});
     }
 
@@ -283,10 +279,10 @@ mod tests {
         ]);
         let states_display: ProcessStatesDisplay = states.into();
         assert_eq!(format!("{states_display}"), indoc! {"
-            NAME       STATUS             PID
-            aaa        Running            123
-            bbb        Stopped          [456]
-            ccc        Completed (0)    [789]
+            NAME  STATUS           PID
+            aaa   Running          123
+            bbb   Stopped        [456]
+            ccc   Completed (0)  [789]
         "});
     }
 
@@ -301,12 +297,36 @@ mod tests {
         ]);
         let states_display: ProcessStatesDisplay = states.into();
         assert_eq!(format!("{states_display}"), indoc! {"
-            NAME       STATUS       PID
-            aaa        Running        1
-            bbb        Running       12
-            ccc        Running      123
-            ddd        Running     1234
-            eee        Running    12345
+            NAME  STATUS     PID
+            aaa   Running      1
+            bbb   Running     12
+            ccc   Running    123
+            ddd   Running   1234
+            eee   Running  12345
+        "});
+    }
+
+    #[test]
+    fn processstatesdisplay_pid_column_fits_widest_pid() {
+        let states = ProcessStates::from(vec![
+            generate_process_state("aaa", "Running", 123, true),
+            generate_stopped_process_state("bbb", 4194304),
+        ]);
+        let states_display: ProcessStatesDisplay = states.into();
+        assert_eq!(format!("{states_display}"), indoc! {"
+            NAME  STATUS         PID
+            aaa   Running        123
+            bbb   Stopped  [4194304]
+        "});
+    }
+
+    #[test]
+    fn processstatesdisplay_status_narrower_than_header() {
+        let states = ProcessStates::from(vec![generate_process_state("aaa", "Error", 123, true)]);
+        let states_display: ProcessStatesDisplay = states.into();
+        assert_eq!(format!("{states_display}"), indoc! {"
+            NAME  STATUS  PID
+            aaa   Error   123
         "});
     }
 

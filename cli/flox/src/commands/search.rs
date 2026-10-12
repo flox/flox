@@ -1,4 +1,5 @@
 use std::fmt::Write;
+use std::io::Write as _;
 use std::num::{NonZeroU8, NonZeroU32};
 
 use anyhow::{Result, bail};
@@ -16,6 +17,7 @@ use crate::subcommand_metric;
 use crate::utils::didyoumean::{DidYouMean, SearchSuggestion};
 use crate::utils::message::{self, stderr_supports_color, stdout_supports_color};
 use crate::utils::search::DisplaySearchResults;
+use crate::utils::table::{table_string, table_writer};
 use crate::utils::tracing::sentry_set_tag;
 
 pub(crate) const DEFAULT_SEARCH_LIMIT: Option<NonZeroU8> = NonZeroU8::new(10);
@@ -200,7 +202,7 @@ impl Search {
             };
         }
 
-        println!("{}", render_command_providers(command_name, &result));
+        println!("{}", render_command_providers(command_name, &result)?);
 
         // Truncation hint: shown only when the API total exceeds what we
         // fetched (i.e. --all was not passed and results were capped).
@@ -229,12 +231,10 @@ fn render_search_results_json(search_results: SearchResults) -> Result<()> {
 /// Exact matches are listed first and marked with `*`. All providers in
 /// `result.providers` are shown; the caller controls how many were fetched
 /// via the `api_limit` passed to `by_command`.
-fn render_command_providers(command: &str, result: &ByCommandResult) -> String {
+fn render_command_providers(command: &str, result: &ByCommandResult) -> Result<String> {
     let providers = &result.providers;
     let total = result.total_count;
     let exact_count = providers.iter().filter(|p| p.exact_name_match).count();
-
-    let mut s = String::new();
 
     // Header: always mention exact match count so "exact matches" is present.
     let exact_str = match exact_count {
@@ -243,14 +243,17 @@ fn render_command_providers(command: &str, result: &ByCommandResult) -> String {
         n => format!(" — {n} exact matches (*)"),
     };
     let plural = if total == 1 { "" } else { "s" };
-    let _ = writeln!(s, "{total} package{plural} provide '{command}'{exact_str}:");
-
+    let mut tw = table_writer(Vec::new());
+    writeln!(
+        tw,
+        "{total} package{plural} provide '{command}'{exact_str}:"
+    )?;
     for p in providers {
         let marker = if p.exact_name_match { " *" } else { "  " };
-        let _ = writeln!(s, " {marker} {:<12} ({})", p.pname, p.attr_path);
+        writeln!(tw, " {marker} {}\t({})", p.pname, p.attr_path)?;
     }
 
-    s.trim_end().to_string()
+    Ok(table_string(tw).trim_end().to_string())
 }
 
 #[cfg(test)]
@@ -286,10 +289,29 @@ mod tests {
     #[test]
     fn render_single_exact_match() {
         let result = make_result("rg", vec![make_provider("ripgrep", "ripgrep", true)], true);
-        let output = render_command_providers("rg", &result);
+        let output = render_command_providers("rg", &result).unwrap();
         assert!(output.contains("1 exact match"), "output: {output}");
         assert!(output.contains("ripgrep"), "output: {output}");
         assert!(!output.contains("2 exact"), "output: {output}");
+    }
+
+    // render_command_providers: the package column widens to fit the longest
+    // name, so attr paths stay aligned.
+    #[test]
+    fn render_aligns_long_package_names() {
+        let result = make_result(
+            "python3",
+            vec![
+                make_provider("python3", "python3", true),
+                make_provider("python3-minimal", "python3Minimal", false),
+            ],
+            true,
+        );
+        let output = render_command_providers("python3", &result).unwrap();
+        assert_eq!(output, indoc! {"
+            2 packages provide 'python3' — 1 exact match (*):
+              * python3          (python3)
+                python3-minimal  (python3Minimal)"});
     }
 
     // render_command_providers: zero exact matches — "0 exact matches" in header.
@@ -303,7 +325,7 @@ mod tests {
             ],
             true,
         );
-        let output = render_command_providers("vi", &result);
+        let output = render_command_providers("vi", &result).unwrap();
         assert!(output.contains("0 exact matches"), "output: {output}");
     }
 
@@ -319,7 +341,7 @@ mod tests {
             ],
             true,
         );
-        let output = render_command_providers("vi", &result);
+        let output = render_command_providers("vi", &result).unwrap();
         assert!(output.contains("2 exact matches"), "output: {output}");
     }
 
@@ -336,7 +358,7 @@ mod tests {
             ],
             true,
         );
-        let output = render_command_providers("vi", &result);
+        let output = render_command_providers("vi", &result).unwrap();
         let vim_row_pos = output.find("(vim)").unwrap();
         let neovim_row_pos = output.find("(neovim)").unwrap();
         assert!(
@@ -353,7 +375,7 @@ mod tests {
             .map(|i| make_provider(&format!("pkg{i}"), &format!("pkg{i}"), false))
             .collect();
         let result = make_result("cmd", providers, true);
-        let output = render_command_providers("cmd", &result);
+        let output = render_command_providers("cmd", &result).unwrap();
         assert!(output.contains("pkg14"), "all providers shown: {output}");
         assert!(!output.contains("shown,"), "no truncation line: {output}");
     }
@@ -363,7 +385,7 @@ mod tests {
     #[test]
     fn render_body_excludes_search_hint() {
         let result = make_result("rg", vec![make_provider("ripgrep", "ripgrep", false)], true);
-        let output = render_command_providers("rg", &result);
+        let output = render_command_providers("rg", &result).unwrap();
         assert!(
             !output.contains("flox search"),
             "body should not mention flox search"
