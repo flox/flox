@@ -359,3 +359,75 @@ EOF
   assert_equal "$(jq -r '.selected_by_path' <<<"$output")" \
     "$(realpath "$GLOBAL_ACTIVE_PROJECT/.flox/run")/$NIX_SYSTEM.project-dev/bin/hello"
 }
+
+catalog_fixture_base() {
+  local native
+  native="$("$NIX_BIN" build --impure --file "$TESTS_DIR/global/packages.nix" \
+    --argstr rev "$TEST_NIXPKGS_REV_NEW" --argstr system "$NIX_SYSTEM" \
+    first --out-link "$BATS_TEST_TMPDIR/catalog-native" --print-out-paths)"
+  "$FLOX_BIN" global install --id native "$native" --json
+}
+
+@test "global catalog group and command routing retain ordinary upgrade semantics" {
+  catalog_fixture_base
+  local manifest expected
+  manifest="$BATS_TEST_TMPDIR/catalog-manifest.toml"
+  # This existing recording includes all four systems and an install ID that
+  # differs from its public command. Do not rewrite the generated recording.
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/envs/hello_as_greeting/hello_as_greeting.yaml"
+  tomlq -t --arg system "$NIX_SYSTEM" '.install.native.systems = [$system] |
+    .install.greeting = {"pkg-path":"hello"} |
+    .options.systems = ["aarch64-darwin","aarch64-linux","x86_64-darwin","x86_64-linux"]' \
+    "$GLOBAL_ENV/.flox/env/manifest.toml" > "$manifest"
+  "$FLOX_BIN" edit --dir "$GLOBAL_ENV" --file "$manifest"
+  "$FLOX_BIN" global retry-publication --json
+  expected="$(jq -cS '.packages | map(select(.install_id == "greeting"))' "$GLOBAL_ENV/.flox/env/manifest.lock")"
+  local target
+  for target in toplevel hello; do
+    # Follow the ordinary upgrade test's synthetic-version convention. A
+    # mistaken routing to native (which supplies a command named toplevel)
+    # would be a no-op and leave this version behind.
+    jq_edit "$GLOBAL_ENV/.flox/env/manifest.lock" \
+      '(.packages[] | select(.install_id == "greeting")) |=
+        (.version = "0.0.0" | .derivation = "/nix/store/blahblahblah")'
+    run --separate-stderr "$FLOX_BIN" global upgrade "$target" --json
+    assert_success
+    assert_equal "$(jq -r '.environment_outcome, .publication.status' <<<"$output")" $'changed\ncomplete'
+    assert_equal "$(jq -cS '.package_state_after.packages | map(select(.install_id == "greeting"))' <<<"$output")" "$expected"
+  done
+  run --separate-stderr "$FLOX_BIN" global which hello --json
+  assert_success
+  assert_equal "$(jq -c '.after.commands[0].provider_install_ids' <<<"$output")" '["greeting"]'
+  # A unique public command maps back to its catalog install ID for removal.
+  "$FLOX_BIN" global uninstall hello --json
+  assert [ ! -L "$FLOX_DATA_DIR/bin/hello" ]
+  assert [ -L "$FLOX_DATA_DIR/bin/first" ]
+}
+
+@test "global constrained catalog upgrade matches ordinary package authority" {
+  catalog_fixture_base
+  local manifest ordinary before
+  manifest="$BATS_TEST_TMPDIR/constrained-manifest.toml"
+  ordinary="$BATS_TEST_TMPDIR/ordinary"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/envs/old_hello.yaml"
+  # The constrained recording has three package systems. The environment
+  # explicitly supports all four, with a native store package on each host.
+  # Thus x86_64-darwin tests the same cross-system constraint preservation.
+  tomlq -t --arg system "$NIX_SYSTEM" '.install.native.systems = [$system] |
+    .install.hello = {"pkg-path":"hello", "version":"2.10", "outputs":"all",
+    "systems":["aarch64-darwin","aarch64-linux","x86_64-linux"]} |
+    .options.systems = ["aarch64-darwin","aarch64-linux","x86_64-darwin","x86_64-linux"]' \
+    "$GLOBAL_ENV/.flox/env/manifest.toml" > "$manifest"
+  "$FLOX_BIN" edit --dir "$GLOBAL_ENV" --file "$manifest"
+  "$FLOX_BIN" global retry-publication --json
+  mkdir -p "$ordinary"
+  "$FLOX_BIN" init --dir "$ordinary"
+  cp "$GLOBAL_ENV/.flox/env/manifest.toml" "$GLOBAL_ENV/.flox/env/manifest.lock" "$ordinary/.flox/env/"
+  before="$(sha256sum "$GLOBAL_ENV/.flox/env/manifest.toml")"
+  "$FLOX_BIN" upgrade --dir "$ordinary" toplevel
+  run --separate-stderr "$FLOX_BIN" global upgrade toplevel --json
+  assert_success
+  assert_equal "$(jq -cS '.package_state_after' <<<"$output")" "$(jq -cS . "$ordinary/.flox/env/manifest.lock")"
+  assert_equal "$(sha256sum "$GLOBAL_ENV/.flox/env/manifest.toml")" "$before"
+  assert_equal "$(jq -r '.package_state_after.manifest.install.hello.version' <<<"$output")" '2.10'
+}

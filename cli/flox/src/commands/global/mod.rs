@@ -557,7 +557,10 @@ impl Mutation {
         before: &Snapshot,
     ) -> GlobalResult<(Self, bool)> {
         let target = |name: &str| -> GlobalResult<String> {
-            if before.packages.iter().any(|p| p.install_id == name)
+            // Ordinary upgrade reserves the implicit toplevel group even
+            // without an explicit pkg-group field in the manifest.
+            if (matches!(command, GlobalCommand::Upgrade { .. }) && name == "toplevel")
+                || before.packages.iter().any(|p| p.install_id == name)
                 || before
                     .lockfile
                     .as_ref()

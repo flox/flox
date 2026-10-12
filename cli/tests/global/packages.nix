@@ -23,6 +23,9 @@ let
       EOF
       chmod +x $out/bin/${name}
       ln -s $out/bin/${name} $out/sbin/${name}
+      ${pkgs.lib.optionalString (name == "first") ''
+        ln -s $out/bin/${name} $out/bin/toplevel
+      ''}
     '';
 in
 {
