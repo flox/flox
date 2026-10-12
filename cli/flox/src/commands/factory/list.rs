@@ -17,7 +17,7 @@ use floxhub_client::{
 use interim::{Dialect, Interval, parse_date_string, parse_duration};
 use tracing::instrument;
 
-use super::{effective_status, effective_updated_at};
+use super::{effective_status, effective_updated_at, trigger_label};
 use crate::subcommand_metric;
 use crate::utils::message::page_output;
 use crate::utils::table::{table_string, table_writer};
@@ -211,6 +211,7 @@ struct BuildRowDisplay {
     build_id: i64,
     attr_path: String,
     system: String,
+    trigger: String,
     status: String,
     updated: String,
 }
@@ -219,11 +220,13 @@ impl BuildRowDisplay {
     fn new(b: BuildResponse, now: DateTime<Utc>) -> Self {
         let status = effective_status(&b);
         let updated = format_age(effective_updated_at(&b), now);
+        let trigger = trigger_label(&b);
 
         BuildRowDisplay {
             build_id: b.build_id,
             attr_path: b.attr_path,
             system: b.system,
+            trigger,
             status,
             updated,
         }
@@ -255,12 +258,13 @@ impl fmt::Display for BuildListDisplay {
         }
 
         let mut tw = table_writer(Vec::new());
-        writeln!(tw, "BUILD ID\tATTR PATH\tSYSTEM\tSTATUS\tUPDATED").map_err(|_| fmt::Error)?;
+        writeln!(tw, "BUILD ID\tATTR PATH\tSYSTEM\tTRIGGER\tSTATUS\tUPDATED")
+            .map_err(|_| fmt::Error)?;
         for row in &self.rows {
             writeln!(
                 tw,
-                "{}\t{}\t{}\t{}\t{}",
-                row.build_id, row.attr_path, row.system, row.status, row.updated,
+                "{}\t{}\t{}\t{}\t{}\t{}",
+                row.build_id, row.attr_path, row.system, row.trigger, row.status, row.updated,
             )
             .map_err(|_| fmt::Error)?;
         }
@@ -272,6 +276,7 @@ impl fmt::Display for BuildListDisplay {
 #[cfg(test)]
 mod tests {
     use bpaf::Parser;
+    use floxhub_client::BuildTrigger;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
 
@@ -282,20 +287,27 @@ mod tests {
     fn list_display_renders_table_exactly() {
         // A dispatched build shows its task's updated_at; an undispatched build
         // has no task, so UPDATED falls back to the build's created_at.
+        // A build from a Factory that predates trigger reporting shows `-`.
         let builds = vec![
-            make_build(
-                1,
-                "x86_64-linux",
-                "hello",
-                Some(EffectiveBuildStatus::Running),
-            ),
+            BuildResponse {
+                trigger: Some(BuildTrigger {
+                    kind: Some("source_push".to_string().into()),
+                    stabilities: vec!["stable".to_string(), "staging".to_string()],
+                }),
+                ..make_build(
+                    1,
+                    "x86_64-linux",
+                    "hello",
+                    Some(EffectiveBuildStatus::Running),
+                )
+            },
             make_build(2, "aarch64-darwin", "ripgrep", None),
         ];
         let display = BuildListDisplay::new(builds, utc("2025-01-01T00:01:00Z"));
         assert_eq!(display.to_string(), indoc! {"
-            BUILD ID  ATTR PATH  SYSTEM          STATUS   UPDATED
-            1         hello      x86_64-linux    running  59s ago
-            2         ripgrep    aarch64-darwin  pending  1m ago
+            BUILD ID  ATTR PATH  SYSTEM          TRIGGER                       STATUS   UPDATED
+            1         hello      x86_64-linux    source_push (stable,staging)  running  59s ago
+            2         ripgrep    aarch64-darwin  -                             pending  1m ago
         "});
     }
 
@@ -327,10 +339,10 @@ mod tests {
         ];
         let display = BuildListDisplay::new(builds, utc("2025-01-01T00:01:00Z"));
         assert_eq!(display.to_string(), indoc! {"
-            BUILD ID  ATTR PATH  SYSTEM          STATUS                UPDATED
-            3         curl       x86_64-linux    timed_out             59s ago
-            4         jq         aarch64-darwin  cancelled             1m ago
-            5         wget       x86_64-linux    unknown: frobnicated  1m ago
+            BUILD ID  ATTR PATH  SYSTEM          TRIGGER  STATUS                UPDATED
+            3         curl       x86_64-linux    -        timed_out             59s ago
+            4         jq         aarch64-darwin  -        cancelled             1m ago
+            5         wget       x86_64-linux    -        unknown: frobnicated  1m ago
         "});
     }
 
