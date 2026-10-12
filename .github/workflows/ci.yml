@@ -307,6 +307,12 @@ jobs:
         if: ${{ needs.scope.outputs.heavy != 'false' }}
         run: nix develop -L --no-update-lock-file --command just build-cli
 
+      - name: "Global development smoke"
+        if: ${{ needs.scope.outputs.heavy != 'false' }}
+        env:
+          FLOX_TEST_JOBS: "1"
+        run: nix develop -L --no-update-lock-file --command just integ-tests global.bats -- --filter-tags global:smoke
+
       - name: "CLI Unit Tests"
         # Only run unit tests if when not running specialized integration tests
         # Also skip on push to main; already run in the merge queue. The
