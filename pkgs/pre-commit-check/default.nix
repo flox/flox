@@ -9,6 +9,10 @@
   clang-tools,
   makeWrapper,
   bash,
+  crate2nix,
+  gitMinimal,
+  just,
+  writeShellApplication,
 }:
 pre-commit-hooks.lib.${stdenv.hostPlatform.system}.run {
   src = builtins.path { path = ./.; };
@@ -72,6 +76,30 @@ pre-commit-hooks.lib.${stdenv.hostPlatform.system}.run {
 
     # treefmt formats yaml and nix (github actions)
     treefmt.enable = true;
+
+    crate2nix-cargo-nix = {
+      enable = true;
+      name = "crate2nix Cargo.nix";
+      description = "Check that pkgs/crate2nix/Cargo.nix is up to date with the Cargo manifests.";
+      files = "(^|/)Cargo\\.(lock|toml)$|^pkgs/crate2nix/(Cargo\\.nix|crate-hashes\\.json)$";
+      pass_filenames = false;
+      entry = lib.getExe (writeShellApplication {
+        name = "check-crate2nix-cargo-nix";
+        runtimeInputs = [
+          crate2nix
+          gitMinimal
+          just
+        ];
+        text = ''
+          # Regenerating in place leaves the fix in the working tree on failure.
+          just gen-cargo-nix
+          if ! git diff --exit-code pkgs/crate2nix/; then
+            echo "pkgs/crate2nix/ is out of date. Run 'just gen-cargo-nix' and commit the result." >&2
+            exit 1
+          fi
+        '';
+      });
+    };
   };
   imports = [
     (
