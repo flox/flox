@@ -391,7 +391,7 @@ impl Global {
 
     fn render(&self, report: &Report) {
         if let Some(path) = &report.directory {
-            message::plain(path.display());
+            println!("{}", path.display());
         }
         if let Some(shell) = &report.shell {
             if matches!(self.command, GlobalCommand::UpdateShell {

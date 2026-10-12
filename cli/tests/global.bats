@@ -106,7 +106,9 @@ protected_state() {
   assert_equal "$(protected_state)" "$before"
   # A missing recorded entry can be recreated from the current ordinary output.
   rm "$FLOX_DATA_DIR/bin/hello"
-  run --separate-stderr env NIX_BIN=/no-nix BUILDENV_BIN=/no-build _FLOX_USE_CATALOG_MOCK=/no-catalog-access "$FLOX_BIN" global retry-publication --json
+  # CLI startup needs a valid mock configuration; an empty mock cannot resolve
+  # packages. Poison the actual build inputs only after preserving that setup.
+  run --separate-stderr env NIX_BIN=/no-nix FLOX_BUILDENV_NIX=/no-build "$FLOX_BIN" global retry-publication --json
   assert_success
   assert_equal "$(sha256sum "$GLOBAL_ENV/.flox/env/manifest.toml" "$GLOBAL_ENV/.flox/env/manifest.lock")" "$authority"
   run "$FLOX_DATA_DIR/bin/hello"
