@@ -14,6 +14,10 @@ setup() {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
   export DEFAULTS_PROBE="$BATS_TEST_TMPDIR/probe"
   mkdir -p "$DEFAULTS_PROBE"
+  # Match canonical environment identity, including macOS's /tmp symlink.
+  DEFAULTS_PROBE="$(realpath "$DEFAULTS_PROBE")"
+  # Packaged tests provide FLOX_BIN without adding its directory to PATH.
+  export PATH="$(dirname "$FLOX_BIN"):$PATH"
   export DEFAULTS_SH="$(command -v sh)"
   unset _FLOX_ACTIVE_ENVIRONMENTS _FLOX_SOURCED_PROFILE_SCRIPTS
 }
@@ -612,7 +616,11 @@ expect {
   eof { exit 125 }
 }
 send -- "\003"
-after 100
+expect {
+  "defaults-ready> " {}
+  timeout { puts stderr "Timed out waiting for the prompt after Ctrl-C"; exit 124 }
+  eof { exit 125 }
+}
 send -- "\"\$DEFAULTS_SH\" \"\$DEFAULTS_PROBE/record.sh\" interrupted\nexit\n"
 expect {
   timeout { exit 124 }
@@ -622,6 +630,16 @@ set result [wait]
 exit [lindex $result 3]
 EOF
   for shell_name in bash zsh fish tcsh; do
+    # Wait for the shell to finish recovering before sending probe commands;
+    # startup can discard input sent before its line editor is ready.
+    local rc prompt
+    case "$shell_name" in
+      bash) rc="$HOME/.bashrc"; prompt="PS1='defaults-ready> '" ;;
+      zsh) rc="$HOME/.zshrc"; prompt="PS1='defaults-ready> '" ;;
+      fish) rc="$HOME/.config/fish/config.fish"; prompt="function fish_prompt; printf 'defaults-ready> '; end" ;;
+      tcsh) rc="$HOME/.tcshrc"; prompt="set prompt = 'defaults-ready> '" ;;
+    esac
+    { printf '%s\n' "$prompt"; "$FLOX_BIN" defaults setup --shell "$shell_name" --print; } > "$rc"
     run expect "$DEFAULTS_PROBE/interrupt.exp" "$(command -v "$shell_name")" -i
     assert_success
     assert_equal "$(cat "$DEFAULTS_PROBE/interrupted.state")" '[]'
