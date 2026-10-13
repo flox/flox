@@ -3871,9 +3871,11 @@ mod tests {
             .unwrap();
         let stdout = child.wait_with_output().unwrap().stdout;
         let drv = serde_json::from_slice::<serde_json::Value>(&stdout).unwrap();
-        // `nix derivation show` prints a map with the .drv path as the key
-        // We just care about the value and discard the key
-        let mut current = drv.as_object().unwrap().values().next().unwrap();
+        // `nix derivation show` prints a map keyed by .drv path; since Nix
+        // 2.35 that map sits under a `derivations` key next to a `version`.
+        // We just care about the value and discard the key.
+        let derivations = drv.get("derivations").unwrap_or(&drv);
+        let mut current = derivations.as_object().unwrap().values().next().unwrap();
         for key in keypath {
             current = &current[key];
         }

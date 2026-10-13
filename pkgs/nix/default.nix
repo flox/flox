@@ -1,63 +1,36 @@
 # ============================================================================ #
 #
-# Applies patches to `nix' and fixes up public header `#includes'.
+# Selects the version of `nix' that flox builds against.
 #
-# Additionally there's a wonky spot where they
-# `#include "nlohmann/json_fwd.hpp"' in `include/nix/json-impls.hh' which forces
-# consumers to use `-I' instead of `-isystem' for `nlohmann_json' when compiling
-# against `nix'.
-# This fixes that issue too.
+# The pinned nixpkgs packages 2.35.2 as `nixVersions.latest`. 2.35.3 carries
+# the fixes for the advisories published on 2026-10-13 (GHSA-jwvx-xq5j-gc56,
+# GHSA-92x5-h528-wrmw, GHSA-m4vq-qf6v-82pj, GHSA-25vp-6h23-hj3g,
+# GHSA-hf6w-2rg9-v84g), so re-point the 2.35 component set at that tag with
+# `overrideSource`. Setting `src` through `overrideScope` is not enough: with
+# an empty patch list the scope keeps the source it already captured and only
+# the version string changes.
 #
-# N.B. we select the "stable" revision in the full knowledge/expectation that
-# this will change out from underneath us over time. We do this along with a
-# commitment to continually build against the (flox) nixpkgs staging and
-# unstable branches in CI so that we will be notified when upcoming upgrades of
-# nixVersions.stable upstream break our build.
+# TODO: reduce this to `nixVersions.latest` once the pinned nixpkgs carries
+# 2.35.3. `flox-nix-plugins` must be ported along with every minor bump.
 #
 # ---------------------------------------------------------------------------- #
-{
-  nixVersions,
-  fetchFromGitHub,
-}:
+{ nixVersions, fetchFromGitHub }:
 let
-  nixVersion = "stable";
+  version = "2.35.3";
+  src = fetchFromGitHub {
+    owner = "NixOS";
+    repo = "nix";
+    tag = version;
+    hash = "sha256-qtlx8ywd1qj2ToZTNBunXE7JUajLtw44ja3r7+d47D4=";
+  };
 in
-# TODO: revert to nixpkgs' nix with next nixpkgs bump in May '26.
-#
-# All versions of nix on the current flox/nixpkgs/stable (2026-03-24)
-# are susceptible to
-# * GHSA-g3g9-5vj6-r3gj <https://discourse.nixos.org/t/nix-security-advisory-privilege-escalation-via-symlink-following-during-fod-output-registration/76900>
-# * GHSA-vh5x-56v6-4368 <https://github.com/NixOS/nix/security/advisories/GHSA-vh5x-56v6-4368>
-# * GHSA-gr92-w2r5-qw5p <https://github.com/NixOS/nix/security/advisories/GHSA-gr92-w2r5-qw5p>
-# * Security advisory for Nix and Lix - October 2026 <https://discourse.nixos.org/t/security-advisory-for-nix-and-lix-october-2026/80547>
-# We bump the "stable" nix (which refers to `2.31.3`), to 2.31.6
-# which includes fixes against the above vuln.
-# FWIW, using `.appendPatches` apparently runs into build issues in CI,
-# likely on account of <https://github.com/NixOS/nix/issues/14751>.
 (nixVersions.extend (
-  final: prev: {
-    nixComponents_2_31 = prev.nixComponents_2_31.override {
-      version = "2.31.6";
-      src = fetchFromGitHub {
-        owner = "NixOS";
-        repo = "nix";
-        tag = "2.31.6";
-        hash = "sha256-yAvNBedw4FB+Z5myhfGsnRT8F1QqeEoXGbm7EmTW/Og=";
-      };
-    };
-
+  _: prev: {
+    nixComponents_2_35 = (prev.nixComponents_2_35.overrideSource src).overrideScope (
+      _: _: { inherit version; }
+    );
   }
-)).
-
-"${nixVersion}"
-#  .appendPatches
-#   # E.g:
-#   # (builtins.path { path = ./patches/pr_<PR>_<description>.patch; })
-
-#   # <https://discourse.nixos.org/t/nix-security-advisory-privilege-escalation-via-symlink-following-during-fod-output-registration/76900>
-#   # TODO: drop with next stability bump in May '26 as that will ship with the fix applied.
-#   (builtins.path { path = ./patches/GHSA-g3g9-5vj6-r3gj-2.31.3.patch; })
-# ]
+)).nix_2_35
 # ---------------------------------------------------------------------------- #
 #
 #

@@ -365,7 +365,7 @@ pub fn build_catalog_pkg_from_source(
     .entered();
 
     let mut cmd = base_command();
-    cmd.args(["--option", "extra-plugin-files", &*NIX_PLUGINS]);
+    cmd.args(["--option", "plugin-files", &*NIX_PLUGINS]);
     cmd.arg("build");
     cmd.arg("--no-write-lock-file");
     cmd.arg("--no-update-lock-file");
