@@ -34,7 +34,6 @@ use floxhub_client::{
     SearchLimit,
     SearchResults,
     StoreInfo,
-    StoreInfoError,
     StoreInfoResponse,
     StorepathStatusResponse,
     UserBuildPublish,
@@ -365,7 +364,7 @@ impl CatalogClientTrait for MockClient {
     async fn get_store_info(
         &self,
         _derivations: Vec<String>,
-    ) -> Result<HashMap<String, Vec<StoreInfo>>, StoreInfoError> {
+    ) -> Result<HashMap<String, Vec<StoreInfo>>, FloxhubClientError> {
         let mock_resp = self
             .mock_responses
             .lock()

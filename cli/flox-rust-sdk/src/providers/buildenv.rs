@@ -21,13 +21,7 @@ use flox_manifest::lockfile::{
 };
 use flox_manifest::parsed::Inner;
 use flox_manifest::parsed::latest::SelectedOutputs;
-use floxhub_client::{
-    CatalogClientTrait,
-    FloxhubClientError,
-    ResolveAuthError,
-    StoreInfo,
-    StoreInfoError,
-};
+use floxhub_client::{CatalogClientTrait, FloxhubClientError, ResolveAuthError, StoreInfo};
 use pollster::FutureExt as _;
 use rsevents_extra::Semaphore;
 use serde::{Deserialize, Serialize};
@@ -437,9 +431,20 @@ pub fn copy_from_custom_catalog_locations(
         BuildEnvError::NixCopyError(format!("no store paths provided for '{install_id}'"))
     })?;
 
-    let locations = store_locations
-        .get(first_path)
-        .ok_or_else(|| BuildEnvError::NoPackageStoreLocation(install_id.to_string()))?;
+    let locations = store_locations.get(first_path).ok_or_else(|| {
+        // The store-info response returned no locations for this package.
+        // When the user is logged out this is the expected signal — the server
+        // returns an empty map rather than 401 for unauthenticated requests.
+        if no_netrc_is_error {
+            BuildEnvError::DownloadAuth(ResolveAuthError::Required {
+                detail: format!(
+                    "Authentication is required to download custom package '{install_id}'."
+                ),
+            })
+        } else {
+            BuildEnvError::NoPackageStoreLocation(install_id.to_string())
+        }
+    })?;
 
     let span = info_span!(
         "substitute custom catalog package",
@@ -532,9 +537,19 @@ pub fn copy_from_custom_catalog_locations(
             .map_err(|e| BuildEnvError::NixCopyError(e.to_string()))?;
         if !ok {
             if locations.is_empty() {
-                return Err(BuildEnvError::NoPackageStoreLocation(
-                    install_id.to_string(),
-                ));
+                // No download locations were returned and the public cache also
+                // has no copy. When the user is logged out, missing locations
+                // is the expected signal (the server returns an empty list for
+                // unauthenticated requests), so prompt for login.
+                return Err(if no_netrc_is_error {
+                    BuildEnvError::DownloadAuth(ResolveAuthError::Required {
+                        detail: format!(
+                            "Authentication is required to download custom package '{install_id}'."
+                        ),
+                    })
+                } else {
+                    BuildEnvError::NoPackageStoreLocation(install_id.to_string())
+                });
             }
             download_attempts.0.push(DownloadAttempt {
                 location: LOCATION_FALLBACK_NAME.to_string(),
@@ -635,10 +650,7 @@ where
             let store_locations = client
                 .get_store_info(all_custom_pkg_store_paths)
                 .block_on()
-                .map_err(|err| match err {
-                    StoreInfoError::Auth(auth_err) => BuildEnvError::DownloadAuth(auth_err),
-                    StoreInfoError::FloxhubClientError(e) => BuildEnvError::CatalogError(e),
-                })?;
+                .map_err(BuildEnvError::CatalogError)?;
             Some(store_locations)
         };
 
@@ -1871,10 +1883,12 @@ mod realise_nixpkgs_tests {
             map
         };
 
+        // no_netrc_is_error = false: the user is logged in but the store
+        // returned no download locations for this package (genuinely absent).
         let subst_resp = BuildEnvNix::<NixAuth>::realise_single_custom_catalog_pkg(
             &locked_package,
             &store_locations,
-            true,
+            false,
             None,
             Span::current(),
             &Semaphore::new(1, 1),
@@ -1996,41 +2010,8 @@ mod realise_nixpkgs_tests {
 /// message containing `flox auth login`.
 #[cfg(test)]
 mod auth_error_rendering_tests {
-    use std::num::NonZeroU32;
-
-    use flox_core::Version;
-    use flox_manifest::interfaces::AsTypedOnlyManifest;
-    use flox_manifest::lockfile::test_helpers::{
-        fake_catalog_package_lock_with_outputs,
-        locked_published_package,
-    };
-    use flox_manifest::parsed::latest::ManifestLatest;
-    use floxhub_client::{
-        BaseCatalogInfo,
-        BuildInputsLookupRequest,
-        BuildInputsLookupResponse,
-        ByCommandError,
-        ByCommandResult,
-        CheckBuildQuery,
-        CheckBuildResponse,
-        FloxhubClientError,
-        LockedSourceItem,
-        PackageDetails,
-        PackageGroup,
-        PackageSystem,
-        PublishResponse,
-        ResolveAuthError,
-        ResolveError,
-        ResolvedPackageGroup,
-        ResultsPage,
-        SearchError,
-        SearchLimit,
-        SearchResults,
-        StoreInfo,
-        StoreInfoError,
-        UserBuildPublish,
-        VersionsError,
-    };
+    use flox_manifest::lockfile::test_helpers::locked_published_package;
+    use floxhub_client::StoreInfo;
 
     use super::*;
 
@@ -2076,147 +2057,28 @@ mod auth_error_rendering_tests {
         );
     }
 
-    /// `StoreInfoError::Auth` returned by `get_store_info` is mapped to
-    /// `BuildEnvError::DownloadAuth` at the call site in `realise_lockfile`
-    /// (the `.map_err` block at buildenv.rs:638-641).
-    ///
-    /// This test drives that mapping end-to-end: it runs `realise_lockfile`
-    /// with a lockfile that contains a custom catalog package not present in
-    /// the Nix store, against a minimal client stub that returns
-    /// `StoreInfoError::Auth`, and asserts the resulting error is
+    /// When the user is logged out and the store-info response has no entry for
+    /// the package (empty map key), `copy_from_custom_catalog_locations` returns
     /// `DownloadAuth` with a `flox auth login` hint.
+    ///
+    /// This is the real logged-out signal: the `/store` endpoint returns HTTP 200
+    /// with an empty items map rather than 401 when unauthenticated.
     #[test]
-    fn get_store_info_auth_error_maps_to_download_auth() {
-        // Build a lockfile with a custom catalog package (pkg_path "mycatalog/hello"
-        // triggers is_from_custom_catalog()) locked for the current system.
-        let (descriptor, mut locked) =
-            fake_catalog_package_lock_with_outputs("hello", "mycatalog/hello", &["out"]);
-        locked.system = env!("NIX_TARGET_SYSTEM").to_string();
-        // Replace outputs with a path that is definitely absent so realise_lockfile
-        // calls get_store_info rather than skipping the download.
-        locked.outputs.insert(
-            "out".to_string(),
-            "/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-definitely-absent".to_string(),
-        );
+    fn empty_store_locations_logged_out_returns_download_auth() {
+        let (locked_package, _) = locked_published_package(None);
+        let fake_store_path = locked_package.outputs["out"].clone();
+        // Empty map: the server returned 200 but no entry for this store path.
+        let store_locations: HashMap<String, Vec<StoreInfo>> = HashMap::new();
 
-        let mut manifest = ManifestLatest::default();
-        manifest
-            .install
-            .inner_mut()
-            .insert("hello".to_string(), descriptor);
-        let lockfile = Lockfile {
-            version: Version::<1>,
-            manifest: manifest.as_typed_only(),
-            packages: vec![locked.into()],
-            compose: None,
-        };
-
-        // A minimal CatalogClientTrait stub: only get_store_info is called;
-        // all other methods are unreachable for this code path.
-        struct StoreInfoAuthClient;
-        impl CatalogClientTrait for StoreInfoAuthClient {
-            async fn resolve(
-                &self,
-                _: Vec<PackageGroup>,
-            ) -> Result<Vec<ResolvedPackageGroup>, ResolveError> {
-                unimplemented!()
-            }
-
-            async fn search(
-                &self,
-                _: impl AsRef<str> + Send + Sync,
-                _: PackageSystem,
-                _: SearchLimit,
-            ) -> Result<SearchResults, SearchError> {
-                unimplemented!()
-            }
-
-            async fn by_command(
-                &self,
-                _: impl AsRef<str> + Send + Sync,
-                _: PackageSystem,
-                _: Option<NonZeroU32>,
-            ) -> Result<ByCommandResult, ByCommandError> {
-                unimplemented!()
-            }
-
-            async fn package_versions(
-                &self,
-                _: impl AsRef<str> + Send + Sync,
-            ) -> Result<PackageDetails, VersionsError> {
-                unimplemented!()
-            }
-
-            async fn publish_info(
-                &self,
-                _: impl AsRef<str> + Send + Sync,
-                _: impl AsRef<str> + Send + Sync,
-            ) -> Result<PublishResponse, FloxhubClientError> {
-                unimplemented!()
-            }
-
-            async fn get_catalog_locked_sources(
-                &self,
-                _: impl AsRef<str> + Send + Sync,
-            ) -> Result<ResultsPage<LockedSourceItem>, FloxhubClientError> {
-                unimplemented!()
-            }
-
-            async fn build_inputs_lookup(
-                &self,
-                _: BuildInputsLookupRequest,
-            ) -> Result<BuildInputsLookupResponse, FloxhubClientError> {
-                unimplemented!()
-            }
-
-            async fn create_package(
-                &self,
-                _: impl AsRef<str> + Send + Sync,
-                _: impl AsRef<str> + Send + Sync,
-                _: impl AsRef<str> + Send + Sync,
-            ) -> Result<(), FloxhubClientError> {
-                unimplemented!()
-            }
-
-            async fn publish_build(
-                &self,
-                _: impl AsRef<str> + Send + Sync,
-                _: impl AsRef<str> + Send + Sync,
-                _: &UserBuildPublish,
-            ) -> Result<(), FloxhubClientError> {
-                unimplemented!()
-            }
-
-            async fn get_store_info(
-                &self,
-                _: Vec<String>,
-            ) -> Result<HashMap<String, Vec<StoreInfo>>, StoreInfoError> {
-                Err(StoreInfoError::Auth(ResolveAuthError::Required {
-                    detail: "Authentication is required".to_string(),
-                }))
-            }
-
-            async fn is_publish_complete(&self, _: &[String]) -> Result<bool, FloxhubClientError> {
-                unimplemented!()
-            }
-
-            async fn get_base_catalog_info(&self) -> Result<BaseCatalogInfo, FloxhubClientError> {
-                unimplemented!()
-            }
-
-            async fn check_build_already_recorded(
-                &self,
-                _: CheckBuildQuery<'_>,
-            ) -> Result<CheckBuildResponse, FloxhubClientError> {
-                unimplemented!()
-            }
-        }
-
-        let buildenv = test_helpers::buildenv_instance();
-        let system = env!("NIX_TARGET_SYSTEM").to_string();
-        let err = buildenv
-            .realise_lockfile(&StoreInfoAuthClient, &lockfile, &system)
-            .unwrap_err();
+        let err = copy_from_custom_catalog_locations(
+            &[fake_store_path],
+            "mycatalog/hello",
+            "hello",
+            &store_locations,
+            /* no_netrc_is_error = */ true,
+            /* maybe_netrc_path = */ None,
+        )
+        .unwrap_err();
 
         assert!(
             matches!(err, BuildEnvError::DownloadAuth(_)),
@@ -2225,6 +2087,32 @@ mod auth_error_rendering_tests {
         assert!(
             err.to_string().contains(AUTH_LOGIN_HINT),
             "error message should name 'flox auth login'; got: {err}"
+        );
+    }
+
+    /// When the user is logged in and the store-info response has no entry for
+    /// the package, `copy_from_custom_catalog_locations` returns
+    /// `NoPackageStoreLocation` — the package may genuinely be absent or deleted.
+    #[test]
+    fn empty_store_locations_logged_in_returns_no_package_store_location() {
+        let (locked_package, _) = locked_published_package(None);
+        let fake_store_path = locked_package.outputs["out"].clone();
+        // Empty map: the server returned 200 but no entry for this store path.
+        let store_locations: HashMap<String, Vec<StoreInfo>> = HashMap::new();
+
+        let err = copy_from_custom_catalog_locations(
+            &[fake_store_path],
+            "mycatalog/hello",
+            "hello",
+            &store_locations,
+            /* no_netrc_is_error = */ false,
+            /* maybe_netrc_path = */ None,
+        )
+        .unwrap_err();
+
+        assert!(
+            matches!(err, BuildEnvError::NoPackageStoreLocation(_)),
+            "expected NoPackageStoreLocation, got {err:?}"
         );
     }
 }

@@ -7,6 +7,11 @@
 # resolution keeps working while the catalog allows it, and commands that
 # resolve nothing (fully locked environments) never ask.
 #
+# For custom-catalog package downloads, the store-info endpoint (/api/v1/catalog/store)
+# does NOT return 401 when unauthenticated — it returns HTTP 200 with an empty
+# items map. The CLI detects the logged-out state via the missing credential and
+# surfaces a clean 'flox auth login' prompt when the store-info response is empty.
+#
 # bats file_tags=catalog-auth-required
 #
 # ---------------------------------------------------------------------------- #
@@ -20,8 +25,9 @@ AUTH_REQUIRED="Authentication is required to resolve packages."
 UNAUTHORIZED_MOCK="$MANUALLY_GENERATED/resolve/unauthorized.yaml"
 # A 401 with the catalog's reason for rejecting a token.
 REJECTED_MOCK="$MANUALLY_GENERATED/resolve/rejected.yaml"
-# A 401 from the store info endpoint, triggered during custom-package download.
-STORE_UNAUTHORIZED_MOCK="$MANUALLY_GENERATED/store/unauthorized.yaml"
+# An empty 200 from the store info endpoint, which is what the real server
+# returns when the user is unauthenticated (the endpoint does not return 401).
+STORE_EMPTY_MOCK="$MANUALLY_GENERATED/store/empty.yaml"
 # Fixture: a locked environment containing a custom-catalog package whose store
 # paths are absent from the local Nix store, so activation must consult the
 # catalog for download locations.
@@ -133,14 +139,15 @@ hello.pkg-path = "hello"' > .flox/env/manifest.toml
 }
 
 # When a custom-catalog package is not in the local Nix store, activate must
-# call the catalog for download locations. A 401 from that endpoint should
-# produce a clean 'flox auth login' prompt rather than a raw API error.
+# call the catalog for download locations. The store-info endpoint returns an
+# empty 200 (not 401) when unauthenticated; the CLI detects the logged-out
+# state and produces a clean 'flox auth login' prompt.
 @test "'flox activate' with custom catalog package shows login prompt when logged out" {
   unset FLOX_FLOXHUB_TOKEN
   "$FLOX_BIN" init
   cp "$CUSTOM_CATALOG_HELLO_DIR/manifest.toml" .flox/env/manifest.toml
   cp "$CUSTOM_CATALOG_HELLO_DIR/manifest.lock" .flox/env/manifest.lock
-  export _FLOX_USE_CATALOG_MOCK="$STORE_UNAUTHORIZED_MOCK"
+  export _FLOX_USE_CATALOG_MOCK="$STORE_EMPTY_MOCK"
   run "$FLOX_BIN" activate -- true
   assert_failure
   assert_output --partial "flox auth login"
