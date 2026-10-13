@@ -392,6 +392,44 @@ pub fn build_catalog_pkg_from_source(
     })
 }
 
+/// The caller's FloxHub credential state when downloading a custom catalog
+/// package.
+///
+/// The `/store` endpoint downgrades an expired token to anonymous and returns
+/// the same empty response as a missing token, so an empty store-info response
+/// cannot distinguish the two. The expiry is knowable locally, so the caller
+/// computes this state and passes it in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DownloadAuthState {
+    /// No credential is present: the user is logged out.
+    NoToken,
+    /// A credential is present but its locally-known expiry has passed.
+    Expired,
+    /// A present credential whose expiry, if any, has not passed.
+    Valid,
+}
+
+/// Build the error for a custom catalog package whose store-info response
+/// carried no download location.
+///
+/// An empty response is the expected signal for a logged-out or expired user
+/// — the `/store` endpoint serves anonymous and expired requests the same
+/// empty response — so those get an auth prompt. A valid-credential user
+/// reaching here means the package is genuinely absent. This mirrors how
+/// `classify_unauthorized_resolve` renders a 401 from `/resolve`, where the
+/// endpoint does distinguish the states.
+fn empty_store_locations_error(auth_state: DownloadAuthState, install_id: &str) -> BuildEnvError {
+    match auth_state {
+        DownloadAuthState::NoToken => BuildEnvError::DownloadAuth(ResolveAuthError::Required {
+            detail: format!(
+                "Authentication is required to download custom package '{install_id}'."
+            ),
+        }),
+        DownloadAuthState::Expired => BuildEnvError::DownloadAuth(ResolveAuthError::Expired),
+        DownloadAuthState::Valid => BuildEnvError::NoPackageStoreLocation(install_id.to_string()),
+    }
+}
+
 /// Download store paths from custom catalog store locations.
 ///
 /// Tries each `StoreInfo` location for the given store paths in order.
@@ -404,9 +442,10 @@ pub fn build_catalog_pkg_from_source(
 /// # Parameters
 /// - `install_id`: install ID used in error messages (e.g. `"mycat/vim"`)
 /// - `attr_path`: attribute path used in span labels (e.g. `"vim"`)
-/// - `no_netrc_is_error`: `true` when no FloxHub token was present at auth
-///   setup time; a netrc-authenticated location failure should be surfaced
-///   rather than silently skipped
+/// - `auth_state`: the caller's FloxHub credential state, used to tell apart
+///   an empty store-info response caused by being logged out (prompt to log
+///   in), one caused by an expired login (prompt to re-authenticate), and a
+///   genuinely absent package for a logged-in user
 /// - `maybe_netrc_path`: path to a temporary netrc file for FloxHub token
 ///   auth; `None` when the user is not authenticated
 ///
@@ -419,7 +458,7 @@ pub fn copy_from_custom_catalog_locations(
     install_id: &str,
     attr_path: &str,
     store_locations: &HashMap<String, Vec<StoreInfo>>,
-    no_netrc_is_error: bool,
+    auth_state: DownloadAuthState,
     maybe_netrc_path: Option<&Path>,
 ) -> Result<(), BuildEnvError> {
     // The way the data structures are written it's possible to have
@@ -431,20 +470,9 @@ pub fn copy_from_custom_catalog_locations(
         BuildEnvError::NixCopyError(format!("no store paths provided for '{install_id}'"))
     })?;
 
-    let locations = store_locations.get(first_path).ok_or_else(|| {
-        // The store-info response returned no locations for this package.
-        // When the user is logged out this is the expected signal — the server
-        // returns an empty map rather than 401 for unauthenticated requests.
-        if no_netrc_is_error {
-            BuildEnvError::DownloadAuth(ResolveAuthError::Required {
-                detail: format!(
-                    "Authentication is required to download custom package '{install_id}'."
-                ),
-            })
-        } else {
-            BuildEnvError::NoPackageStoreLocation(install_id.to_string())
-        }
-    })?;
+    let locations = store_locations
+        .get(first_path)
+        .ok_or_else(|| empty_store_locations_error(auth_state, install_id))?;
 
     let span = info_span!(
         "substitute custom catalog package",
@@ -481,10 +509,11 @@ pub fn copy_from_custom_catalog_locations(
             if store_needs_auth(location_url) {
                 if let Some(ref netrc_path) = maybe_netrc_path {
                     copy_command.arg("--netrc-file").arg(netrc_path);
-                } else if no_netrc_is_error {
-                    // No credential is present: the user is logged out.
-                    // Use Required (rather than Expired or Rejected) because
-                    // we only know a token is absent, not that one expired.
+                } else if auth_state == DownloadAuthState::NoToken {
+                    // No netrc file and no credential: the user is logged out.
+                    // An expired token still writes a netrc (the secret is
+                    // present), so it takes the branch above, not this one;
+                    // its empty-locations case is handled before the loop.
                     return Err(BuildEnvError::DownloadAuth(ResolveAuthError::Required {
                         detail: "Authentication is required to download this package.".to_string(),
                     }));
@@ -538,18 +567,11 @@ pub fn copy_from_custom_catalog_locations(
         if !ok {
             if locations.is_empty() {
                 // No download locations were returned and the public cache also
-                // has no copy. When the user is logged out, missing locations
-                // is the expected signal (the server returns an empty list for
-                // unauthenticated requests), so prompt for login.
-                return Err(if no_netrc_is_error {
-                    BuildEnvError::DownloadAuth(ResolveAuthError::Required {
-                        detail: format!(
-                            "Authentication is required to download custom package '{install_id}'."
-                        ),
-                    })
-                } else {
-                    BuildEnvError::NoPackageStoreLocation(install_id.to_string())
-                });
+                // has no copy. A logged-out or expired user reaching here is the
+                // expected signal (the server returns an empty list for both),
+                // so prompt for login; a valid-credential user means the package
+                // is genuinely absent.
+                return Err(empty_store_locations_error(auth_state, install_id));
             }
             download_attempts.0.push(DownloadAttempt {
                 location: LOCATION_FALLBACK_NAME.to_string(),
@@ -655,12 +677,20 @@ where
         };
 
         // We optimistically try to create a netrc file but don't bail on error
-        // in case the user doesn't need it. The `no_netrc_is_error` indicates
-        // that there was an authentication error. We're doing this weird dance
-        // because the thread-safety (specifically, the lack of it) of the auth
-        // provider makes it a real pain to pass it into other threads. It makes
-        // life *much* easier to do some of this ahead of time.
-        let no_netrc_is_error = !self.auth.has_credential();
+        // in case the user doesn't need it. The `auth_state` captures whether
+        // the user is logged out, expired, or valid, so the download helper can
+        // tell apart the empty store-info responses the server returns for all
+        // three. We're doing this weird dance because the thread-safety
+        // (specifically, the lack of it) of the auth provider makes it a real
+        // pain to pass it into other threads. It makes life *much* easier to do
+        // some of this ahead of time.
+        let auth_state = if !self.auth.has_credential() {
+            DownloadAuthState::NoToken
+        } else if self.auth.is_expired() {
+            DownloadAuthState::Expired
+        } else {
+            DownloadAuthState::Valid
+        };
         // Hold the TempPath alive for the duration of the build; dropping it
         // would delete the underlying file before nix copy can read it.
         let netrc_guard = self.auth.try_create_netrc();
@@ -693,7 +723,7 @@ where
                         Self::realise_single_custom_catalog_pkg(
                             pkg,
                             store_locations,
-                            no_netrc_is_error,
+                            auth_state,
                             borrowed_netrc_path,
                             span.clone(),
                             &semaphore,
@@ -735,7 +765,7 @@ where
     fn realise_single_custom_catalog_pkg(
         locked_pkg: &LockedPackageCatalog,
         store_locations: &HashMap<String, Vec<StoreInfo>>,
-        no_netrc_is_error: bool,
+        auth_state: DownloadAuthState,
         maybe_netrc_path: Option<&Path>,
         parent_span: Span,
         semaphore: &Semaphore,
@@ -750,7 +780,7 @@ where
             &locked_pkg.install_id,
             &locked_pkg.attr_path,
             store_locations,
-            no_netrc_is_error,
+            auth_state,
             maybe_netrc_path,
         )
     }
@@ -1883,12 +1913,12 @@ mod realise_nixpkgs_tests {
             map
         };
 
-        // no_netrc_is_error = false: the user is logged in but the store
-        // returned no download locations for this package (genuinely absent).
+        // Valid credential: the user is logged in but the store returned no
+        // download locations for this package (genuinely absent).
         let subst_resp = BuildEnvNix::<NixAuth>::realise_single_custom_catalog_pkg(
             &locked_package,
             &store_locations,
-            false,
+            DownloadAuthState::Valid,
             None,
             Span::current(),
             &Semaphore::new(1, 1),
@@ -1932,7 +1962,7 @@ mod realise_nixpkgs_tests {
         let subst_resp = BuildEnvNix::<NixAuth>::realise_single_custom_catalog_pkg(
             &locked_package,
             &store_locations,
-            true,
+            DownloadAuthState::NoToken,
             dummy_netrc,
             Span::current(),
             &Semaphore::new(1, 1),
@@ -1968,7 +1998,7 @@ mod realise_nixpkgs_tests {
         let result = BuildEnvNix::<NixAuth>::realise_single_custom_catalog_pkg(
             &locked_package,
             &store_locations,
-            true,
+            DownloadAuthState::NoToken,
             None,
             Span::current(),
             &Semaphore::new(1, 1),
@@ -2042,7 +2072,7 @@ mod auth_error_rendering_tests {
             "mycatalog/hello",
             "hello",
             &store_locations,
-            /* no_netrc_is_error = */ true,
+            DownloadAuthState::NoToken,
             /* maybe_netrc_path = */ None,
         )
         .unwrap_err();
@@ -2075,7 +2105,7 @@ mod auth_error_rendering_tests {
             "mycatalog/hello",
             "hello",
             &store_locations,
-            /* no_netrc_is_error = */ true,
+            DownloadAuthState::NoToken,
             /* maybe_netrc_path = */ None,
         )
         .unwrap_err();
@@ -2090,11 +2120,15 @@ mod auth_error_rendering_tests {
         );
     }
 
-    /// When the user is logged in and the store-info response has no entry for
-    /// the package, `copy_from_custom_catalog_locations` returns
-    /// `NoPackageStoreLocation` — the package may genuinely be absent or deleted.
+    /// When the credential has expired and the store-info response has no entry
+    /// for the package, `copy_from_custom_catalog_locations` returns
+    /// `DownloadAuth(Expired)`, whose message names expiry and `flox auth login`.
+    ///
+    /// The `/store` endpoint downgrades an expired token to anonymous and serves
+    /// the same empty response as a missing token; the expiry is known locally,
+    /// so the helper produces the re-login prompt rather than "may be deleted".
     #[test]
-    fn empty_store_locations_logged_in_returns_no_package_store_location() {
+    fn empty_store_locations_expired_token_returns_download_auth() {
         let (locked_package, _) = locked_published_package(None);
         let fake_store_path = locked_package.outputs["out"].clone();
         // Empty map: the server returned 200 but no entry for this store path.
@@ -2105,7 +2139,42 @@ mod auth_error_rendering_tests {
             "mycatalog/hello",
             "hello",
             &store_locations,
-            /* no_netrc_is_error = */ false,
+            DownloadAuthState::Expired,
+            /* maybe_netrc_path = */ None,
+        )
+        .unwrap_err();
+
+        assert!(
+            matches!(err, BuildEnvError::DownloadAuth(ResolveAuthError::Expired)),
+            "expected DownloadAuth(Expired), got {err:?}"
+        );
+        let msg = err.to_string();
+        assert!(
+            msg.contains("expired"),
+            "error message should name expiry; got: {msg}"
+        );
+        assert!(
+            msg.contains(AUTH_LOGIN_HINT),
+            "error message should name 'flox auth login'; got: {msg}"
+        );
+    }
+
+    /// When the credential is valid and the store-info response has no entry for
+    /// the package, `copy_from_custom_catalog_locations` returns
+    /// `NoPackageStoreLocation` — the package may genuinely be absent or deleted.
+    #[test]
+    fn empty_store_locations_valid_token_returns_no_package_store_location() {
+        let (locked_package, _) = locked_published_package(None);
+        let fake_store_path = locked_package.outputs["out"].clone();
+        // Empty map: the server returned 200 but no entry for this store path.
+        let store_locations: HashMap<String, Vec<StoreInfo>> = HashMap::new();
+
+        let err = copy_from_custom_catalog_locations(
+            &[fake_store_path],
+            "mycatalog/hello",
+            "hello",
+            &store_locations,
+            DownloadAuthState::Valid,
             /* maybe_netrc_path = */ None,
         )
         .unwrap_err();
