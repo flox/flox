@@ -415,7 +415,7 @@ mod tests {
             eval "$('/flox_activations' profile-scripts --shell bash --already-sourced-env-dirs "${_FLOX_SOURCED_PROFILE_SCRIPTS:-}" --env-dirs "${FLOX_ENV_DIRS:-}")";
             set +h
             set +x
-            /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
+            /coreutils/bin/rm /path/to/rc/file;
             export _FLOX_PROMPT_HOOK_VERSION=1:true;
             _flox_hook() {
               local _prev_exit=$?;
@@ -464,7 +464,7 @@ mod tests {
             eval "$('/flox_activations' profile-scripts --shell bash --already-sourced-env-dirs "${_FLOX_SOURCED_PROFILE_SCRIPTS:-}" --env-dirs "${FLOX_ENV_DIRS:-}")";
             set +h
             set +x
-            /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
+            /coreutils/bin/rm /path/to/rc/file;
             export _FLOX_PROMPT_HOOK_VERSION=1:true;
             _flox_hook() {
               local _prev_exit=$?;

@@ -407,7 +407,7 @@ mod tests {
             source /interpreter/activate.d/zsh;
             _FLOX_INVOCATION_TYPES="$('/flox_activations' push-invocation-type --invocation-type interactive --env '{"name":"test_env","type":"path"}' --current "${_FLOX_INVOCATION_TYPES:-}")";
             if [[ -o interactive ]]; then source '/interpreter/activate.d/set-prompt.zsh'; fi;
-            /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
+            /coreutils/bin/rm /path/to/rc/file;
             export _FLOX_PROMPT_HOOK_VERSION=1:true;
             _flox_hook() {
               local _flox_vars;
@@ -452,7 +452,7 @@ mod tests {
             source /interpreter/activate.d/zsh;
             _FLOX_INVOCATION_TYPES="$('/flox_activations' push-invocation-type --invocation-type inplace --env '{"name":"test_env","type":"path"}' --current "${_FLOX_INVOCATION_TYPES:-}")";
             if [[ -o interactive ]]; then source '/interpreter/activate.d/set-prompt.zsh'; fi;
-            /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
+            /coreutils/bin/rm /path/to/rc/file;
             export _FLOX_PROMPT_HOOK_VERSION=1:true;
             _flox_hook() {
               local _flox_vars;
