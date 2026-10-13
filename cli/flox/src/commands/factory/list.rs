@@ -40,8 +40,8 @@ pub struct List {
     #[bpaf(long, argument::<String>("SYSTEM"), parse(parse_non_empty("System")), many)]
     pub system: Vec<SystemItem>,
 
-    /// Filter by attribute path; a prefix matches; repeat to match any of
-    /// several.
+    /// Filter by attribute path, without the catalog shown in the PACKAGE
+    /// column; a prefix matches; repeat to match any of several.
     #[bpaf(long, argument::<String>("PATH"), parse(parse_non_empty("Attribute path")), many)]
     pub attr_path: Vec<AttrPathItem>,
 
@@ -209,7 +209,7 @@ fn format_age(then: DateTime<Utc>, now: DateTime<Utc>) -> String {
 #[derive(Clone, Debug)]
 struct BuildRowDisplay {
     build_id: i64,
-    attr_path: String,
+    pkg_path: String,
     system: String,
     trigger: String,
     status: String,
@@ -224,7 +224,7 @@ impl BuildRowDisplay {
 
         BuildRowDisplay {
             build_id: b.build_id,
-            attr_path: b.attr_path,
+            pkg_path: format!("{}/{}", b.catalog_name, b.attr_path),
             system: b.system,
             trigger,
             status,
@@ -258,13 +258,13 @@ impl fmt::Display for BuildListDisplay {
         }
 
         let mut tw = table_writer(Vec::new());
-        writeln!(tw, "BUILD ID\tATTR PATH\tSYSTEM\tTRIGGER\tSTATUS\tUPDATED")
+        writeln!(tw, "BUILD ID\tPACKAGE\tSYSTEM\tTRIGGER\tSTATUS\tUPDATED")
             .map_err(|_| fmt::Error)?;
         for row in &self.rows {
             writeln!(
                 tw,
                 "{}\t{}\t{}\t{}\t{}\t{}",
-                row.build_id, row.attr_path, row.system, row.trigger, row.status, row.updated,
+                row.build_id, row.pkg_path, row.system, row.trigger, row.status, row.updated,
             )
             .map_err(|_| fmt::Error)?;
         }
@@ -301,13 +301,16 @@ mod tests {
                     Some(EffectiveBuildStatus::Running),
                 )
             },
-            make_build(2, "aarch64-darwin", "ripgrep", None),
+            BuildResponse {
+                catalog_name: "other-catalog".to_string(),
+                ..make_build(2, "aarch64-darwin", "ripgrep", None)
+            },
         ];
         let display = BuildListDisplay::new(builds, utc("2025-01-01T00:01:00Z"));
         assert_eq!(display.to_string(), indoc! {"
-            BUILD ID  ATTR PATH  SYSTEM          TRIGGER                       STATUS   UPDATED
-            1         hello      x86_64-linux    source_push (stable,staging)  running  59s ago
-            2         ripgrep    aarch64-darwin  -                             pending  1m ago
+            BUILD ID  PACKAGE                SYSTEM          TRIGGER                       STATUS   UPDATED
+            1         my-catalog/hello       x86_64-linux    source_push (stable,staging)  running  59s ago
+            2         other-catalog/ripgrep  aarch64-darwin  -                             pending  1m ago
         "});
     }
 
@@ -339,10 +342,10 @@ mod tests {
         ];
         let display = BuildListDisplay::new(builds, utc("2025-01-01T00:01:00Z"));
         assert_eq!(display.to_string(), indoc! {"
-            BUILD ID  ATTR PATH  SYSTEM          TRIGGER  STATUS                UPDATED
-            3         curl       x86_64-linux    -        timed_out             59s ago
-            4         jq         aarch64-darwin  -        cancelled             1m ago
-            5         wget       x86_64-linux    -        unknown: frobnicated  1m ago
+            BUILD ID  PACKAGE          SYSTEM          TRIGGER  STATUS                UPDATED
+            3         my-catalog/curl  x86_64-linux    -        timed_out             59s ago
+            4         my-catalog/jq    aarch64-darwin  -        cancelled             1m ago
+            5         my-catalog/wget  x86_64-linux    -        unknown: frobnicated  1m ago
         "});
     }
 
