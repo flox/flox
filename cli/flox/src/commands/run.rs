@@ -28,6 +28,7 @@ use flox_manifest::raw::{CatalogPackage, RawManifestError};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::providers::buildenv::{
     BuildEnvError,
+    DownloadAuthState,
     build_catalog_pkg_from_source,
     copy_from_custom_catalog_locations,
     materialise_with_retry,
@@ -38,6 +39,7 @@ use floxhub_client::{
     ByCommandError,
     CatalogClientTrait,
     CommandProvider,
+    FloxhubClientError,
     MessageLevel,
     PackageDescriptor,
     PackageGroup,
@@ -712,7 +714,13 @@ async fn download_custom_catalog_package(
 ) -> Result<(), RunError> {
     let auth = NixAuth::from_flox(flox)
         .map_err(|e| RunError::BuildFailed(pkg_spec.to_string(), BuildEnvError::Auth(e)))?;
-    let no_netrc_is_error = !auth.has_credential();
+    let auth_state = if !auth.has_credential() {
+        DownloadAuthState::NoToken
+    } else if auth.is_expired() {
+        DownloadAuthState::Expired
+    } else {
+        DownloadAuthState::Valid
+    };
     let netrc_guard = auth.try_create_netrc();
     let netrc_path: Option<&Path> = netrc_guard.as_deref();
 
@@ -720,7 +728,7 @@ async fn download_custom_catalog_package(
         .floxhub_client
         .get_store_info(store_paths.to_vec())
         .await
-        .map_err(|e| {
+        .map_err(|e: FloxhubClientError| {
             debug!(error = ?e, "get_store_info failed");
             RunError::CatalogError(pkg_spec.to_string())
         })?;
@@ -736,10 +744,13 @@ async fn download_custom_catalog_package(
             &catalog_pkg.id,
             attr_path,
             &store_locations,
-            no_netrc_is_error,
+            auth_state,
             netrc_path,
         )
-        .map_err(|e| RunError::BuildFailed(pkg_spec.to_string(), e))?;
+        .map_err(|e| match e {
+            BuildEnvError::DownloadAuth(auth_err) => RunError::Auth(auth_err),
+            other => RunError::BuildFailed(pkg_spec.to_string(), other),
+        })?;
     }
 
     // TODO: wrap the nix copy + GC root sequence in a materialise_with_retry

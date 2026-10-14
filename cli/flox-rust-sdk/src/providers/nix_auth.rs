@@ -22,6 +22,11 @@ const FLOXHUB_AUTHENTICATED_HOSTNAMES: [&str; 6] = [
 pub trait AuthProvider {
     /// Whether a token is present to authenticate with.
     fn has_credential(&self) -> bool;
+    /// Whether a present token's locally-known expiry has passed. A token
+    /// whose expiry has passed still satisfies `has_credential`, so callers
+    /// deciding between a "log in" and a "login expired" prompt must check
+    /// this separately.
+    fn is_expired(&self) -> bool;
     fn create_netrc(&self) -> Result<TempPath, AuthError>;
     /// Attempt to create a netrc file, returning it if the user has a valid
     /// token, or `None` when they don't.
@@ -115,6 +120,10 @@ impl NixAuth {
 impl AuthProvider for NixAuth {
     fn has_credential(&self) -> bool {
         self.auth_context.token_secret().is_some()
+    }
+
+    fn is_expired(&self) -> bool {
+        self.auth_context.is_expired()
     }
 
     /// Creates a temporary netrc file with authentication credentials

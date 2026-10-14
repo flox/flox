@@ -1,0 +1,129 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "schema-version": "1.19.0",
+    "install": {
+      "hello": {
+        "pkg-path": "mycatalog/hello"
+      }
+    },
+    "options": {
+      "systems": [
+        "aarch64-darwin",
+        "aarch64-linux",
+        "x86_64-darwin",
+        "x86_64-linux"
+      ]
+    }
+  },
+  "packages": [
+    {
+      "attr_path": "hello",
+      "broken": false,
+      "derivation": "/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-hello-2.12.3.drv",
+      "description": "Program that produces a familiar, friendly greeting",
+      "install_id": "hello",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "github:super/custom/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "name": "hello-2.12.3",
+      "pname": "hello",
+      "rev": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "rev_count": 1,
+      "rev_date": "2024-01-01T00:00:00Z",
+      "scrape_date": "2024-01-01T00:00:00Z",
+      "stabilities": [],
+      "unfree": false,
+      "version": "2.12.3",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-hello-2.12.3"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "hello",
+      "broken": false,
+      "derivation": "/nix/store/yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy-hello-2.12.3.drv",
+      "description": "Program that produces a familiar, friendly greeting",
+      "install_id": "hello",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "github:super/custom/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "name": "hello-2.12.3",
+      "pname": "hello",
+      "rev": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "rev_count": 1,
+      "rev_date": "2024-01-01T00:00:00Z",
+      "scrape_date": "2024-01-01T00:00:00Z",
+      "stabilities": [],
+      "unfree": false,
+      "version": "2.12.3",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy-hello-2.12.3"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "hello",
+      "broken": false,
+      "derivation": "/nix/store/zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-hello-2.12.3.drv",
+      "description": "Program that produces a familiar, friendly greeting",
+      "install_id": "hello",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "github:super/custom/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "name": "hello-2.12.3",
+      "pname": "hello",
+      "rev": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "rev_count": 1,
+      "rev_date": "2024-01-01T00:00:00Z",
+      "scrape_date": "2024-01-01T00:00:00Z",
+      "stabilities": [],
+      "unfree": false,
+      "version": "2.12.3",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-hello-2.12.3"
+      },
+      "system": "x86_64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "hello",
+      "broken": false,
+      "derivation": "/nix/store/wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww-hello-2.12.3.drv",
+      "description": "Program that produces a familiar, friendly greeting",
+      "install_id": "hello",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "github:super/custom/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "name": "hello-2.12.3",
+      "pname": "hello",
+      "rev": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "rev_count": 1,
+      "rev_date": "2024-01-01T00:00:00Z",
+      "scrape_date": "2024-01-01T00:00:00Z",
+      "stabilities": [],
+      "unfree": false,
+      "version": "2.12.3",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww-hello-2.12.3"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    }
+  ]
+}
