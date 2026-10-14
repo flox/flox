@@ -1181,7 +1181,7 @@
             }
           },
           "409": {
-            "description": "The package is registered to a different source repository or ref",
+            "description": "The package is registered to a different source repository or ref, or identical content is already published from another lineage",
             "content": {
               "application/json": {
                 "schema": {
@@ -1290,6 +1290,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PackageBuildResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Identical content is already published from another lineage",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
