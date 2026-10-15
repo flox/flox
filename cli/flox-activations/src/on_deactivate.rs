@@ -18,6 +18,7 @@ use tracing::{debug, info, warn};
 
 use crate::attach_diff::AttachDiff;
 use crate::env_trace::EnvTrace;
+use crate::start::ACTIVATE_COMPLETE_MARKER;
 use crate::vars_from_env::VarsFromEnvironment;
 
 const BASH_BIN: &str = env!("X_BASH_BIN");
@@ -97,6 +98,19 @@ fn run_hook_script(
     script: &Path,
 ) -> Result<()> {
     let start_state_dir = start_id.start_state_dir(activation_state_dir)?;
+
+    // The activate script writes its completion marker only after
+    // hook.on-activate has returned. A start without the marker never
+    // opened its bookend: hook.on-activate exited with an error, or the
+    // activation was killed or is still running, so there is nothing for
+    // hook.on-deactivate to close.
+    if !start_state_dir.join(ACTIVATE_COMPLETE_MARKER).exists() {
+        info!(
+            ?start_id,
+            "hook.on-activate did not complete, skipping hook.on-deactivate"
+        );
+        return Ok(());
+    }
 
     // Replay the activation's environment so the hook sees variables
     // exported by hook.on-activate. A start without a usable trace never got
@@ -201,6 +215,8 @@ mod test {
             "1\u{1f}set\u{1f}11\u{1f}ON_ACTIVATE_VAR\u{1f}@\u{1f}:from-on-activate\n",
         )
         .unwrap();
+        // The activate script ran to the end, past hook.on-activate.
+        std::fs::write(start_state_dir.join(ACTIVATE_COMPLETE_MARKER), "").unwrap();
 
         (start_id, activation_state_dir, start_state_dir)
     }
@@ -253,5 +269,28 @@ mod test {
             !start_state_dir.exists(),
             "a failing hook must not block cleanup"
         );
+    }
+
+    /// A start whose activate script never finished, because hook.on-activate
+    /// exited or the activation was killed, never opened its bookend, so the
+    /// sweep must not run hook.on-deactivate for it. Removes the completion
+    /// marker from a start and checks the hook's marker file is never written,
+    /// while the start state dir is still removed.
+    #[test]
+    fn sweep_skips_hook_when_activation_did_not_complete() {
+        let tmp = TempDir::new().unwrap();
+        let marker = tmp.path().join("marker");
+        let script = format!("touch '{}'\n", marker.display());
+        let (start_id, activation_state_dir, start_state_dir) = setup_start(&tmp, Some(&script));
+        std::fs::remove_file(start_state_dir.join(ACTIVATE_COMPLETE_MARKER)).unwrap();
+
+        let (attach, project) = test_context(tmp.path());
+        sweep_orphaned_starts(0, &attach, &project, &activation_state_dir, vec![start_id]);
+
+        assert!(
+            !marker.exists(),
+            "hook.on-deactivate must not run when hook.on-activate did not complete"
+        );
+        assert!(!start_state_dir.exists());
     }
 }
