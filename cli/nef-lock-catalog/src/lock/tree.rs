@@ -231,9 +231,8 @@ mod tests {
 
     #[test]
     fn package_then_child_is_rejected() {
-        // Add "conflict" as a leaf package, then add
-        // "conflict.child" which forces "conflict" to become
-        // a package set.
+        // "conflict" is already a package, so "conflict.child" cannot
+        // descend through it.
         let mut builder = PackageTreeBuilder::new();
         let source = test_source();
 
@@ -262,7 +261,8 @@ mod tests {
 
     #[test]
     fn child_then_package_is_rejected() {
-        // Create package set first
+        // "conflict" is already a package set, so a package cannot take
+        // its name.
         let mut builder = PackageTreeBuilder::new();
         let source = test_source();
 

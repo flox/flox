@@ -488,19 +488,8 @@ pub fn render_lock(lock: &BuildLock) -> Result<String, LockfileError> {
     serde_json::to_string_pretty(lock).map_err(LockfileError::Serialize)
 }
 
-/// Write a `BuildLock` to the specified file.
-/// The file is written in a pretty-printed JSON format
-/// and consumed by the CLI. The NEF receives a separate materialized file.
-/// The write is atomic — rendered to a temp file in the target's directory
-/// and renamed into place — so a crash mid-write can never leave a
-/// truncated lock for a later build to trust. The temp file gets a fresh
-/// random name on every call (`flox_core::write_atomically`, the same
-/// helper `flox-core` itself uses for its own state files) rather than one
-/// derived from `path`: concurrent CLI invocations of one project share
-/// the committed `.flox/catalog.lock` path and may share a temp directory
-/// for their `catalog.lock.`-prefixed ephemeral files, and a temp name
-/// derived from the target path would let those writers truncate or
-/// overwrite each other's write before either renamed into place.
+/// Write a `BuildLock` to the specified file as pretty-printed JSON.
+/// The write is atomic, and concurrent writers use distinct temporary files.
 #[instrument(skip(lock), fields(path = %path.as_ref().display()))]
 pub fn write_lock(lock: &BuildLock, path: impl AsRef<Path>) -> Result<(), LockfileError> {
     let path = path.as_ref();
@@ -806,7 +795,7 @@ mod tests {
             })
         );
         assert_eq!(
-            crate::lock::transform::materialize_catalogs(&lock).unwrap(),
+            crate::lock::transform::build_catalog_trees(&lock).unwrap(),
             serde_json::json!({})
         );
     }
