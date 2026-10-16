@@ -1337,13 +1337,13 @@ fn gather_build_repo_meta(
         Some(ref_) => {
             return Err(build_repo_err(&formatdoc! {"
                 '{ref_}' is not a branch.
-                Check out a branch before publishing: git checkout -b <branch-name>"
+                Check out a branch before publishing: 'git checkout -b BRANCH'"
             }));
         },
         None => {
             return Err(build_repo_err(&formatdoc! {"
                 Repository is in detached HEAD state.
-                Check out a branch before publishing: git checkout -b <branch-name>"
+                Check out a branch before publishing: 'git checkout -b BRANCH'"
             }));
         },
     };
