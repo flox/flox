@@ -22,6 +22,7 @@ use floxhub_client::{
     PublishReceipt,
     PublishResponse,
     PublishWarning,
+    RegisteredSource,
     SourceLineageChange,
     UserBuildPublish,
     UserDerivationInfo,
@@ -129,6 +130,30 @@ pub enum PublishError {
     InvalidDeepOverrideName(String),
 }
 
+/// Whether a publish may replace the package's registered source.
+#[derive(Debug, Clone, PartialEq)]
+pub enum LineageOverride {
+    /// Refuse a change to the registered source.
+    Refuse,
+    /// Replace whichever source is registered.
+    Unbound,
+    /// Replace the registered source only while it is still this one.
+    Expected(RegisteredSource),
+}
+
+impl LineageOverride {
+    fn apply(&self, build_info: &mut UserBuildPublish) {
+        (
+            build_info.allow_lineage_change,
+            build_info.expected_registered_source,
+        ) = match self {
+            LineageOverride::Refuse => (false, None),
+            LineageOverride::Unbound => (true, None),
+            LineageOverride::Expected(source) => (true, Some(source.clone())),
+        };
+    }
+}
+
 /// Publish outcome that lets the command show warnings before polling.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PublishOutcome {
@@ -161,8 +186,10 @@ pub trait Publisher {
     /// process environment; this trait does not read the environment
     /// itself.
     ///
-    /// `allow_lineage_change` explicitly authorizes a source change. Otherwise,
-    /// `confirm_lineage_change` is called only after a lineage refusal, before
+    /// `lineage_override` authorizes a source change, unconditionally or
+    /// only while the registration is the one the user confirmed. With
+    /// [`LineageOverride::Refuse`], `confirm_lineage_change` is called only
+    /// after a lineage refusal, before
     /// retrying the metadata submission once. Returning `Ok(false)` preserves the
     /// refusal when confirmation is unavailable. Returning
     /// `Err(PublishError::LineageChangeDeclined)` signals an explicit decline
@@ -178,7 +205,7 @@ pub trait Publisher {
         key_file: Option<PathBuf>,
         metadata_only: bool,
         factory_build_token: Option<&str>,
-        allow_lineage_change: bool,
+        lineage_override: LineageOverride,
         confirm_lineage_change: impl AsyncFnOnce(&SourceLineageChange) -> Result<bool, PublishError>,
     ) -> Result<PublishOutcome, PublishError>;
     async fn wait_for_publish_completion(
@@ -196,17 +223,19 @@ async fn publish_build_with_confirmation(
     catalog_name: &str,
     package_name: &str,
     mut build_info: UserBuildPublish,
+    lineage_override: LineageOverride,
     confirm: impl AsyncFnOnce(&SourceLineageChange) -> Result<bool, PublishError>,
 ) -> Result<PublishReceipt, PublishError> {
+    lineage_override.apply(&mut build_info);
     tracing::debug!(?build_info, "Publishing build in catalog...");
     let result = client
         .publish_build(catalog_name, package_name, &build_info)
         .await;
     if let Err(FloxhubClientError::SourceLineageChange(change)) = &result
-        && !build_info.allow_lineage_change
+        && lineage_override == LineageOverride::Refuse
         && confirm(change).await?
     {
-        build_info.allow_lineage_change = true;
+        LineageOverride::Unbound.apply(&mut build_info);
         tracing::debug!("Retrying build publish with confirmed lineage change...");
         return client
             .publish_build(catalog_name, package_name, &build_info)
@@ -705,7 +734,7 @@ where
         key_file: Option<PathBuf>,
         metadata_only: bool,
         factory_build_token: Option<&str>,
-        allow_lineage_change: bool,
+        lineage_override: LineageOverride,
         confirm_lineage_change: impl AsyncFnOnce(&SourceLineageChange) -> Result<bool, PublishError>,
     ) -> Result<PublishOutcome, PublishError> {
         // Step 2 hit /publish
@@ -782,7 +811,7 @@ where
                 .rel_expression_build_base_dir
                 .to_string_lossy()
                 .into_owned(),
-            allow_lineage_change,
+            allow_lineage_change: false,
             expected_registered_source: None,
             factory_build_token: factory_build_token.map(str::to_string),
             // Always sent, mirroring `locked_inputs` above: an empty list
@@ -804,6 +833,7 @@ where
             catalog_name,
             self.package_metadata.package.name().as_ref(),
             build_info,
+            lineage_override,
             confirm_lineage_change,
         )
         .await?;
@@ -1595,7 +1625,7 @@ pub mod tests {
     async fn exercise_lineage_publish(
         status: u16,
         detail: &str,
-        allow_lineage_change: bool,
+        lineage_override: LineageOverride,
         confirm: bool,
         retry_status: u16,
         warn_on_success: bool,
@@ -1603,7 +1633,6 @@ pub mod tests {
         let server = httpmock::MockServer::start_async().await;
         let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
         let build: UserBuildPublish = serde_json::from_value(serde_json::json!({
-            "allow_lineage_change": allow_lineage_change,
             "derivation": {
                 "drv_path": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-hello.drv",
                 "name": "hello",
@@ -1653,21 +1682,31 @@ pub mod tests {
         } else {
             serde_json::json!({})
         };
+        // Spelled out rather than taken from `LineageOverride::apply`, so a
+        // regression there shows up as an unmatched request.
+        let mut sent = build.clone();
+        (sent.allow_lineage_change, sent.expected_registered_source) = match &lineage_override {
+            LineageOverride::Refuse => (false, None),
+            LineageOverride::Unbound => (true, None),
+            LineageOverride::Expected(registered) => (true, Some(registered.clone())),
+        };
         let initial = server.mock(|when, then| {
             when.method(httpmock::Method::POST)
                 .path("/api/v1/catalog/catalogs/test/packages/hello/builds")
-                .json_body_obj(&build);
+                .json_body_obj(&sent);
             then.status(status).json_body(if status == 200 {
                 response_body.clone()
             } else {
                 serde_json::json!({"detail": detail})
             });
         });
-        // With the override already set, a retry would resend the initial body,
-        // so only `initial` can match and it counts every request.
-        let retry = (!allow_lineage_change).then(|| {
+        // Only a refused `Refuse` attempt is retried. A retry of any other
+        // attempt would show up as a second `initial` call or an unmatched
+        // request.
+        let retry = (lineage_override == LineageOverride::Refuse).then(|| {
             let mut replacement = build.clone();
             replacement.allow_lineage_change = true;
+            replacement.expected_registered_source = None;
             server.mock(|when, then| {
                 when.method(httpmock::Method::POST)
                     .path("/api/v1/catalog/catalogs/test/packages/hello/builds")
@@ -1680,24 +1719,30 @@ pub mod tests {
             })
         });
         let mut confirmations = 0;
-        let result =
-            publish_build_with_confirmation(&client, "test", "hello", build, async |change| {
+        let result = publish_build_with_confirmation(
+            &client,
+            "test",
+            "hello",
+            build,
+            lineage_override,
+            async |change| {
                 confirmations += 1;
                 assert_eq!(change, &SourceLineageChange {
                     registered: "github.com/org/original (ref main)".to_owned(),
                     requested: "github.com/org/moved (ref release)".to_owned(),
                 });
                 Ok(confirm)
-            })
-            .await
-            .map(|receipt| {
-                receipt
-                    .warnings
-                    .into_iter()
-                    .map(|warning| warning.message)
-                    .collect()
-            })
-            .map_err(|err| err.to_string());
+            },
+        )
+        .await
+        .map(|receipt| {
+            receipt
+                .warnings
+                .into_iter()
+                .map(|warning| warning.message)
+                .collect()
+        })
+        .map_err(|err| err.to_string());
         let retry_requests = retry.map_or(0, |mock| mock.calls());
         ObservedLineagePublish {
             confirmations,
@@ -1709,8 +1754,15 @@ pub mod tests {
 
     #[tokio::test]
     async fn publish_lineage_confirmation_retries_only_when_accepted() {
-        let accepted =
-            exercise_lineage_publish(409, LINEAGE_CHANGE_DETAIL, false, true, 200, true).await;
+        let accepted = exercise_lineage_publish(
+            409,
+            LINEAGE_CHANGE_DETAIL,
+            LineageOverride::Refuse,
+            true,
+            200,
+            true,
+        )
+        .await;
         assert_eq!(accepted, ObservedLineagePublish {
             confirmations: 1,
             initial_requests: 1,
@@ -1718,8 +1770,15 @@ pub mod tests {
             result: Ok(vec![INPUT_LINEAGE_WARNING.to_owned()])
         });
 
-        let declined =
-            exercise_lineage_publish(409, LINEAGE_CHANGE_DETAIL, false, false, 200, true).await;
+        let declined = exercise_lineage_publish(
+            409,
+            LINEAGE_CHANGE_DETAIL,
+            LineageOverride::Refuse,
+            false,
+            200,
+            true,
+        )
+        .await;
         let refusal = SourceLineageChange {
             registered: "github.com/org/original (ref main)".to_owned(),
             requested: "github.com/org/moved (ref release)".to_owned(),
@@ -1733,8 +1792,15 @@ pub mod tests {
         });
 
         // Even a second lineage refusal must terminate, not prompt or loop again.
-        let refused_retry =
-            exercise_lineage_publish(409, LINEAGE_CHANGE_DETAIL, false, true, 409, true).await;
+        let refused_retry = exercise_lineage_publish(
+            409,
+            LINEAGE_CHANGE_DETAIL,
+            LineageOverride::Refuse,
+            true,
+            409,
+            true,
+        )
+        .await;
         assert_eq!(refused_retry, ObservedLineagePublish {
             confirmations: 1,
             initial_requests: 1,
@@ -1743,20 +1809,49 @@ pub mod tests {
         });
     }
 
+    /// An override that was already granted is never widened after the
+    /// build: a refused bound publish stops so a re-run can confirm the new
+    /// registration.
     #[tokio::test]
-    async fn publish_lineage_flag_sends_override_without_confirmation() {
-        let outcome = exercise_lineage_publish(200, "", true, false, 200, true).await;
-        assert_eq!(outcome, ObservedLineagePublish {
-            confirmations: 0,
-            initial_requests: 1,
-            retry_requests: 0,
-            result: Ok(vec![INPUT_LINEAGE_WARNING.to_owned()])
-        });
+    async fn publish_lineage_refusal_of_a_granted_override_is_not_retried() {
+        let refusal = SourceLineageChange {
+            registered: "github.com/org/original (ref main)".to_owned(),
+            requested: "github.com/org/moved (ref release)".to_owned(),
+        }
+        .to_string();
+        for lineage_override in [
+            LineageOverride::Unbound,
+            LineageOverride::Expected(RegisteredSource {
+                ref_: Some("refs/heads/main".to_owned()),
+                url: "https://github.com/org/original".to_owned(),
+            }),
+        ] {
+            let outcome = exercise_lineage_publish(
+                409,
+                LINEAGE_CHANGE_DETAIL,
+                lineage_override.clone(),
+                true,
+                200,
+                true,
+            )
+            .await;
+            assert_eq!(
+                outcome,
+                ObservedLineagePublish {
+                    confirmations: 0,
+                    initial_requests: 1,
+                    retry_requests: 0,
+                    result: Err(refusal.clone())
+                },
+                "{lineage_override:?}"
+            );
+        }
     }
 
     #[tokio::test]
     async fn publish_success_carries_input_lineage_warning_without_a_conflict() {
-        let outcome = exercise_lineage_publish(200, "", false, false, 200, true).await;
+        let outcome =
+            exercise_lineage_publish(200, "", LineageOverride::Refuse, false, 200, true).await;
         assert_eq!(outcome, ObservedLineagePublish {
             confirmations: 0,
             initial_requests: 1,
@@ -1767,7 +1862,8 @@ pub mod tests {
 
     #[tokio::test]
     async fn publish_lineage_confirmation_ignores_other_responses() {
-        let success = exercise_lineage_publish(200, "", false, true, 200, false).await;
+        let success =
+            exercise_lineage_publish(200, "", LineageOverride::Refuse, true, 200, false).await;
         assert_eq!(success, ObservedLineagePublish {
             confirmations: 0,
             initial_requests: 1,
@@ -1791,7 +1887,9 @@ pub mod tests {
                 format!("400 Bad Request: {LINEAGE_CHANGE_DETAIL}"),
             ),
         ] {
-            let outcome = exercise_lineage_publish(status, detail, false, true, 200, false).await;
+            let outcome =
+                exercise_lineage_publish(status, detail, LineageOverride::Refuse, true, 200, false)
+                    .await;
             assert_eq!(outcome, ObservedLineagePublish {
                 confirmations: 0,
                 initial_requests: 1,
@@ -2257,7 +2355,7 @@ pub mod tests {
                 None,
                 false,
                 None,
-                false,
+                LineageOverride::Refuse,
                 async |_| Ok(false),
             )
             .await;
@@ -2329,7 +2427,7 @@ pub mod tests {
                 None,
                 false,
                 Some("factory:abc123"),
-                false,
+                LineageOverride::Refuse,
                 async |_| Ok(false),
             )
             .await
@@ -2607,7 +2705,7 @@ pub mod tests {
                 None,
                 false,
                 None,
-                false,
+                LineageOverride::Refuse,
                 async |_| Ok(false),
             )
             .await;
@@ -2763,7 +2861,7 @@ pub mod tests {
                 cache.local_signing_key_path(),
                 false,
                 None,
-                false,
+                LineageOverride::Refuse,
                 async |_| Ok(false),
             )
             .await
@@ -3050,7 +3148,7 @@ pub mod tests {
                 // from FIXED_TEST_STORE_PATH in the local daemon store.
                 false,
                 None,
-                false,
+                LineageOverride::Refuse,
                 async |_| Ok(false),
             )
             .await
@@ -3094,7 +3192,7 @@ pub mod tests {
                 // from FIXED_TEST_STORE_PATH in the local daemon store.
                 false,
                 None,
-                false,
+                LineageOverride::Refuse,
                 async |_| Ok(false),
             )
             .await
@@ -3165,7 +3263,7 @@ pub mod tests {
                 // from FIXED_TEST_STORE_PATH in the local daemon store.
                 false,
                 None,
-                false,
+                LineageOverride::Refuse,
                 async |_| Ok(false),
             )
             .await
@@ -3184,7 +3282,7 @@ pub mod tests {
                 // from FIXED_TEST_STORE_PATH in the local daemon store.
                 false,
                 None,
-                false,
+                LineageOverride::Refuse,
                 async |_| Ok(false),
             )
             .await
@@ -3228,7 +3326,7 @@ pub mod tests {
                 // from FIXED_TEST_STORE_PATH in the local daemon store.
                 false,
                 None,
-                false,
+                LineageOverride::Refuse,
                 async |_| Ok(false),
             )
             .await
@@ -3916,7 +4014,7 @@ pub mod tests {
                     None,
                     false,
                     None,
-                    false,
+                    LineageOverride::Refuse,
                     async |_| Ok(false),
                 )
                 .await
