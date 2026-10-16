@@ -76,6 +76,22 @@ fn emit_publish_warnings(outcome: &PublishOutcome, mut emit: impl FnMut(&str)) {
     }
 }
 
+/// Show an accepted publish's warnings, then wait for the publisher service
+/// when it is responsible for ingesting artifacts (Publisher mode). NixCopy
+/// and MetadataOnly submit NAR info directly, so there is nothing to wait for.
+/// The warnings come first so a later polling failure cannot hide them.
+async fn finish_accepted_publish(
+    outcome: &PublishOutcome,
+    emit_warning: impl FnMut(&str),
+    wait_for_publisher: impl AsyncFnOnce() -> Result<()>,
+) -> Result<()> {
+    emit_publish_warnings(outcome, emit_warning);
+    if outcome.needs_publisher_wait {
+        wait_for_publisher().await?;
+    }
+    Ok(())
+}
+
 async fn confirm_lineage_change(change: &SourceLineageChange) -> Result<bool, PublishError> {
     if !Dialog::can_prompt() {
         return Ok(false);
@@ -600,18 +616,14 @@ impl Publish {
             Err(e) => bail!("Failed to publish package: {}", display_chain(&e)),
         };
 
-        // A later poll failure must not hide warnings from the accepted POST.
-        emit_publish_warnings(&outcome, |warning| message::warning(warning));
-
-        // Only poll when the external publisher service is responsible for
-        // ingesting artifacts (Publisher mode). NixCopy and MetadataOnly
-        // submit NAR info directly, so there is nothing to wait for.
-        if outcome.needs_publisher_wait {
-            let span = info_span!(
-                "publish",
-                progress = "Waiting for confirmation of successful publish..."
-            );
-            {
+        finish_accepted_publish(
+            &outcome,
+            |warning| message::warning(warning),
+            async || {
+                let span = info_span!(
+                    "publish",
+                    progress = "Waiting for confirmation of successful publish..."
+                );
                 // Using a block here instead of `span.in_scope()` because
                 // that's not an async context.
                 let _ = span.enter();
@@ -624,9 +636,10 @@ impl Publish {
                         PUBLISH_COMPLETION_TIMEOUT_MILLIS,
                     )
                     .await
-                    .context("Failed while waiting for publish confirmation")?;
-            }
-        }
+                    .context("Failed while waiting for publish confirmation")
+            },
+        )
+        .await?;
         message::updated(formatdoc! {"
             Package published successfully.
 
@@ -662,6 +675,36 @@ mod tests {
         assert_eq!(displayed, [
             "dependency: dependency moved to a newer source lineage"
         ]);
+    }
+
+    #[tokio::test]
+    async fn accepted_publish_warnings_stay_visible_when_polling_fails() {
+        let outcome = PublishOutcome {
+            needs_publisher_wait: true,
+            warnings: vec![PublishWarning {
+                code: "input_lineage_changed".to_owned(),
+                input: "dependency".to_owned(),
+                message: "dependency moved to a newer source lineage".to_owned(),
+            }],
+        };
+        let mut displayed = Vec::new();
+        let err = finish_accepted_publish(
+            &outcome,
+            |message| displayed.push(message.to_owned()),
+            async || {
+                Err(anyhow!("publisher timed out")
+                    .context("Failed while waiting for publish confirmation"))
+            },
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(
+            (displayed, format!("{err:#}")),
+            (
+                vec!["dependency: dependency moved to a newer source lineage".to_owned()],
+                "Failed while waiting for publish confirmation: publisher timed out".to_owned()
+            )
+        );
     }
 
     /// A stale committed lock fails a publish naming both the uncovered
