@@ -27,6 +27,7 @@ use flox_core::hook_actions::{
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::find_all_dot_flox;
 use indoc::formatdoc;
+use nix::unistd::getppid;
 use shell_gen::{GenerateShell, SetVar, Shell, ShellWithPath, UnsetVar};
 use tracing::debug;
 
@@ -70,10 +71,31 @@ pub struct HookEnv {
     /// its hook exports the short-lived variable around this call.
     #[bpaf(long("invocation-types-from-env"), switch)]
     invocation_types_from_env: bool,
+
+    /// Do nothing when a forked subshell is evaluating the hook.
+    ///
+    /// A fork of the interactive shell (`( cd .. )`, a command substitution)
+    /// still expands `$$` to the interactive shell's PID, so `--shell-pid`
+    /// alone can't tell the two apart. A hook that passes this flag `exec`s
+    /// `hook-env`, which makes the shell evaluating the hook this process's
+    /// parent: a parent other than `--shell-pid` is a fork. Used by tcsh; the
+    /// zsh hook checks `ZSH_SUBSHELL` itself.
+    #[bpaf(long("skip-in-forked-subshell"), switch)]
+    skip_in_forked_subshell: bool,
 }
 
 impl HookEnv {
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
+        // Checked before anything else: even reading this shell's pending
+        // prompt-hook actions would consume them on the fork's behalf.
+        if self.skip_in_forked_subshell && getppid().as_raw() != self.shell_pid {
+            debug!(
+                shell_pid = self.shell_pid,
+                "hook is running in a forked subshell, doing nothing"
+            );
+            return Ok(());
+        }
+
         let mut writer = BufWriter::new(stdout());
 
         // Read the shell's exported prompt-hook version once and thread it
