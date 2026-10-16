@@ -624,13 +624,11 @@ impl Build {
                     &lockfile_path,
                 )?;
                 message::created(formatdoc! {"
-                No Nix expression builds found; replaced '.flox/catalog.lock' \
-                with an empty version 2 lock, discarding {discarded} entries.
-                Commit the file so every revision builds against the same inputs."});
+                No Nix expression builds found.
+                Cleared {discarded} unused entries from '.flox/catalog.lock'.
+                Commit the updated file."});
             } else {
-                message::plain(
-                    "No Nix expression builds found; only expression builds reference the catalog.",
-                );
+                message::plain("No Nix expression builds found. Nothing to update.");
             }
             return Ok(());
         }
