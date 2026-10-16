@@ -56,9 +56,8 @@ fn render(build: BuildResponse, json: bool) -> Result<String> {
 #[derive(Clone, Debug)]
 struct BuildStatusDisplay {
     build_id: i64,
+    pkg_path: String,
     system: String,
-    attr_path: String,
-    catalog_name: String,
     trigger: String,
     status: String,
     created_at: String,
@@ -71,9 +70,8 @@ impl From<BuildResponse> for BuildStatusDisplay {
 
         BuildStatusDisplay {
             build_id: b.build_id,
+            pkg_path: format!("{}/{}", b.catalog_name, b.attr_path),
             system: b.system,
-            attr_path: b.attr_path,
-            catalog_name: b.catalog_name,
             trigger,
             status,
             created_at: b.created_at.to_rfc3339(),
@@ -84,9 +82,8 @@ impl From<BuildResponse> for BuildStatusDisplay {
 impl std::fmt::Display for BuildStatusDisplay {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "{:<14} {}", "Build ID:", self.build_id)?;
+        writeln!(f, "{:<14} {}", "Package:", self.pkg_path)?;
         writeln!(f, "{:<14} {}", "System:", self.system)?;
-        writeln!(f, "{:<14} {}", "Attr path:", self.attr_path)?;
-        writeln!(f, "{:<14} {}", "Catalog:", self.catalog_name)?;
         writeln!(f, "{:<14} {}", "Trigger:", self.trigger)?;
         writeln!(f, "{:<14} {}", "Status:", self.status)?;
         writeln!(f, "{:<14} {}", "Created:", self.created_at)?;
@@ -131,9 +128,8 @@ mod tests {
         });
         assert_eq!(render(build, false).unwrap(), indoc! {"
             Build ID:      42
+            Package:       my-catalog/hello
             System:        x86_64-linux
-            Attr path:     hello
-            Catalog:       my-catalog
             Trigger:       source_push (staging)
             Status:        running
             Created:       2025-01-01T00:00:00+00:00
@@ -145,9 +141,8 @@ mod tests {
         let build = make_build(42, "x86_64-linux", "hello", None);
         assert_eq!(render(build, false).unwrap(), indoc! {"
             Build ID:      42
+            Package:       my-catalog/hello
             System:        x86_64-linux
-            Attr path:     hello
-            Catalog:       my-catalog
             Trigger:       -
             Status:        pending
             Created:       2025-01-01T00:00:00+00:00
