@@ -1241,7 +1241,7 @@ fn upstream_lookup_error(
                     [single] if !single.is_empty() => Some(single.clone()),
                     _ => None,
                 })
-                .unwrap_or_else(|| "<remote>".to_string());
+                .unwrap_or_else(|| "REMOTE".to_string());
             build_repo_err(&formatdoc! {"
                 Current branch '{branch}' has no upstream remote configured.
                 Set one with 'git branch --set-upstream-to={remote_hint}/{branch}'"
@@ -1249,7 +1249,7 @@ fn upstream_lookup_error(
         },
         GitCommandGetOriginError::UpstreamNotABranch { upstream } => build_repo_err(&formatdoc! {"
             Current branch '{branch}' tracks '{upstream}', which is not a branch.
-            Configure a branch upstream with 'git branch --set-upstream-to=<remote>/<branch>'"
+            Configure a branch upstream with 'git branch --set-upstream-to=REMOTE/{branch}'"
         }),
         GitCommandGetOriginError::AmbiguousLocalRef { ref_, rows } => {
             debug!(%ref_, ?rows, "multiple upstream configurations found");
@@ -3560,8 +3560,8 @@ pub mod tests {
         let err = gather_build_repo_meta(&git).unwrap_err();
         let msg = err.to_string();
         assert!(
-            msg.contains("--set-upstream-to=<remote>/main"),
-            "Expected placeholder <remote> in suggestion, got: {msg}"
+            msg.contains("--set-upstream-to=REMOTE/main"),
+            "Expected placeholder REMOTE in suggestion, got: {msg}"
         );
     }
 
@@ -3713,6 +3713,23 @@ pub mod tests {
                 assert!(!msg.contains(raw), "{raw:?} leaked into: {msg}");
             }
         }
+    }
+
+    #[test]
+    fn not_a_branch_upstream_suggestion_uses_uppercase_placeholder() {
+        let (git, _dir) = init_temp_repo(false);
+        let msg = upstream_lookup_error(
+            &git,
+            "refs/heads/main",
+            GitCommandGetOriginError::UpstreamNotABranch {
+                upstream: "refs/tags/v1".into(),
+            },
+        )
+        .to_string();
+        assert!(
+            msg.contains("'git branch --set-upstream-to=REMOTE/main'"),
+            "{msg}"
+        );
     }
 
     #[test]
