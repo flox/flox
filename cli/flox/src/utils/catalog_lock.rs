@@ -35,6 +35,22 @@ pub struct BuildLockGuard {
 }
 
 impl BuildLockGuard {
+    /// The lock for a build over the given expressions, or `None` when none
+    /// are involved. Without expressions nothing consumes a catalog lock, so
+    /// an existing file is neither read nor validated.
+    pub async fn for_expression_builds(
+        client: &impl CatalogClientTrait,
+        dot_flox_path: impl AsRef<Path>,
+        rel_file_paths: &[PathBuf],
+    ) -> Result<Option<BuildLockGuard>> {
+        if rel_file_paths.is_empty() {
+            return Ok(None);
+        }
+        Self::new_existing_or_ephemeral(client, dot_flox_path, rel_file_paths)
+            .await
+            .map(Some)
+    }
+
     /// Read the committed lock if present; otherwise resolve the scanned
     /// references. Always materialize a temporary builder-facing file.
     pub async fn new_existing_or_ephemeral(
@@ -306,5 +322,38 @@ mod tests {
             err.to_string().contains("myorg.world"),
             "the uncovered reference must be named, got: {err}"
         );
+    }
+
+    /// A pure manifest build consumes no catalog lock, so a v1 or malformed
+    /// committed file is neither read nor rewritten, and no catalog request
+    /// is made: the no-op client fails every request.
+    #[tokio::test]
+    async fn no_expression_builds_leave_an_unused_lock_untouched() {
+        let (_project, dot_flox, _pkgs_dir) =
+            project_with_expression("{ catalogs }: catalogs.myorg.hello");
+        let lock_path = catalog_lockfile_path(&dot_flox);
+        for unused in [COMMITTED_V1_LOCK, "not json"] {
+            std::fs::write(&lock_path, unused).unwrap();
+            let lock = BuildLockGuard::for_expression_builds(&new_noop(), &dot_flox, &[])
+                .await
+                .unwrap();
+            assert!(lock.is_none());
+            assert_eq!(std::fs::read_to_string(&lock_path).unwrap(), unused);
+        }
+    }
+
+    /// An expression build still reads the committed lock, and refuses a v1
+    /// one with the relock command.
+    #[tokio::test]
+    async fn expression_builds_still_refuse_a_v1_lock() {
+        let (_project, dot_flox, _pkgs_dir) =
+            project_with_expression("{ catalogs }: catalogs.myorg.hello");
+        std::fs::write(catalog_lockfile_path(&dot_flox), COMMITTED_V1_LOCK).unwrap();
+        let err = BuildLockGuard::for_expression_builds(&new_noop(), &dot_flox, &[PathBuf::from(
+            "hello.nix",
+        )])
+        .await
+        .expect_err("a v1 lock must be refused where expressions read it");
+        assert!(format!("{err:#}").contains(nef_lock_catalog::UPDATE_CATALOGS_COMMAND));
     }
 }

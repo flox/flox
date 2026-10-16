@@ -35,13 +35,7 @@ use floxhub_client::{
     SourceLineageChange,
 };
 use indoc::formatdoc;
-use nef_lock_catalog::{
-    CatalogRef,
-    NixFlakeref,
-    PackageClosure,
-    catalog_lockfile_path,
-    scan_package,
-};
+use nef_lock_catalog::{CatalogRef, NixFlakeref, PackageClosure, scan_package};
 use tracing::{debug, info_span, instrument, warn};
 
 use super::{DirEnvironmentSelect, dir_environment_select};
@@ -482,20 +476,12 @@ impl Publish {
                 )
             },
         };
-        // A committed v1 lock needs an explicit relock even without expressions.
-        let catalog_lock = match lock_rel_paths.is_empty()
-            && !catalog_lockfile_path(path_env.dot_flox_path()).exists()
-        {
-            true => None,
-            false => Some(
-                BuildLockGuard::new_existing_or_ephemeral(
-                    &flox.floxhub_client,
-                    path_env.dot_flox_path(),
-                    &lock_rel_paths,
-                )
-                .await?,
-            ),
-        };
+        let catalog_lock = BuildLockGuard::for_expression_builds(
+            &flox.floxhub_client,
+            path_env.dot_flox_path(),
+            &lock_rel_paths,
+        )
+        .await?;
 
         // This package's roots and closure, projected from the lock the
         // build consumes. Knowable before any build runs, so a true
@@ -670,37 +656,6 @@ mod tests {
         assert_eq!(displayed, [
             "dependency: dependency moved to a newer source lineage"
         ]);
-    }
-
-    #[tokio::test]
-    async fn manifest_only_publish_refuses_v1_and_projects_v2() {
-        use floxhub_client::client::test_helpers::new_noop;
-
-        let project = tempfile::tempdir().unwrap();
-        let dot_flox = project.path().join(".flox");
-        std::fs::create_dir(&dot_flox).unwrap();
-        let lock_path = catalog_lockfile_path(&dot_flox);
-        std::fs::write(&lock_path, r#"{"version":1}"#).unwrap();
-        let error = BuildLockGuard::new_existing_or_ephemeral(
-            &new_noop(),
-            &dot_flox,
-            Vec::<PathBuf>::new(),
-        )
-        .await
-        .unwrap_err();
-        assert!(error.to_string().contains(UPDATE_CATALOGS_COMMAND));
-
-        nef_lock_catalog::write_lock(&nef_lock_catalog::BuildLock::default(), &lock_path).unwrap();
-        let guard = BuildLockGuard::new_existing_or_ephemeral(
-            &new_noop(),
-            &dot_flox,
-            Vec::<PathBuf>::new(),
-        )
-        .await
-        .unwrap();
-        let closure = project_for_publish(&guard, &BTreeSet::new()).unwrap();
-        assert!(closure.direct_inputs.is_empty());
-        assert!(closure.locked_inputs.is_empty());
     }
 
     /// A stale committed lock fails a publish naming both the uncovered

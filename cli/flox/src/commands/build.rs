@@ -373,20 +373,12 @@ impl Build {
             None => None,
         };
 
-        let catalog_lock = match &*expression_lock_rel_paths {
-            [] => {
-                validate_manifest_only_catalog_lock(&env.dot_flox_path())?;
-                None
-            },
-            expression_lock_rel_paths => Some(
-                BuildLockGuard::new_existing_or_ephemeral(
-                    &flox.floxhub_client,
-                    env.dot_flox_path(),
-                    expression_lock_rel_paths,
-                )
-                .await?,
-            ),
-        };
+        let catalog_lock = BuildLockGuard::for_expression_builds(
+            &flox.floxhub_client,
+            env.dot_flox_path(),
+            &expression_lock_rel_paths,
+        )
+        .await?;
 
         let cache_path = env.cache_path()?;
         let builder = FloxBuildMk::new(
@@ -979,14 +971,6 @@ impl TargetChoice {
     }
 }
 
-fn validate_manifest_only_catalog_lock(dot_flox_path: &Path) -> Result<()> {
-    let path = catalog_lockfile_path(dot_flox_path);
-    if path.exists() {
-        nef_lock_catalog::read_lock(&path)?;
-    }
-    Ok(())
-}
-
 pub(crate) fn packages_to_build<'o>(
     manifest: &'o Manifest<MigratedTypedOnly>,
     expression_ref: &'o NixFlakeref,
@@ -1026,20 +1010,6 @@ mod test {
     use tempfile::tempdir_in;
 
     use super::*;
-
-    #[test]
-    fn manifest_only_build_refuses_v1_catalog_lock() {
-        let project = tempfile::tempdir().unwrap();
-        let dot_flox = project.path().join(".flox");
-        std::fs::create_dir(&dot_flox).unwrap();
-        std::fs::write(catalog_lockfile_path(&dot_flox), r#"{"version":1}"#).unwrap();
-        let error = validate_manifest_only_catalog_lock(&dot_flox).unwrap_err();
-        assert!(
-            error
-                .to_string()
-                .contains(nef_lock_catalog::UPDATE_CATALOGS_COMMAND)
-        );
-    }
 
     /// Test that check_and_display_symlink shortens the symlink when in the
     /// current directory,
