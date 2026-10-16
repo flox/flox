@@ -87,7 +87,8 @@ pub mod types {
     /**Request body for the /build-inputs/lookup endpoint.
 
 A lookup names one or more `groups` of references to resolve, optionally
-anchored at a `reference_point`.
+anchored at a `reference_point`. Base-catalog references are advisory
+because the caller supplies them through pinned evaluation.
 
 The response is source revisions plus DAG edges: for each reference, the
 latest revision of its own source together with the transitive non-base
@@ -101,7 +102,7 @@ built repeatedly.*/
     /// ```json
     ///{
     ///  "title": "BuildInputsLookupRequest",
-    ///  "description": "Request body for the /build-inputs/lookup endpoint.\n\nA lookup names one or more `groups` of references to resolve, optionally\nanchored at a `reference_point`.\n\nThe response is source revisions plus DAG edges: for each reference, the\nlatest revision of its own source together with the transitive non-base\nsources that revision was built against.  That answer carries no system\nand no nixpkgs base revision, so the request body names neither.  A base\nrevision is selected at build time, against which the same lock may be\nbuilt repeatedly.",
+    ///  "description": "Request body for the /build-inputs/lookup endpoint.\n\nA lookup names one or more `groups` of references to resolve, optionally\nanchored at a `reference_point`. Base-catalog references are advisory\nbecause the caller supplies them through pinned evaluation.\n\nThe response is source revisions plus DAG edges: for each reference, the\nlatest revision of its own source together with the transitive non-base\nsources that revision was built against.  That answer carries no system\nand no nixpkgs base revision, so the request body names neither.  A base\nrevision is selected at build time, against which the same lock may be\nbuilt repeatedly.",
     ///  "type": "object",
     ///  "required": [
     ///    "groups"
@@ -937,6 +938,23 @@ manifest packages were built via the traditional flox manifest workflow.*/
     ///    "system"
     ///  ],
     ///  "properties": {
+    ///    "direct_inputs": {
+    ///      "title": "Direct Inputs",
+    ///      "type": [
+    ///        "array",
+    ///        "null"
+    ///      ],
+    ///      "items": {
+    ///        "type": "string"
+    ///      }
+    ///    },
+    ///    "dot_flox_dir": {
+    ///      "title": "Dot Flox Dir",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
     ///    "factory_build_token": {
     ///      "title": "Factory Build Token",
     ///      "type": [
@@ -958,6 +976,13 @@ manifest packages were built via the traditional flox manifest workflow.*/
     ///      "title": "Nixpkgs Rev",
     ///      "type": "string"
     ///    },
+    ///    "source_ref": {
+    ///      "title": "Source Ref",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
     ///    "source_rev": {
     ///      "title": "Source Rev",
     ///      "type": "string"
@@ -976,12 +1001,18 @@ manifest packages were built via the traditional flox manifest workflow.*/
     #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct CheckBuildRequest {
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub direct_inputs: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub dot_flox_dir: ::std::option::Option<::std::string::String>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub factory_build_token: ::std::option::Option<::std::string::String>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub locked_inputs: ::std::option::Option<
             ::std::collections::HashMap<::std::string::String, LockedInputEntry>,
         >,
         pub nixpkgs_rev: ::std::string::String,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub source_ref: ::std::option::Option<::std::string::String>,
         pub source_rev: ::std::string::String,
         pub source_url: ::std::string::String,
         pub system: PackageSystem,
@@ -1417,30 +1448,19 @@ Attributes:
             value.clone()
         }
     }
-    /**Result for a single LookupGroup.
+    /**Keep failures scoped to one group; any failure invalidates its lock.
 
-lock carries the resolved LockedInputs map (full transitive closure).
-unresolvable is scoped INSIDE the group (never at the top-level response).
-Keeping unresolvable entries group-scoped is the contract the lookup
-handler must respect when building this response.
-
-matched maps locked-input keys (same namespace as lock — every matched
-key must also exist in lock) to the list of raw user-query strings that
-directly pulled this entry in.  A direct dep matched by several queries
-has several entries in its value list; a wildcard query pulling several
-deps means that query string appears under several keys.  Roots are
-implicit — they are the keys of matched.
-
-matched is response-only; it must NOT appear on the publish request path.
-Use pydantic.Field(default_factory=dict) so an empty match set serializes
-cleanly (mirrors how unresolvable defaults).*/
+A nonempty `unresolvable` list invalidates the whole lookup group.
+`matched` identifies direct roots and preserves the queries selecting each
+root; every `matched` key belongs to `lock`. `not_lockable` is advisory:
+pinned evaluation supplies base inputs.*/
     ///
     /// <details><summary>JSON schema</summary>
     ///
     /// ```json
     ///{
     ///  "title": "GroupResult",
-    ///  "description": "Result for a single LookupGroup.\n\nlock carries the resolved LockedInputs map (full transitive closure).\nunresolvable is scoped INSIDE the group (never at the top-level response).\nKeeping unresolvable entries group-scoped is the contract the lookup\nhandler must respect when building this response.\n\nmatched maps locked-input keys (same namespace as lock — every matched\nkey must also exist in lock) to the list of raw user-query strings that\ndirectly pulled this entry in.  A direct dep matched by several queries\nhas several entries in its value list; a wildcard query pulling several\ndeps means that query string appears under several keys.  Roots are\nimplicit — they are the keys of matched.\n\nmatched is response-only; it must NOT appear on the publish request path.\nUse pydantic.Field(default_factory=dict) so an empty match set serializes\ncleanly (mirrors how unresolvable defaults).",
+    ///  "description": "Keep failures scoped to one group; any failure invalidates its lock.\n\nA nonempty `unresolvable` list invalidates the whole lookup group.\n`matched` identifies direct roots and preserves the queries selecting each\nroot; every `matched` key belongs to `lock`. `not_lockable` is advisory:\npinned evaluation supplies base inputs.",
     ///  "type": "object",
     ///  "required": [
     ///    "lock"
@@ -1461,6 +1481,13 @@ cleanly (mirrors how unresolvable defaults).*/
     ///        "items": {
     ///          "type": "string"
     ///        }
+    ///      }
+    ///    },
+    ///    "not_lockable": {
+    ///      "title": "Not Lockable",
+    ///      "type": "object",
+    ///      "additionalProperties": {
+    ///        "$ref": "#/components/schemas/NotLockableEntry"
     ///      }
     ///    },
     ///    "unresolvable": {
@@ -1484,6 +1511,14 @@ cleanly (mirrors how unresolvable defaults).*/
         pub matched: ::std::collections::HashMap<
             ::std::string::String,
             ::std::vec::Vec<::std::string::String>,
+        >,
+        #[serde(
+            default,
+            skip_serializing_if = ":: std :: collections :: HashMap::is_empty"
+        )]
+        pub not_lockable: ::std::collections::HashMap<
+            ::std::string::String,
+            NotLockableEntry,
         >,
         #[serde(default, skip_serializing_if = "::std::vec::Vec::is_empty")]
         pub unresolvable: ::std::vec::Vec<UnresolvableEntry>,
@@ -1739,31 +1774,16 @@ without a client release.*/
             self.0.fmt(f)
         }
     }
-    /**A locked git flakeref, in its attribute form.
+    /**Preserve all git attributes, including unknown source fields, on round-trip.
 
-Locked inputs are only ever tracked as git flakerefs, so this models a git
-source honestly rather than a generic flakeref: type must equal "git", and
-the four git fields are required — url (source), rev (commit), ref (the
-existing CLI lockfile contract), and dir (the subdir holding build
-instructions).  The CLI needs all of them to rebuild a locked input.  A git
-flakeref is still an open attribute set, so any git-native attribute beyond
-these (e.g. narHash) flows through unchanged via extra="allow"; the contract
-boundary validates field presence and that type == "git", not the
-flakeref's deeper semantics (the downstream publish path parses url + rev
-for storage identity).
-
-The round-trip is value/dict-equal: with every named field required there
-are no unset fields to emit as null, and extras serialize verbatim, so the
-default model_dump reproduces the input attribute set (no injected nulls).
-Key ORDER is not preserved or relied upon — the identity hash reads url/rev
-values, not the serialized form.*/
+The CLI needs the required source fields to rebuild each locked input.*/
     ///
     /// <details><summary>JSON schema</summary>
     ///
     /// ```json
     ///{
     ///  "title": "LockedGitSource",
-    ///  "description": "A locked git flakeref, in its attribute form.\n\nLocked inputs are only ever tracked as git flakerefs, so this models a git\nsource honestly rather than a generic flakeref: type must equal \"git\", and\nthe four git fields are required — url (source), rev (commit), ref (the\nexisting CLI lockfile contract), and dir (the subdir holding build\ninstructions).  The CLI needs all of them to rebuild a locked input.  A git\nflakeref is still an open attribute set, so any git-native attribute beyond\nthese (e.g. narHash) flows through unchanged via extra=\"allow\"; the contract\nboundary validates field presence and that type == \"git\", not the\nflakeref's deeper semantics (the downstream publish path parses url + rev\nfor storage identity).\n\nThe round-trip is value/dict-equal: with every named field required there\nare no unset fields to emit as null, and extras serialize verbatim, so the\ndefault model_dump reproduces the input attribute set (no injected nulls).\nKey ORDER is not preserved or relied upon — the identity hash reads url/rev\nvalues, not the serialized form.",
+    ///  "description": "Preserve all git attributes, including unknown source fields, on round-trip.\n\nThe CLI needs the required source fields to rebuild each locked input.",
     ///  "type": "object",
     ///  "required": [
     ///    "dir",
@@ -1813,24 +1833,16 @@ values, not the serialized form.*/
             value.clone()
         }
     }
-    /**An entry in a flat locked-inputs map.
+    /**Require the closure hash and preserve nullable inputs and reserved fields.
 
-Publish leaves `inputs` as `null` because the server reconstructs the DAG
-from `package_inputs`. Lookup supplies direct input keys. An empty list
-means no dependencies.
-
-`locked_inputs_hash` is required. Lookup computes it from the closure it
-assembled; publish uses it to select a stored closure. Boundary children,
-including redacted or unencodable rows, can contribute to that hash without
-appearing in `inputs`. Lookup can compute a digest no stored row carries,
-which publish rejects.*/
+Legacy publish ignores child lists; v2 publish requires the reachable closure.*/
     ///
     /// <details><summary>JSON schema</summary>
     ///
     /// ```json
     ///{
     ///  "title": "LockedInputEntry",
-    ///  "description": "An entry in a flat locked-inputs map.\n\nPublish leaves `inputs` as `null` because the server reconstructs the DAG\nfrom `package_inputs`. Lookup supplies direct input keys. An empty list\nmeans no dependencies.\n\n`locked_inputs_hash` is required. Lookup computes it from the closure it\nassembled; publish uses it to select a stored closure. Boundary children,\nincluding redacted or unencodable rows, can contribute to that hash without\nappearing in `inputs`. Lookup can compute a digest no stored row carries,\nwhich publish rejects.",
+    ///  "description": "Require the closure hash and preserve nullable inputs and reserved fields.\n\nLegacy publish ignores child lists; v2 publish requires the reachable closure.",
     ///  "type": "object",
     ///  "required": [
     ///    "attr_path",
@@ -1846,6 +1858,13 @@ which publish rejects.*/
     ///      "items": {
     ///        "type": "string"
     ///      }
+    ///    },
+    ///    "build": {
+    ///      "title": "Build",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
     ///    },
     ///    "build_type": {
     ///      "$ref": "#/components/schemas/BuildType"
@@ -1885,6 +1904,13 @@ which publish rejects.*/
     ///    },
     ///    "source": {
     ///      "$ref": "#/components/schemas/LockedGitSource"
+    ///    },
+    ///    "version": {
+    ///      "title": "Version",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
     ///    }
     ///  }
     ///}
@@ -1893,6 +1919,8 @@ which publish rejects.*/
     #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct LockedInputEntry {
         pub attr_path: ::std::vec::Vec<::std::string::String>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub build: ::std::option::Option<::std::string::String>,
         pub build_type: BuildType,
         pub catalog: ::std::string::String,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
@@ -1903,6 +1931,8 @@ which publish rejects.*/
         pub inputs: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
         pub locked_inputs_hash: ::std::string::String,
         pub source: LockedGitSource,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub version: ::std::option::Option<::std::string::String>,
     }
     impl ::std::convert::From<&LockedInputEntry> for LockedInputEntry {
         fn from(value: &LockedInputEntry) -> Self {
@@ -1996,19 +2026,17 @@ which publish rejects.*/
             value.clone()
         }
     }
-    /**A named group of reference strings for a build-inputs lookup.
+    /**Accept owner-first exact references and wildcards in one group.
 
-references is flat and mixed-kind; the server disambiguates.
-Wildcard sentinels are owner-first, like '<owner>.*' (whole
-catalog) or '<owner>.<pkgset>.*' (package set) — e.g. 'brantley.*'
-— and are accepted without validation; the server expands them.*/
+Examples: `owner.package`, `owner.*` for the whole catalog, and
+`owner.python3Packages.*` for one package set.*/
     ///
     /// <details><summary>JSON schema</summary>
     ///
     /// ```json
     ///{
     ///  "title": "LookupGroup",
-    ///  "description": "A named group of reference strings for a build-inputs lookup.\n\nreferences is flat and mixed-kind; the server disambiguates.\nWildcard sentinels are owner-first, like '<owner>.*' (whole\ncatalog) or '<owner>.<pkgset>.*' (package set) — e.g. 'brantley.*'\n— and are accepted without validation; the server expands them.",
+    ///  "description": "Accept owner-first exact references and wildcards in one group.\n\nExamples: `owner.package`, `owner.*` for the whole catalog, and\n`owner.python3Packages.*` for one package set.",
     ///  "type": "object",
     ///  "required": [
     ///    "key",
@@ -2552,6 +2580,36 @@ catalog) or '<owner>.<pkgset>.*' (package set) — e.g. 'brantley.*'
             Self(value)
         }
     }
+    ///A requested reference whose catalog is supplied by pinned evaluation.
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "NotLockableEntry",
+    ///  "description": "A requested reference whose catalog is supplied by pinned evaluation.",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "kind"
+    ///  ],
+    ///  "properties": {
+    ///    "kind": {
+    ///      "title": "Kind",
+    ///      "type": "string"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct NotLockableEntry {
+        pub kind: ::std::string::String,
+    }
+    impl ::std::convert::From<&NotLockableEntry> for NotLockableEntry {
+        fn from(value: &NotLockableEntry) -> Self {
+            value.clone()
+        }
+    }
     ///Comma-separated list of output names (e.g., 'out,bin,dev')
     ///
     /// <details><summary>JSON schema</summary>
@@ -2872,41 +2930,34 @@ catalog) or '<owner>.<pkgset>.*' (package set) — e.g. 'brantley.*'
     /// ```json
     ///{
     ///  "title": "PackageBuildResponse",
-    ///  "type": "object"
+    ///  "type": "object",
+    ///  "properties": {
+    ///    "warnings": {
+    ///      "title": "Warnings",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "$ref": "#/components/schemas/PublishWarning"
+    ///      }
+    ///    }
+    ///  }
     ///}
     /// ```
     /// </details>
     #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
-    #[serde(transparent)]
-    pub struct PackageBuildResponse(
-        pub ::serde_json::Map<::std::string::String, ::serde_json::Value>,
-    );
-    impl ::std::ops::Deref for PackageBuildResponse {
-        type Target = ::serde_json::Map<::std::string::String, ::serde_json::Value>;
-        fn deref(
-            &self,
-        ) -> &::serde_json::Map<::std::string::String, ::serde_json::Value> {
-            &self.0
-        }
-    }
-    impl ::std::convert::From<PackageBuildResponse>
-    for ::serde_json::Map<::std::string::String, ::serde_json::Value> {
-        fn from(value: PackageBuildResponse) -> Self {
-            value.0
-        }
+    pub struct PackageBuildResponse {
+        #[serde(default, skip_serializing_if = "::std::vec::Vec::is_empty")]
+        pub warnings: ::std::vec::Vec<PublishWarning>,
     }
     impl ::std::convert::From<&PackageBuildResponse> for PackageBuildResponse {
         fn from(value: &PackageBuildResponse) -> Self {
             value.clone()
         }
     }
-    impl ::std::convert::From<
-        ::serde_json::Map<::std::string::String, ::serde_json::Value>,
-    > for PackageBuildResponse {
-        fn from(
-            value: ::serde_json::Map<::std::string::String, ::serde_json::Value>,
-        ) -> Self {
-            Self(value)
+    impl ::std::default::Default for PackageBuildResponse {
+        fn default() -> Self {
+            Self {
+                warnings: Default::default(),
+            }
         }
     }
     ///`PackageBuildWithNarInfo`
@@ -3021,6 +3072,16 @@ catalog) or '<owner>.<pkgset>.*' (package set) — e.g. 'brantley.*'
     ///    "derivation": {
     ///      "$ref": "#/components/schemas/PackageDerivation"
     ///    },
+    ///    "direct_inputs": {
+    ///      "title": "Direct Inputs",
+    ///      "type": [
+    ///        "array",
+    ///        "null"
+    ///      ],
+    ///      "items": {
+    ///        "type": "string"
+    ///      }
+    ///    },
     ///    "dot_flox_dir": {
     ///      "title": "Dot Flox Dir",
     ///      "default": ".flox",
@@ -3126,6 +3187,8 @@ catalog) or '<owner>.<pkgset>.*' (package set) — e.g. 'brantley.*'
             ::std::vec::Vec<::std::vec::Vec<DeepOverridesItemItem>>,
         >,
         pub derivation: PackageDerivation,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub direct_inputs: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
         #[serde(default = "defaults::package_build_with_nar_info_dot_flox_dir")]
         pub dot_flox_dir: ::std::string::String,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
@@ -4666,6 +4729,48 @@ state implies. Absent (null) means ordinary circulation.*/
             value.clone()
         }
     }
+    ///A publish diagnostic with an open code and a message for display.
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "PublishWarning",
+    ///  "description": "A publish diagnostic with an open code and a message for display.",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "code",
+    ///    "input",
+    ///    "message"
+    ///  ],
+    ///  "properties": {
+    ///    "code": {
+    ///      "title": "Code",
+    ///      "type": "string"
+    ///    },
+    ///    "input": {
+    ///      "title": "Input",
+    ///      "type": "string"
+    ///    },
+    ///    "message": {
+    ///      "title": "Message",
+    ///      "type": "string"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct PublishWarning {
+        pub code: ::std::string::String,
+        pub input: ::std::string::String,
+        pub message: ::std::string::String,
+    }
+    impl ::std::convert::From<&PublishWarning> for PublishWarning {
+        fn from(value: &PublishWarning) -> Self {
+            value.clone()
+        }
+    }
     ///`PublishedCatalog`
     ///
     /// <details><summary>JSON schema</summary>
@@ -4808,19 +4913,14 @@ state implies. Absent (null) means ordinary circulation.*/
             value.clone()
         }
     }
-    /**Temporal anchor for a build-inputs lookup.
-
-At most one of as_of_date / as_of_build may be set.  When both are
-absent the server interprets this as "now".  Uses a plain optional-
-fields model with a model_validator — NOT a discriminated union —
-because the two anchors carry different value types.*/
+    ///Allow at most one temporal anchor; no anchor means now.
     ///
     /// <details><summary>JSON schema</summary>
     ///
     /// ```json
     ///{
     ///  "title": "ReferencePoint",
-    ///  "description": "Temporal anchor for a build-inputs lookup.\n\nAt most one of as_of_date / as_of_build may be set.  When both are\nabsent the server interprets this as \"now\".  Uses a plain optional-\nfields model with a model_validator — NOT a discriminated union —\nbecause the two anchors carry different value types.",
+    ///  "description": "Allow at most one temporal anchor; no anchor means now.",
     ///  "type": "object",
     ///  "properties": {
     ///    "as_of_build": {
@@ -7018,6 +7118,9 @@ Sends a `PUT` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pack
             404u16 => {
                 Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
             }
+            409u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
             422u16 => {
                 Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
             }
@@ -7112,12 +7215,17 @@ Request Body:
 - **source_rev**: Source revision
 - **nixpkgs_rev**: Nixpkgs revision used for the build
 - **system**: Target system (e.g. x86_64-linux)
-- **locked_inputs**: Optional flat map of DIRECT catalog dependencies,
-  same shape as the locked_inputs field on the publish endpoint.  The
-  check is always closure-aware — there is no hash-blind path:
-  absent/null/{} → empty closure (H(∅)); {…} → resolved + Merkle-hashed.
-  Old clients that omit the field are accepted (no 422); they are treated
-  as publishing with an empty closure.
+- **locked_inputs**, **direct_inputs**: the same mode-selecting pair as
+  the publish endpoint (build_lock.uses_v2_closure_contract): absent/null
+  direct_inputs is legacy, which always answers
+  already_published=false. Any list,
+  including [], selects v2: locked_inputs must hold the complete
+  closure, which is validated and walked the same way as publish; a
+  well-shaped but unresolvable closure is an advisory miss, never a
+  hard failure.
+- **source_ref**, **dot_flox_dir**: identify the package under check,
+  never a dependency's source. Either absent or unusable is an advisory
+  miss for a v2 check; legacy always misses regardless of these fields.
 
 Returns:
 - **CheckBuildResponse** with already_published=true and provenance

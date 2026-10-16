@@ -811,7 +811,8 @@ error_class IN ('transient', 'permanent', 'timeout',
 'dispatch_timeout'); the column is NULL for non-failure
 terminals.
 
-- TRANSIENT: retry-able by the sweeper.
+- TRANSIENT: says nothing of the build itself, such as a build
+  the coordinator lost or gave no status for.
 - PERMANENT: will not improve on retry.
 - TIMEOUT: the coordinator reported an execution timeout — a
   build that ran and overran its limit.
@@ -828,7 +829,7 @@ failed.*/
     /// ```json
     ///{
     ///  "title": "TaskErrorClass",
-    ///  "description": "Diagnostic class of a failed task.\n\nMirrors the ``ck_task_error_class`` CHECK as of migration 1.8.2:\nerror_class IN ('transient', 'permanent', 'timeout',\n'dispatch_timeout'); the column is NULL for non-failure\nterminals.\n\n- TRANSIENT: retry-able by the sweeper.\n- PERMANENT: will not improve on retry.\n- TIMEOUT: the coordinator reported an execution timeout — a\n  build that ran and overran its limit.\n- DISPATCH_TIMEOUT: the submit HTTP call to the coordinator\n  itself timed out, so the build's handoff never observably\n  started.\n\nThe last two are kept distinct so the read surface shows an\nexecution timeout as timed_out while a submit timeout reads as\nfailed.",
+    ///  "description": "Diagnostic class of a failed task.\n\nMirrors the ``ck_task_error_class`` CHECK as of migration 1.8.2:\nerror_class IN ('transient', 'permanent', 'timeout',\n'dispatch_timeout'); the column is NULL for non-failure\nterminals.\n\n- TRANSIENT: says nothing of the build itself, such as a build\n  the coordinator lost or gave no status for.\n- PERMANENT: will not improve on retry.\n- TIMEOUT: the coordinator reported an execution timeout — a\n  build that ran and overran its limit.\n- DISPATCH_TIMEOUT: the submit HTTP call to the coordinator\n  itself timed out, so the build's handoff never observably\n  started.\n\nThe last two are kept distinct so the read surface shows an\nexecution timeout as timed_out while a submit timeout reads as\nfailed.",
     ///  "type": "string",
     ///  "enum": [
     ///    "transient",
