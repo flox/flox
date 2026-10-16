@@ -122,7 +122,8 @@ fn wire_reference(reference: &CatalogRef) -> ReferencesItem {
 /// merging across groups; locking multiple groups at once is not supported yet.
 ///
 /// Boundary: if the group reports any unresolvable references, fail the whole
-/// lock. Otherwise hand the resolved `lock` map off to the A2 transform.
+/// lock. `not_lockable` entries are advisories of any kind and never affect
+/// completeness. Otherwise hand the resolved `lock` map off to the A2 transform.
 #[instrument(skip(response))]
 fn lock_from_response(mut response: BuildInputsLookupResponse) -> Result<BuildLock, LockError> {
     let Some(group) = response.groups.remove(LOOKUP_GROUP_KEY) else {
@@ -138,16 +139,6 @@ fn lock_from_response(mut response: BuildInputsLookupResponse) -> Result<BuildLo
             "lookup reported unresolvable references"
         );
         return Err(LockError::Unresolvable(group.unresolvable));
-    }
-
-    for (reference, advisory) in &group.not_lockable {
-        if advisory.kind != "base_catalog"
-            || (reference != "nixpkgs" && !reference.starts_with("nixpkgs."))
-        {
-            return Err(LockError::Transform(anyhow::anyhow!(
-                "catalog reference '{reference}' cannot be locked"
-            )));
-        }
     }
 
     let direct = group.matched.keys();
@@ -343,33 +334,50 @@ mod tests {
         assert!(value["catalogs"].get("nixpkgs").is_none());
     }
 
+    /// An advisory the CLI does not recognize, on an otherwise complete
+    /// response, leaves the lock exactly as it would be without it.
     #[test]
-    fn not_lockable_outside_base_namespace_fails_the_lock() {
-        let response: BuildInputsLookupResponse = serde_json::from_value(json!({
-            "version": 1,
-            "groups": {"default": {
-                "lock": {}, "matched": {},
-                "not_lockable": {"other.hello": {"kind": "future_kind"}}
-            }}
-        }))
-        .unwrap();
-        let error = lock_from_response(response).unwrap_err().to_string();
-        assert!(error.contains("other.hello"), "{error}");
-    }
-
-    #[test]
-    fn unresolvable_still_fails_with_a_base_advisory() {
-        let mut response: serde_json::Value = serde_json::from_str(include_str!(
-            "../../test_data/build_inputs_lookup/partial.json"
+    fn unfamiliar_advisory_on_a_complete_response_leaves_the_lock_unchanged() {
+        let success: serde_json::Value = serde_json::from_str(include_str!(
+            "../../test_data/build_inputs_lookup/success.json"
         ))
         .unwrap();
-        response["version"] = json!(1);
-        response["groups"][LOOKUP_GROUP_KEY]["not_lockable"] =
-            json!({"nixpkgs.hello": {"kind": "base_catalog"}});
-        let response: BuildInputsLookupResponse = serde_json::from_value(response).unwrap();
-        assert!(matches!(
-            lock_from_response(response),
-            Err(LockError::Unresolvable(entries)) if entries.len() == 1
-        ));
+        let render = |response: serde_json::Value| {
+            let lock = lock_from_response(serde_json::from_value(response).unwrap())
+                .expect("response locks");
+            crate::lock::transform::render_builder_lock(&lock).unwrap()
+        };
+        let expected = render(success.clone());
+
+        let mut with_advisory = success;
+        with_advisory["groups"][LOOKUP_GROUP_KEY]["not_lockable"] =
+            json!({"other.hello": {"kind": "future_kind"}});
+
+        assert_eq!(render(with_advisory), expected);
+    }
+
+    /// Nonempty `unresolvable` marks an incomplete group whatever advisories
+    /// accompany it.
+    #[test]
+    fn unresolvable_still_fails_with_any_advisory() {
+        for advisory in [
+            json!({"nixpkgs.hello": {"kind": "base_catalog"}}),
+            json!({"other.hello": {"kind": "future_kind"}}),
+        ] {
+            let mut response: serde_json::Value = serde_json::from_str(include_str!(
+                "../../test_data/build_inputs_lookup/partial.json"
+            ))
+            .unwrap();
+            response["version"] = json!(1);
+            response["groups"][LOOKUP_GROUP_KEY]["not_lockable"] = advisory.clone();
+            let response: BuildInputsLookupResponse = serde_json::from_value(response).unwrap();
+            assert!(
+                matches!(
+                    lock_from_response(response),
+                    Err(LockError::Unresolvable(entries)) if entries.len() == 1
+                ),
+                "advisory {advisory}"
+            );
+        }
     }
 }

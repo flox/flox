@@ -226,4 +226,37 @@ mod tests {
         }
         assert_eq!(std::fs::read_to_string(path).unwrap(), "unchanged");
     }
+
+    /// An HTTP 200 whose group reports unresolvable references is an
+    /// incomplete lock: the committed file is not overwritten.
+    #[tokio::test]
+    async fn incomplete_http_200_does_not_replace_the_committed_lock() {
+        let server = httpmock::MockServer::start_async().await;
+        let mock = server.mock(|when, then| {
+            when.method("POST")
+                .path("/api/v1/catalog/build-inputs/lookup");
+            then.status(200).json_body(
+                serde_json::from_str::<serde_json::Value>(include_str!(
+                    "../test_data/build_inputs_lookup/partial.json"
+                ))
+                .unwrap(),
+            );
+        });
+        let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        let (_project, dot_flox, pkgs_dir) =
+            project_with_expression("{ catalogs }: catalogs.myorg.hello");
+        let path = catalog_lockfile_path(&dot_flox);
+        std::fs::write(&path, "unchanged").unwrap();
+
+        let error = lock_project_catalog(&client, &pkgs_dir, ["hello.nix"], &path)
+            .await
+            .unwrap_err();
+
+        mock.assert();
+        assert!(
+            matches!(error, CatalogLockError::Unresolvable(_)),
+            "{error}"
+        );
+        assert_eq!(std::fs::read_to_string(path).unwrap(), "unchanged");
+    }
 }
