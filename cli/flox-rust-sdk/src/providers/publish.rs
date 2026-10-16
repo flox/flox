@@ -1693,39 +1693,6 @@ pub mod tests {
     }
 
     #[tokio::test]
-    async fn publish_sends_empty_closure_when_given_one() {
-        let server = httpmock::MockServer::start_async().await;
-        let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
-        let mock = server.mock(|when, then| {
-            when.method(httpmock::Method::POST)
-                .path("/api/v1/catalog/catalogs/test/packages/hello/builds")
-                .json_body_includes(
-                    serde_json::json!({"locked_inputs": {}, "direct_inputs": []}).to_string(),
-                );
-            then.status(200).json_body(serde_json::json!({}));
-        });
-        let build: UserBuildPublish = serde_json::from_value(serde_json::json!({
-            "derivation": {
-                "drv_path": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-hello.drv",
-                "name": "hello", "outputs": [], "system": "x86_64-linux"
-            },
-            "url": "https://github.com/org/repo", "ref": "main", "rev": "abc123",
-            "rev_count": 1, "rev_date": "2026-01-01T00:00:00Z",
-            "narinfos": {},
-            "locked_inputs": {}, "direct_inputs": [],
-            "locked_base_catalog_url": "https://github.com/flox/nixpkgs?rev=abc123"
-        }))
-        .unwrap();
-
-        publish_build_with_confirmation(&client, "test", "hello", build, async |_| {
-            panic!("a successful base-only publish needs no confirmation")
-        })
-        .await
-        .unwrap();
-        mock.assert();
-    }
-
-    #[tokio::test]
     async fn publish_lineage_confirmation_retries_only_when_accepted() {
         let accepted =
             exercise_lineage_publish(409, LINEAGE_CHANGE_DETAIL, false, true, 200, true).await;
@@ -3805,7 +3772,11 @@ pub mod tests {
     }
     #[tokio::test]
     async fn publish_keeps_source_declarations_separate_from_the_input_closure() {
-        for declare_own_overrides in [false, true] {
+        // An empty closure must still reach the request as empty collections,
+        // not as absent fields.
+        for (declare_own_overrides, populated_closure) in
+            [(false, true), (true, true), (false, false)]
+        {
             let (mut flox, _temp_dir_handle) = flox_instance();
             let (_tempdir_handle, _remote_repo, remote_uri) = example_git_remote_repo();
             let (env, build_repo) = example_path_environment(&flox, Some(&remote_uri));
@@ -3849,6 +3820,11 @@ pub mod tests {
                 }
         })).unwrap(),
         };
+            let closure = if populated_closure {
+                closure
+            } else {
+                PackageClosure::default()
+            };
 
             set_test_auth(&mut flox, "test");
             let catalog_name = "test".to_string();
@@ -3921,7 +3897,7 @@ pub mod tests {
                 (
                     serde_json::json!(own_paths),
                     serde_json::to_value(&closure.locked_inputs).unwrap(),
-                    serde_json::json!(["dep/root"])
+                    serde_json::to_value(&closure.direct_inputs).unwrap()
                 ),
             );
         }
