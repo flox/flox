@@ -53,6 +53,9 @@ sharing environments, and administration.
 `activate`
 :   Enter the environment, run `flox deactivate` to leave.
 
+`defaults`
+:   Save and use a startup environment; print manual shell setup.
+
 `develop`
 :   Enter a development shell for a Nix expression build.
 
@@ -133,6 +136,7 @@ sharing environments, and administration.
 
 [`flox-init(1)`](./flox-init.md),
 [`flox-activate(1)`](./flox-activate.md),
+[`flox-defaults(1)`](./flox-defaults.md),
 [`flox-develop(1)`](./flox-develop.md),
 [`flox-run(1)`](./flox-run.md),
 [`flox-install(1)`](./flox-install.md),

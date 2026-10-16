@@ -6,6 +6,7 @@ mod build;
 mod check_for_upgrades;
 mod containerize;
 mod deactivate;
+pub(crate) mod defaults;
 mod delete;
 mod develop;
 mod edit;
@@ -217,6 +218,15 @@ pub struct FloxArgs {
 }
 
 impl FloxArgs {
+    /// Local defaults operations must not initialize authentication, migrate
+    /// credentials, or write telemetry. Setup is entirely instruction-only.
+    pub fn handle_defaults_early(&mut self) -> Option<Result<()>> {
+        match &mut self.command {
+            Some(Commands::Use(UseCommands::Defaults(args))) => args.handle_early(),
+            _ => None,
+        }
+    }
+
     /// The v2 wire subcommand name for this invocation; `"help"` when no
     /// subcommand was given.
     pub fn subcommand_name(&self) -> &'static str {
@@ -823,6 +833,10 @@ enum UseCommands {
     )]
     Activate(#[bpaf(external(activate::activate))] activate::Activate),
 
+    /// Save and use a startup environment; print manual shell setup
+    #[bpaf(command, footer("Run 'man flox-defaults' for more details."))]
+    Defaults(#[bpaf(external(defaults::defaults))] defaults::Defaults),
+
     /// Enter a development shell for a Nix expression build
     #[bpaf(command, footer("Run 'man flox-develop' for more details."))]
     Develop(#[bpaf(external(develop::develop))] develop::Develop),
@@ -850,6 +864,7 @@ impl UseCommands {
     async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
             UseCommands::Activate(args) => args.handle(config, flox).await,
+            UseCommands::Defaults(args) => args.handle(config, flox).await,
             UseCommands::Develop(args) => args.handle(&config, flox).await,
             UseCommands::Deactivate(args) => args.handle(config, flox),
             UseCommands::Run(args) => args.handle(config, flox).await,
@@ -860,6 +875,7 @@ impl UseCommands {
     fn subcommand_name(&self) -> &'static str {
         match self {
             UseCommands::Activate(args) => args.subcommand_name(),
+            UseCommands::Defaults(args) => args.subcommand_name(),
             UseCommands::Develop(args) => args.subcommand_name(),
             UseCommands::Deactivate(_) => "deactivate",
             UseCommands::Run(_) => "run",

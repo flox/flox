@@ -26,6 +26,7 @@ pub const RESERVED_COMMAND_NAMES: &[&str] = &[
     "delete",
     // Use
     "activate",
+    "defaults",
     "deactivate",
     "run",
     "services",
