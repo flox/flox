@@ -169,6 +169,13 @@ pub enum GitCommandError {
     InvalidUrl(#[source] url::ParseError),
     #[error("remote branch '{remote}/{branch}' does not exist")]
     MissingRemoteBranch { remote: String, branch: String },
+    /// The local history is truncated, so ancestry and revision counts
+    /// computed from it would be unreliable.
+    #[error("the repository is a shallow clone")]
+    ShallowRepository,
+    /// The remote branch tip is not among the local objects.
+    #[error("tip of remote branch '{remote}/{branch}' is not present locally")]
+    RemoteTipNotFetched { remote: String, branch: String },
 }
 
 impl GitCommandError {
@@ -339,8 +346,12 @@ pub struct GitCommandProvider {
 }
 
 impl GitCommandProvider {
-    /// Verify against a freshly fetched branch tip, deepening only if needed.
-    /// A cached remote-tracking ref cannot establish what is currently published.
+    /// Verify `rev` is contained in the branch as the remote advertises it now.
+    ///
+    /// Read-only: the tip comes from `git ls-remote` and containment is tested
+    /// against local objects, so no ref, `FETCH_HEAD` or shallow file changes.
+    /// A shallow repository and a tip that was never fetched are refused rather
+    /// than repaired, because the caller must not mutate the checkout unasked.
     pub fn rev_is_on_remote_branch(
         &self,
         rev: &str,
@@ -352,65 +363,68 @@ impl GitCommandProvider {
                 "'{branch_ref}' is not a remote branch ref"
             )));
         }
+        let branch = branch_ref.trim_start_matches("refs/heads/").to_owned();
 
-        let mut fetch = self.new_command();
-        fetch.args(["fetch", "--no-tags", "--", remote_name, branch_ref]);
-        if let Err(fetch_err) = Self::run_command(&mut fetch) {
-            let mut probe = self.new_command();
-            probe.args([
-                "ls-remote",
-                "--exit-code",
-                "--heads",
-                "--",
-                remote_name,
-                branch_ref,
-            ]);
-            if matches!(
-                Self::run_command(&mut probe),
-                Err(GitCommandError::BadExit(2, _, _))
-            ) {
-                return Err(GitCommandError::MissingRemoteBranch {
-                    remote: remote_name.to_owned(),
-                    branch: branch_ref.trim_start_matches("refs/heads/").to_owned(),
-                });
-            }
-            return Err(fetch_err);
+        let shallow = Self::run_command(
+            self.new_command()
+                .args(["rev-parse", "--is-shallow-repository"]),
+        )?;
+        if shallow.to_string_lossy().trim() == "true" {
+            return Err(GitCommandError::ShallowRepository);
         }
 
-        let mut ancestor = self.new_command();
-        ancestor.args(["merge-base", "--is-ancestor", rev, "FETCH_HEAD"]);
-        match Self::run_command(&mut ancestor) {
-            Ok(_) => Ok(true),
-            // In a depth-1 clone the requested local ancestor may itself be
-            // absent, and merge-base then exits 128 rather than 1.
-            Err(GitCommandError::BadExit(code, stdout, stderr)) if code == 1 || code == 128 => {
-                let shallow = Self::run_command(
-                    self.new_command()
-                        .args(["rev-parse", "--is-shallow-repository"]),
-                )?;
-                if shallow.to_string_lossy().trim() != "true" {
-                    return if code == 1 {
-                        Ok(false)
-                    } else {
-                        Err(GitCommandError::BadExit(code, stdout, stderr))
-                    };
-                }
-                let mut deepen = self.new_command();
-                deepen.args([
-                    "fetch",
-                    "--no-tags",
-                    "--unshallow",
-                    "--",
-                    remote_name,
-                    branch_ref,
-                ]);
-                Self::run_command(&mut deepen)?;
-                match Self::run_command(&mut ancestor) {
-                    Ok(_) => Ok(true),
-                    Err(GitCommandError::BadExit(1, _, _)) => Ok(false),
-                    Err(err) => Err(err),
-                }
+        // `ls-remote` patterns match trailing path components, so keep only
+        // the row for exactly this ref.
+        let mut ls_remote = self.new_command();
+        ls_remote.args([
+            "ls-remote",
+            "--exit-code",
+            "--heads",
+            "--",
+            remote_name,
+            branch_ref,
+        ]);
+        let advertised = match Self::run_command(&mut ls_remote) {
+            Ok(out) => out,
+            Err(GitCommandError::BadExit(2, _, _)) => {
+                return Err(GitCommandError::MissingRemoteBranch {
+                    remote: remote_name.to_owned(),
+                    branch,
+                });
             },
+            Err(err) => return Err(err),
+        };
+        let tip = advertised
+            .to_string_lossy()
+            .lines()
+            .find_map(|row| {
+                let (oid, name) = row.split_once('\t')?;
+                (name == branch_ref).then(|| oid.to_owned())
+            })
+            .ok_or_else(|| GitCommandError::MissingRemoteBranch {
+                remote: remote_name.to_owned(),
+                branch: branch.clone(),
+            })?;
+
+        let tip_present = Self::run_command(self.new_command().args([
+            "cat-file",
+            "-e",
+            &format!("{tip}^{{commit}}"),
+        ]));
+        if let Err(GitCommandError::BadExit(..)) = tip_present {
+            return Err(GitCommandError::RemoteTipNotFetched {
+                remote: remote_name.to_owned(),
+                branch,
+            });
+        }
+        tip_present?;
+
+        match Self::run_command(
+            self.new_command()
+                .args(["merge-base", "--is-ancestor", rev, &tip]),
+        ) {
+            Ok(_) => Ok(true),
+            Err(GitCommandError::BadExit(1, _, _)) => Ok(false),
             Err(err) => Err(err),
         }
     }
@@ -2189,7 +2203,7 @@ pub mod tests {
     }
 
     #[test]
-    fn verifies_containment_on_the_fetched_branch_instead_of_any_remote_ref() {
+    fn verifies_containment_on_the_advertised_branch_instead_of_any_remote_ref() {
         let (repo, _repo_dir) = init_temp_repo(false);
         let _remotes = create_remotes(&repo, &["origin"]);
         commit_file(&repo, "base");
@@ -2204,6 +2218,7 @@ pub mod tests {
         commit_file(&repo, "sibling_tip");
         let sibling = repo.status().unwrap().rev;
         repo.push_ref("origin", "sibling", false).unwrap();
+        let before = mutable_git_state(&repo);
 
         assert!(
             repo.rev_is_on_remote_branch(&base, "origin", "refs/heads/main")
@@ -2218,9 +2233,10 @@ pub mod tests {
             repo.rev_is_on_remote_branch(&sibling, "origin", "refs/heads/sibling")
                 .unwrap()
         );
+        assert_eq!(mutable_git_state(&repo), before);
 
-        // Deliberately poison the cached tracking ref: FETCH_HEAD must still
-        // identify the branch as it exists on the remote now.
+        // Deliberately poison the cached tracking ref: the tip advertised by
+        // the remote must still decide, not the cached one.
         GitCommandProvider::run_command(repo.new_command().args([
             "update-ref",
             "refs/remotes/origin/main",
@@ -2238,101 +2254,143 @@ pub mod tests {
         );
     }
 
-    #[test]
-    fn unshallows_before_testing_remote_branch_ancestry() {
-        let (repo, _repo_dir) = init_temp_repo(false);
+    /// Clone `remote_url` into a fresh directory with the given extra flags.
+    fn clone_remote(remote_url: &str, flags: &[&str]) -> (GitCommandProvider, tempfile::TempDir) {
+        let clone_dir = tempfile::tempdir().unwrap();
+        GitCommandProvider::run_command(
+            test_git_options()
+                .new_command()
+                .arg("clone")
+                .args(flags)
+                .args([
+                    "--branch",
+                    "main",
+                    remote_url,
+                    clone_dir.path().to_str().unwrap(),
+                ]),
+        )
+        .unwrap();
+        (
+            GitCommandProvider::open(clone_dir.path()).unwrap(),
+            clone_dir,
+        )
+    }
+
+    /// The Git state a read-only check must leave untouched: every ref, the
+    /// contents of `FETCH_HEAD` (if any) and of the `shallow` file (if any).
+    fn mutable_git_state(repo: &GitCommandProvider) -> (String, Option<String>, Option<String>) {
+        let refs = GitCommandProvider::run_command(
+            repo.new_command()
+                .args(["for-each-ref", "--format=%(refname) %(objectname)"]),
+        )
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+        let git_dir = repo.path().join(".git");
+        (
+            refs,
+            std::fs::read_to_string(git_dir.join("FETCH_HEAD")).ok(),
+            std::fs::read_to_string(git_dir.join("shallow")).ok(),
+        )
+    }
+
+    /// A local repository whose remote `origin` has `main` holding `base`
+    /// then `tip`. The returned guards keep the temp directories alive.
+    struct RemoteFixture {
+        origin: GitCommandProvider,
+        base: String,
+        tip: String,
+        url: String,
+        _guards: (tempfile::TempDir, RemoteMap),
+    }
+
+    fn remote_with_base_and_tip() -> RemoteFixture {
+        let (repo, repo_dir) = init_temp_repo(false);
         let remotes = create_remotes(&repo, &["origin"]);
         commit_file(&repo, "base");
         let base = repo.status().unwrap().rev;
         repo.create_branch("main", &base).unwrap();
         repo.checkout("main", false).unwrap();
         commit_file(&repo, "tip");
+        let tip = repo.status().unwrap().rev;
         repo.push_ref("origin", "main", false).unwrap();
-
-        let clone_dir = tempfile::tempdir().unwrap();
-        let remote_url = repo_local_url(&remotes.get("origin").unwrap().0);
-        GitCommandProvider::run_command(test_git_options().new_command().args([
-            "clone",
-            "--depth",
-            "1",
-            "--branch",
-            "main",
-            &remote_url,
-            clone_dir.path().to_str().unwrap(),
-        ]))
-        .unwrap();
-        let shallow = GitCommandProvider::open(clone_dir.path()).unwrap();
-        assert!(
-            shallow
-                .rev_is_on_remote_branch(&base, "origin", "refs/heads/main")
-                .unwrap()
-        );
-        assert_eq!(
-            GitCommandProvider::run_command(
-                shallow
-                    .new_command()
-                    .args(["rev-parse", "--is-shallow-repository"]),
-            )
-            .unwrap()
-            .to_string_lossy()
-            .trim(),
-            "false"
-        );
+        RemoteFixture {
+            url: get_remote_url(&remotes, "origin"),
+            origin: repo,
+            base,
+            tip,
+            _guards: (repo_dir, remotes),
+        }
     }
 
     #[test]
-    fn shallow_tip_is_accepted_without_unshallowing() {
-        let (repo, _repo_dir) = init_temp_repo(false);
-        let remotes = create_remotes(&repo, &["origin"]);
-        commit_file(&repo, "base");
-        let base = repo.status().unwrap().rev;
-        repo.create_branch("main", &base).unwrap();
-        repo.checkout("main", false).unwrap();
-        commit_file(&repo, "tip");
-        repo.push_ref("origin", "main", false).unwrap();
+    fn refuses_a_shallow_repository_and_leaves_it_shallow() {
+        let RemoteFixture { base, tip, url, .. } = &remote_with_base_and_tip();
+        let (shallow, _dir) = clone_remote(url, &["--depth", "1"]);
+        let before = mutable_git_state(&shallow);
+        assert!(before.2.is_some(), "fixture must be shallow");
 
-        let clone_dir = tempfile::tempdir().unwrap();
-        let remote_url = repo_local_url(&remotes.get("origin").unwrap().0);
-        GitCommandProvider::run_command(test_git_options().new_command().args([
-            "clone",
-            "--depth",
-            "1",
-            "--branch",
-            "main",
-            &remote_url,
-            clone_dir.path().to_str().unwrap(),
-        ]))
-        .unwrap();
-        let shallow = GitCommandProvider::open(clone_dir.path()).unwrap();
-        let tip = shallow.status().unwrap().rev;
-        assert!(
-            shallow
-                .rev_is_on_remote_branch(&tip, "origin", "refs/heads/main")
-                .unwrap()
-        );
-        assert_eq!(
-            GitCommandProvider::run_command(
-                shallow
-                    .new_command()
-                    .args(["rev-parse", "--is-shallow-repository"])
-            )
-            .unwrap()
-            .to_string_lossy()
-            .trim(),
-            "true"
-        );
+        // Both a revision inside the truncated history and one outside it.
+        for rev in [tip, base] {
+            assert!(matches!(
+                shallow.rev_is_on_remote_branch(rev, "origin", "refs/heads/main"),
+                Err(GitCommandError::ShallowRepository)
+            ));
+        }
+        assert_eq!(mutable_git_state(&shallow), before);
     }
 
     #[test]
-    fn missing_remote_branch_is_classified() {
+    fn full_clone_is_verified_without_changing_git_state() {
+        let RemoteFixture { base, tip, url, .. } = &remote_with_base_and_tip();
+        let (clone, _dir) = clone_remote(url, &[]);
+        let before = mutable_git_state(&clone);
+        // A fresh clone has no FETCH_HEAD; a fetch would create one.
+        assert_eq!(before.1, None);
+
+        assert!(
+            clone
+                .rev_is_on_remote_branch(base, "origin", "refs/heads/main")
+                .unwrap()
+        );
+        assert!(
+            clone
+                .rev_is_on_remote_branch(tip, "origin", "refs/heads/main")
+                .unwrap()
+        );
+        assert_eq!(mutable_git_state(&clone), before);
+    }
+
+    #[test]
+    fn refuses_an_advertised_tip_that_is_missing_locally() {
+        let fixture = remote_with_base_and_tip();
+        let (clone, _dir) = clone_remote(&fixture.url, &[]);
+        let local = clone.status().unwrap().rev;
+
+        // The remote advances after the clone, so its tip is not fetched here.
+        commit_file(&fixture.origin, "newer");
+        fixture.origin.push_ref("origin", "main", false).unwrap();
+        let before = mutable_git_state(&clone);
+
+        assert!(matches!(
+            clone.rev_is_on_remote_branch(&local, "origin", "refs/heads/main"),
+            Err(GitCommandError::RemoteTipNotFetched { .. })
+        ));
+        assert_eq!(mutable_git_state(&clone), before);
+    }
+
+    #[test]
+    fn deleted_remote_branch_is_classified_without_changing_git_state() {
         let (repo, _repo_dir) = init_temp_repo(false);
         let _remotes = create_remotes(&repo, &["origin"]);
         commit_file(&repo, "base");
         let rev = repo.status().unwrap().rev;
+        let before = mutable_git_state(&repo);
         assert!(matches!(
             repo.rev_is_on_remote_branch(&rev, "origin", "refs/heads/deleted"),
             Err(GitCommandError::MissingRemoteBranch { .. })
         ));
+        assert_eq!(mutable_git_state(&repo), before);
     }
 
     #[test]
