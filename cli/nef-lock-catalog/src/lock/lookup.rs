@@ -306,7 +306,7 @@ mod tests {
         assert!(lock.direct_inputs.is_empty());
         assert!(lock.locked_inputs.is_empty());
         assert_eq!(
-            crate::lock::transform::materialize_catalogs(&lock).unwrap(),
+            crate::lock::transform::build_catalog_trees(&lock).unwrap(),
             json!({})
         );
     }

@@ -41,8 +41,8 @@ pub use lock::flakeref::NixFlakeref;
 pub use lock::lookup::{LockError, lock_references};
 pub use lock::render::render_unresolvable;
 pub use lock::transform::{
+    build_catalog_trees,
     build_lock_from_locked_inputs,
-    materialize_catalogs,
     render_builder_lock,
 };
 pub use project::{

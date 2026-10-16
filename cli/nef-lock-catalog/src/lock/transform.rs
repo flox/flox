@@ -43,9 +43,9 @@ pub fn build_lock_from_locked_inputs<'d>(
     })
 }
 
-/// Derive the NEF package trees from the persisted, server-provided inputs.
-/// The same tree builder used by the original combined transform is retained.
-pub fn materialize_catalogs(lock: &BuildLock) -> Result<serde_json::Value> {
+/// Build the nested, evaluator-facing JSON catalog trees in memory from the
+/// flat locked inputs, refusing inputs whose attribute paths collide.
+pub fn build_catalog_trees(lock: &BuildLock) -> Result<serde_json::Value> {
     materialize_entries(lock.locked_inputs.iter())
 }
 
@@ -110,7 +110,7 @@ fn materialize_entries<'a>(
 /// Render the temporary builder-facing lock, including the derived catalogs.
 pub fn render_builder_lock(lock: &BuildLock) -> Result<String> {
     let mut value = serde_json::to_value(lock)?;
-    value["catalogs"] = materialize_catalogs(lock)?;
+    value["catalogs"] = build_catalog_trees(lock)?;
     Ok(format!("{}\n", serde_json::to_string_pretty(&value)?))
 }
 
@@ -353,7 +353,7 @@ mod tests {
             json!("sha256-abc123")
         );
         assert!(
-            materialize_catalogs(&lock).unwrap()["myorg"]["packages"]["entries"]["hello"]["source"]
+            build_catalog_trees(&lock).unwrap()["myorg"]["packages"]["entries"]["hello"]["source"]
                 .get("narHash")
                 .is_none()
         );
@@ -367,7 +367,7 @@ mod tests {
             }}
         }}});
         assert_eq!(
-            serde_json::to_vec(&materialize_catalogs(&lock).unwrap()).unwrap(),
+            serde_json::to_vec(&build_catalog_trees(&lock).unwrap()).unwrap(),
             serde_json::to_vec(&expected).unwrap()
         );
     }
@@ -426,7 +426,7 @@ mod tests {
             ),
         ]);
         let lock = build_lock_from_locked_inputs(locked, [&"myorg/alias-one".to_string()]).unwrap();
-        let error = materialize_catalogs(&lock).unwrap_err().to_string();
+        let error = build_catalog_trees(&lock).unwrap_err().to_string();
         assert!(error.contains("myorg/alias-one"), "{error}");
         assert!(error.contains("myorg/alias-two"), "{error}");
     }
@@ -453,7 +453,7 @@ mod tests {
             ),
         ]);
         let lock = build_lock_from_locked_inputs(locked, [&"alpha/a".to_string()]).unwrap();
-        materialize_catalogs(&lock).expect("distinct paths do not collide");
+        build_catalog_trees(&lock).expect("distinct paths do not collide");
     }
 
     #[test]
@@ -477,7 +477,7 @@ mod tests {
         let package =
             |build_type| json!({"type":"package", "build_type":build_type, "source":source});
         assert_eq!(
-            materialize_catalogs(&lock).unwrap(),
+            build_catalog_trees(&lock).unwrap(),
             json!({
                 "alpha": {"type":"floxhub", "packages":{"type":"package_set", "entries":{
                     "a":{"type":"package_set", "entries":{
@@ -517,7 +517,7 @@ mod tests {
                 leaf["deep_overrides"] = json!(paths);
             }
             assert_eq!(
-                materialize_catalogs(&lock).unwrap(),
+                build_catalog_trees(&lock).unwrap(),
                 json!({
                     "myorg": {"type": "floxhub", "packages": {
                         "type": "package_set", "entries": {"hello": leaf}

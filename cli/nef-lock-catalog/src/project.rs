@@ -27,8 +27,8 @@ use crate::{
     LockfileError,
     ScanError,
     StaleLockError,
+    build_catalog_trees,
     lock_references,
-    materialize_catalogs,
     render_unresolvable,
     scan_package,
     write_lock,
@@ -118,7 +118,8 @@ pub async fn lock_project_catalog(
 ) -> Result<BTreeSet<CatalogRef>, CatalogLockError> {
     let references = scan_references(expressions_dir, rel_file_paths)?;
     let lock = resolve_lock(client, references.clone()).await?;
-    materialize_catalogs(&lock).map_err(|error| {
+    // Validate evaluator compatibility before replacing the committed lock.
+    build_catalog_trees(&lock).map_err(|error| {
         let scanned = references
             .iter()
             .map(ToString::to_string)
