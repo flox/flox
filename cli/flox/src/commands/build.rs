@@ -377,6 +377,7 @@ impl Build {
             &flox.floxhub_client,
             env.dot_flox_path(),
             &expression_lock_rel_paths,
+            flox.retain_diagnostic_tempfiles,
         )
         .await?;
 

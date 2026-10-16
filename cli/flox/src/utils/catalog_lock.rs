@@ -23,14 +23,17 @@ use nef_lock_catalog::{
 use tracing::debug;
 
 /// The lock a build consumes, created before the package builder is
-/// invoked and handed to it as `CATALOG_LOCKFILE`. Owns an ephemeral lock's
-/// file: dropping the guard removes it.
+/// invoked and handed to it as `CATALOG_LOCKFILE`. Owns the builder-facing
+/// file: dropping the guard removes it, unless diagnostic retention asked
+/// for it to be kept.
 #[derive(Debug)]
 pub struct BuildLockGuard {
     path: PathBuf,
     lock: BuildLock,
     /// Keeps the builder-facing file alive for the build.
-    _ephemeral: tempfile::TempPath,
+    ephemeral: Option<tempfile::TempPath>,
+    /// Leave the builder-facing file in place on drop, with its path logged.
+    retain: bool,
     committed: bool,
 }
 
@@ -42,21 +45,24 @@ impl BuildLockGuard {
         client: &impl CatalogClientTrait,
         dot_flox_path: impl AsRef<Path>,
         rel_file_paths: &[PathBuf],
+        retain: bool,
     ) -> Result<Option<BuildLockGuard>> {
         if rel_file_paths.is_empty() {
             return Ok(None);
         }
-        Self::new_existing_or_ephemeral(client, dot_flox_path, rel_file_paths)
+        Self::new_existing_or_ephemeral(client, dot_flox_path, rel_file_paths, retain)
             .await
             .map(Some)
     }
 
     /// Read the committed lock if present; otherwise resolve the scanned
-    /// references. Always materialize a temporary builder-facing file.
+    /// references. Always materialize a temporary builder-facing file,
+    /// which outlives the guard when `retain` is set.
     pub async fn new_existing_or_ephemeral(
         client: &impl CatalogClientTrait,
         dot_flox_path: impl AsRef<Path>,
         rel_file_paths: impl IntoIterator<Item = impl AsRef<Path>>,
+        retain: bool,
     ) -> Result<BuildLockGuard> {
         let dot_flox_path = dot_flox_path.as_ref();
         let committed = catalog_lockfile_path(dot_flox_path);
@@ -74,7 +80,7 @@ impl BuildLockGuard {
         // assumption the makefile's own PROJECT_TMPDIR (`$(TMPDIR)/<hash>`)
         // already makes. This deliberately sits outside flox's centralized
         // per-process temp cleanup; the guard's drop removes the file
-        // instead.
+        // instead, or keeps it when diagnostic retention is enabled.
         let temp_path = tempfile::Builder::new()
             .prefix("flox-catalog.lock.")
             .tempfile()
@@ -86,7 +92,8 @@ impl BuildLockGuard {
         Ok(BuildLockGuard {
             path: temp_path.to_path_buf(),
             lock,
-            _ephemeral: temp_path,
+            ephemeral: Some(temp_path),
+            retain,
             committed: is_existing,
         })
     }
@@ -108,6 +115,23 @@ impl BuildLockGuard {
     }
 }
 
+impl Drop for BuildLockGuard {
+    fn drop(&mut self) {
+        if !self.retain {
+            return;
+        }
+        let Some(ephemeral) = self.ephemeral.take() else {
+            return;
+        };
+        match ephemeral.keep() {
+            Ok(path) => {
+                debug!(path = %path.display(), "leaving materialized catalog lock in place")
+            },
+            Err(err) => debug!(%err, "could not keep materialized catalog lock"),
+        }
+    }
+}
+
 #[cfg(test)]
 pub mod test_helpers {
     use super::*;
@@ -123,9 +147,12 @@ pub mod test_helpers {
         BuildLockGuard {
             path: path.into(),
             lock,
-            _ephemeral: tempfile::NamedTempFile::new()
-                .expect("temp file for test lock")
-                .into_temp_path(),
+            ephemeral: Some(
+                tempfile::NamedTempFile::new()
+                    .expect("temp file for test lock")
+                    .into_temp_path(),
+            ),
+            retain: false,
             committed,
         }
     }
@@ -203,9 +230,10 @@ mod tests {
     async fn no_references_resolve_without_a_catalog_request() {
         let (_project, dot_flox, _pkgs_dir) =
             project_with_expression("{ runCommand }: runCommand \"hello\" { } \"\"");
-        let lock = BuildLockGuard::new_existing_or_ephemeral(&new_noop(), &dot_flox, ["hello.nix"])
-            .await
-            .unwrap();
+        let lock =
+            BuildLockGuard::new_existing_or_ephemeral(&new_noop(), &dot_flox, ["hello.nix"], false)
+                .await
+                .unwrap();
 
         assert!(!lock.is_existing());
         assert!(
@@ -228,9 +256,10 @@ mod tests {
         let (_project, dot_flox, pkgs_dir) =
             project_with_expression("{ catalogs }: catalogs.myorg.hello");
         std::fs::write(catalog_lockfile_path(&dot_flox), COMMITTED_LOCK).unwrap();
-        let lock = BuildLockGuard::new_existing_or_ephemeral(&new_noop(), &dot_flox, ["hello.nix"])
-            .await
-            .unwrap();
+        let lock =
+            BuildLockGuard::new_existing_or_ephemeral(&new_noop(), &dot_flox, ["hello.nix"], false)
+                .await
+                .unwrap();
 
         assert!(lock.is_existing());
         assert_ne!(lock.path(), catalog_lockfile_path(&dot_flox));
@@ -263,9 +292,10 @@ mod tests {
         let (_project, dot_flox, pkgs_dir) =
             project_with_expression("{ catalogs }: catalogs.nixpkgs.writeText \"base\" \"hello\"");
         std::fs::write(catalog_lockfile_path(&dot_flox), COMMITTED_LOCK).unwrap();
-        let lock = BuildLockGuard::new_existing_or_ephemeral(&new_noop(), &dot_flox, ["hello.nix"])
-            .await
-            .unwrap();
+        let lock =
+            BuildLockGuard::new_existing_or_ephemeral(&new_noop(), &dot_flox, ["hello.nix"], false)
+                .await
+                .unwrap();
         let references = scan_package(&pkgs_dir, "hello.nix").unwrap();
         let closure = lock.build_lock().project_package(&references).unwrap();
 
@@ -290,9 +320,10 @@ mod tests {
             project_with_expression("{ catalogs }: catalogs.myorg.hello");
         std::fs::write(catalog_lockfile_path(&dot_flox), COMMITTED_V1_LOCK).unwrap();
 
-        let err = BuildLockGuard::new_existing_or_ephemeral(&new_noop(), &dot_flox, ["hello.nix"])
-            .await
-            .expect_err("a v1 lock must be refused, not read as v2");
+        let err =
+            BuildLockGuard::new_existing_or_ephemeral(&new_noop(), &dot_flox, ["hello.nix"], false)
+                .await
+                .expect_err("a v1 lock must be refused, not read as v2");
         let message = format!("{err:#}");
         assert!(
             message.contains(nef_lock_catalog::UPDATE_CATALOGS_COMMAND),
@@ -308,9 +339,10 @@ mod tests {
         let (_project, dot_flox, pkgs_dir) =
             project_with_expression("{ catalogs }: catalogs.myorg.world");
         std::fs::write(catalog_lockfile_path(&dot_flox), COMMITTED_LOCK).unwrap();
-        let lock = BuildLockGuard::new_existing_or_ephemeral(&new_noop(), &dot_flox, ["hello.nix"])
-            .await
-            .unwrap();
+        let lock =
+            BuildLockGuard::new_existing_or_ephemeral(&new_noop(), &dot_flox, ["hello.nix"], false)
+                .await
+                .unwrap();
         assert!(lock.is_existing());
 
         let references = scan_package(&pkgs_dir, "hello.nix").unwrap();
@@ -334,7 +366,7 @@ mod tests {
         let lock_path = catalog_lockfile_path(&dot_flox);
         for unused in [COMMITTED_V1_LOCK, "not json"] {
             std::fs::write(&lock_path, unused).unwrap();
-            let lock = BuildLockGuard::for_expression_builds(&new_noop(), &dot_flox, &[])
+            let lock = BuildLockGuard::for_expression_builds(&new_noop(), &dot_flox, &[], false)
                 .await
                 .unwrap();
             assert!(lock.is_none());
@@ -349,11 +381,46 @@ mod tests {
         let (_project, dot_flox, _pkgs_dir) =
             project_with_expression("{ catalogs }: catalogs.myorg.hello");
         std::fs::write(catalog_lockfile_path(&dot_flox), COMMITTED_V1_LOCK).unwrap();
-        let err = BuildLockGuard::for_expression_builds(&new_noop(), &dot_flox, &[PathBuf::from(
-            "hello.nix",
-        )])
+        let err = BuildLockGuard::for_expression_builds(
+            &new_noop(),
+            &dot_flox,
+            &[PathBuf::from("hello.nix")],
+            false,
+        )
         .await
         .expect_err("a v1 lock must be refused where expressions read it");
         assert!(format!("{err:#}").contains(nef_lock_catalog::UPDATE_CATALOGS_COMMAND));
+    }
+
+    /// With retention the builder file survives the guard with its content
+    /// intact, and the committed lock is untouched; without it the file goes.
+    #[tokio::test]
+    async fn retention_keeps_the_builder_file_past_the_guard() {
+        let (_project, dot_flox, _pkgs_dir) =
+            project_with_expression("{ catalogs }: catalogs.myorg.hello");
+        std::fs::write(catalog_lockfile_path(&dot_flox), COMMITTED_LOCK).unwrap();
+        for retain in [false, true] {
+            let lock = BuildLockGuard::new_existing_or_ephemeral(
+                &new_noop(),
+                &dot_flox,
+                ["hello.nix"],
+                retain,
+            )
+            .await
+            .unwrap();
+            let builder_path = lock.path().to_path_buf();
+            let builder_content = std::fs::read(&builder_path).unwrap();
+            drop(lock);
+
+            assert_eq!(builder_path.exists(), retain);
+            if retain {
+                assert_eq!(std::fs::read(&builder_path).unwrap(), builder_content);
+                std::fs::remove_file(&builder_path).unwrap();
+            }
+            assert_eq!(
+                std::fs::read_to_string(catalog_lockfile_path(&dot_flox)).unwrap(),
+                COMMITTED_LOCK
+            );
+        }
     }
 }

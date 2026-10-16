@@ -155,11 +155,13 @@ impl Develop {
                 unreachable!("manifest builds are refused before the eval")
             },
         };
-        let catalog_lock =
-            BuildLockGuard::new_existing_or_ephemeral(&flox.floxhub_client, env.dot_flox_path(), [
-                &rel_file_path,
-            ])
-            .await?;
+        let catalog_lock = BuildLockGuard::new_existing_or_ephemeral(
+            &flox.floxhub_client,
+            env.dot_flox_path(),
+            [&rel_file_path],
+            flox.retain_diagnostic_tempfiles,
+        )
+        .await?;
 
         let expression_nixpkgs =
             base_nixpkgs_url_from_url_select(&flox, base_catalog_url_select).await?;

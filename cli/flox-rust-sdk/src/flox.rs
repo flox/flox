@@ -67,6 +67,10 @@ pub struct Flox {
 
     pub verbosity: i32,
 
+    /// Whether temporary files that aid diagnosis outlive the command.
+    /// Set from `keep_tempdir` together with debug or verbose logging.
+    pub retain_diagnostic_tempfiles: bool,
+
     /// Device UUID for telemetry correlation.
     /// None when metrics are disabled.
     pub metrics_device_uuid: Option<Uuid>,
@@ -252,6 +256,7 @@ pub mod test_helpers {
             installable_locker: InstallableLockerImpl::Mock(InstallableLockerMock::new()),
             features: Default::default(),
             verbosity: 0,
+            retain_diagnostic_tempfiles: false,
             metrics_device_uuid: None,
         };
 
