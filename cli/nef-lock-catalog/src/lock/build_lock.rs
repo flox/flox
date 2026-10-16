@@ -3,6 +3,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use flox_core::{Version, WriteError, write_atomically};
+use floxhub_client::{
+    BuildType as ApiBuildType,
+    LockedGitSource as ApiLockedGitSource,
+    LockedInputEntry as ApiLockedInputEntry,
+};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, instrument};
 
@@ -44,8 +49,8 @@ pub struct GitSource {
     pub extra: BTreeMap<String, serde_json::Value>,
 }
 
-impl From<floxhub_client::LockedGitSource> for GitSource {
-    fn from(value: floxhub_client::LockedGitSource) -> Self {
+impl From<ApiLockedGitSource> for GitSource {
+    fn from(value: ApiLockedGitSource) -> Self {
         Self {
             dir: value.dir,
             ref_: value.ref_,
@@ -57,7 +62,7 @@ impl From<floxhub_client::LockedGitSource> for GitSource {
     }
 }
 
-impl From<&GitSource> for floxhub_client::LockedGitSource {
+impl From<&GitSource> for ApiLockedGitSource {
     fn from(value: &GitSource) -> Self {
         Self {
             dir: value.dir.clone(),
@@ -79,16 +84,16 @@ pub enum BuildType {
     Nef,
 }
 
-impl From<floxhub_client::BuildType> for BuildType {
-    fn from(value: floxhub_client::BuildType) -> Self {
+impl From<ApiBuildType> for BuildType {
+    fn from(value: ApiBuildType) -> Self {
         match value {
-            floxhub_client::BuildType::Manifest => Self::Manifest,
-            floxhub_client::BuildType::Nef => Self::Nef,
+            ApiBuildType::Manifest => Self::Manifest,
+            ApiBuildType::Nef => Self::Nef,
         }
     }
 }
 
-impl From<BuildType> for floxhub_client::BuildType {
+impl From<BuildType> for ApiBuildType {
     fn from(value: BuildType) -> Self {
         match value {
             BuildType::Manifest => Self::Manifest,
@@ -119,8 +124,8 @@ pub struct LockedInput {
     pub source: GitSource,
 }
 
-impl From<floxhub_client::LockedInputEntry> for LockedInput {
-    fn from(entry: floxhub_client::LockedInputEntry) -> Self {
+impl From<ApiLockedInputEntry> for LockedInput {
+    fn from(entry: ApiLockedInputEntry) -> Self {
         Self {
             attr_path: entry.attr_path,
             build_type: entry.build_type.into(),
@@ -135,7 +140,7 @@ impl From<floxhub_client::LockedInputEntry> for LockedInput {
     }
 }
 
-impl From<&LockedInput> for floxhub_client::LockedInputEntry {
+impl From<&LockedInput> for ApiLockedInputEntry {
     fn from(value: &LockedInput) -> Self {
         Self {
             attr_path: value.attr_path.clone(),
@@ -273,7 +278,7 @@ pub struct PackageClosure {
     /// Empty for a leaf or manifest build with no catalog roots.
     pub direct_inputs: Vec<String>,
     /// Reachable entries, keyed canonically; shared children appear once.
-    pub locked_inputs: BTreeMap<String, floxhub_client::LockedInputEntry>,
+    pub locked_inputs: BTreeMap<String, ApiLockedInputEntry>,
 }
 
 impl BuildLock {
@@ -303,7 +308,7 @@ impl BuildLock {
         }
         let roots = select_roots(&candidates, references)?;
 
-        let mut closure: BTreeMap<String, floxhub_client::LockedInputEntry> = BTreeMap::new();
+        let mut closure: BTreeMap<String, ApiLockedInputEntry> = BTreeMap::new();
         let mut done: BTreeSet<String> = BTreeSet::new();
 
         for root in &roots {
@@ -570,7 +575,7 @@ mod tests {
         assert_eq!(closure.direct_inputs, vec!["myorg/hello".to_string()]);
         assert_eq!(
             closure.locked_inputs["myorg/hello"],
-            floxhub_client::LockedInputEntry::from(&lock.locked_inputs["myorg/hello"])
+            LockedInputEntry::from(&lock.locked_inputs["myorg/hello"])
         );
     }
 
@@ -1002,7 +1007,7 @@ mod tests {
             let restored = read_lock(&path).unwrap();
             assert_eq!(restored.locked_inputs, lock.locked_inputs);
             assert_eq!(
-                floxhub_client::LockedInputEntry::from(&restored.locked_inputs["myorg/hello"]),
+                LockedInputEntry::from(&restored.locked_inputs["myorg/hello"]),
                 input,
             );
         }

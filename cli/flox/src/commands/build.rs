@@ -33,8 +33,6 @@ use flox_rust_sdk::utils::{CommandExt, FLOX_INTERPRETER};
 use floxhub_client::{BaseCatalogUrl, CatalogClientTrait, FloxhubClientError};
 use indoc::formatdoc;
 use itertools::Itertools;
-/// Share the relock command with the crate that reports legacy locks.
-pub(crate) use nef_lock_catalog::UPDATE_CATALOGS_COMMAND;
 use nef_lock_catalog::{NixFlakeref, catalog_lockfile_path, lock_project_catalog};
 use thiserror::Error;
 use tracing::{debug, instrument, trace};
@@ -128,7 +126,7 @@ enum SubcommandOrBuildTargets {
     /// locks them to '.flox/catalog.lock', the single set of pinned catalog
     /// inputs every build of the project evaluates against.
     //
-    // NAMING: provisional; see the note at [UPDATE_CATALOGS_COMMAND] before
+    // NAMING: provisional; see the note at [nef_lock_catalog::UPDATE_CATALOGS_COMMAND] before
     // renaming.
     #[bpaf(
         command,

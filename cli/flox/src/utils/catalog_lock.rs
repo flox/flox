@@ -161,7 +161,7 @@ pub mod test_helpers {
 #[cfg(test)]
 mod tests {
     use floxhub_client::client::test_helpers::new_noop;
-    use nef_lock_catalog::scan_package;
+    use nef_lock_catalog::{UPDATE_CATALOGS_COMMAND, scan_package};
     use tempfile::tempdir;
 
     use super::*;
@@ -326,7 +326,7 @@ mod tests {
                 .expect_err("a v1 lock must be refused, not read as v2");
         let message = format!("{err:#}");
         assert!(
-            message.contains(nef_lock_catalog::UPDATE_CATALOGS_COMMAND),
+            message.contains(UPDATE_CATALOGS_COMMAND),
             "the refusal must name the relock command, got: {message}"
         );
     }
@@ -389,7 +389,7 @@ mod tests {
         )
         .await
         .expect_err("a v1 lock must be refused where expressions read it");
-        assert!(format!("{err:#}").contains(nef_lock_catalog::UPDATE_CATALOGS_COMMAND));
+        assert!(format!("{err:#}").contains(UPDATE_CATALOGS_COMMAND));
     }
 
     /// With retention the builder file survives the guard with its content

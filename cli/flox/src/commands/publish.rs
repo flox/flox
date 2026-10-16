@@ -35,7 +35,13 @@ use floxhub_client::{
     SourceLineageChange,
 };
 use indoc::formatdoc;
-use nef_lock_catalog::{CatalogRef, NixFlakeref, PackageClosure, scan_package};
+use nef_lock_catalog::{
+    CatalogRef,
+    NixFlakeref,
+    PackageClosure,
+    UPDATE_CATALOGS_COMMAND,
+    scan_package,
+};
 use tracing::{debug, info_span, instrument, warn};
 
 use super::{DirEnvironmentSelect, dir_environment_select};
@@ -43,7 +49,6 @@ use crate::commands::build::{
     BaseCatalogUrlSelect,
     SystemOverride,
     TargetChoice,
-    UPDATE_CATALOGS_COMMAND,
     base_catalog_url_select,
     base_nixpkgs_url_from_url_select,
     check_git_tracking_for_expression_builds,
