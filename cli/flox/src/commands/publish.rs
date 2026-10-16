@@ -501,6 +501,7 @@ impl Publish {
             &flox.floxhub_client,
             path_env.dot_flox_path(),
             &lock_rel_paths,
+            flox.retain_diagnostic_tempfiles,
         )
         .await?;
 
