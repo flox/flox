@@ -980,19 +980,19 @@ EOF
   # First activation should generate the .zcompdump file.
   FLOX_SHELL="zsh" run "$FLOX_BIN" activate -v -c 'stat "$FLOX_ENV_CACHE/.zcompdump"'
   assert_success
-  assert_output --partial "No existing compdump file found, regenerating"
+  assert_output --partial "No existing dump file found"
 
   # Repeat activation should not regenerate the .zcompdump file.
   FLOX_SHELL="zsh" run "$FLOX_BIN" activate -v -c 'stat "$FLOX_ENV_CACHE/.zcompdump"'
   assert_success
-  refute_output --partial "regenerating"
+  refute_output --partial "Regenerating dump file"
 
   # New packages that contain completions should regenerate the .zcompdump file.
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/fd.yaml" \
     "$FLOX_BIN" install fd
   FLOX_SHELL="zsh" run "$FLOX_BIN" activate -v -c 'stat "$FLOX_ENV_CACHE/.zcompdump"'
   assert_success
-  assert_output --partial "Loading dump file skipped, regenerating"
+  assert_output --partial "Loading dump file skipped"
 }
 
 # bats test_tags=activate,activate:rc:zsh

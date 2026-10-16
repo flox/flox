@@ -103,7 +103,7 @@ pub(crate) mod test_helpers {
     use flox_core::activate::vars::FLOX_ACTIVE_ENVIRONMENTS_VAR;
     use shell_gen::ShellWithPath;
 
-    use super::{DeactivateCtx, StartupCtx};
+    use super::{DeactivateCtx, RM, StartupCtx};
     use crate::attach::{startup_ctx, write_to_writer};
     use crate::attach_diff::diff_serializer::{DiffSerializer, FLOX_HOOK_DIFF_VAR};
     use crate::env_trace::EnvTrace;
@@ -314,8 +314,10 @@ pub(crate) mod test_helpers {
 
         // flox-activations could be cargo compiled rather than a /nix/store path
         let flox_activations_bin = FLOX_ACTIVATIONS_BIN.display().to_string();
-        let mut normalized =
-            String::from_utf8_lossy(&buf).replace(&flox_activations_bin, "/flox_activations");
+        // and the coreutils store path changes with every nixpkgs bump
+        let mut normalized = String::from_utf8_lossy(&buf)
+            .replace(&flox_activations_bin, "/flox_activations")
+            .replace(RM, "/coreutils/bin/rm");
 
         // Vibed but seems to be working
         // Replace store path hashes

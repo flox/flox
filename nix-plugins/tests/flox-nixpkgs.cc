@@ -65,6 +65,28 @@ test_inputFromAttrs( nix::ref<nix::EvalState> & state )
 
 /* -------------------------------------------------------------------------- */
 
+/**
+ * @brief Test an enterprise `host' round-trips through parse and serialize, so
+ *        a realm's on-premise nixpkgs host is carried through the proxy.
+ */
+bool
+test_URLRoundtripWithHost( nix::ref<nix::EvalState> & state )
+{
+  WrappedNixpkgsInputScheme inputScheme;
+  auto url = "flox-nixpkgs:v0/flox/" + nixpkgsRev + "?host=github.company.com";
+  auto input = inputScheme.inputFromURL( state->fetchSettings,
+                                         nix::parseURL( url ),
+                                         true );
+  EXPECT( input.has_value() );
+  EXPECT_EQ( nix::fetchers::getStrAttr( input->attrs, "host" ),
+             "github.company.com" );
+  EXPECT_EQ( inputScheme.toURL( *input ).to_string(), url );
+  return true;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
 bool
 test_lockedFromUrl( nix::ref<nix::EvalState> & state )
 {
@@ -74,7 +96,8 @@ test_lockedFromUrl( nix::ref<nix::EvalState> & state )
                                          nix::parseURL( url ),
                                          true );
   nix::fetchers::Attrs attrs
-    = inputScheme.getAccessor( state->store, *input ).second.toAttrs();
+    = inputScheme.getAccessor( state->fetchSettings, *state->store, *input )
+        .second.toAttrs();
   auto owner      = nix::fetchers::getStrAttr( attrs, "owner" );
   auto flake_type = nix::fetchers::getStrAttr( attrs, "type" );
   auto rev        = nix::fetchers::getStrAttr( attrs, "rev" );
@@ -104,7 +127,9 @@ test_lockedRepresentation( nix::ref<nix::EvalState> & state )
   auto                      url = "flox-nixpkgs:v0/NixOS/" + nixpkgsRev;
   auto input = inputScheme.inputFromAttrs( state->fetchSettings, attrs );
   EXPECT( input.has_value() );
-  auto locked = inputScheme.getAccessor( state->store, *input ).second;
+  auto locked
+    = inputScheme.getAccessor( state->fetchSettings, *state->store, *input )
+        .second;
   EXPECT( locked.toAttrs() == attrs );
   return true;
 }
@@ -129,6 +154,7 @@ main()
                                               nix::evalSettings );
 
   RUN_TEST( URLRoundtrip, state );
+  RUN_TEST( URLRoundtripWithHost, state );
   RUN_TEST( inputFromAttrs, state );
   RUN_TEST( lockedFromUrl, state );
   RUN_TEST( lockedRepresentation, state );

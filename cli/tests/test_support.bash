@@ -207,6 +207,10 @@ user_dotfiles_setup() {
 
   # Allow predictable output from interactive tests that use expect.
   export KNOWN_PROMPT="myprompt> "
+  # fish >= 4.1 queries the terminal at startup and waits for the reply before
+  # showing a prompt. expect's pty never answers, and the wait grew to 10s in
+  # 4.9, past the expect timeouts, so turn the queries off.
+  export fish_features="no-query-term"
   # This isn't honoured by zsh or fish.
   cat >"${HOME}/.inputrc" <<EOF
 set enable-bracketed-paste off

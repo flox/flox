@@ -15,6 +15,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <ranges>
 #include <regex>
 #include <string>
 #include <string_view>
@@ -28,7 +29,6 @@
 #include <nix/fetchers/fetch-settings.hh>
 #include <nix/fetchers/fetchers.hh>
 #include <nix/fetchers/git-utils.hh>
-#include <nix/fetchers/store-path-accessor.hh>
 #include <nix/flake/flake.hh>
 #include <nix/flake/flakeref.hh>
 #include <nix/flake/lockfile.hh>
@@ -145,18 +145,38 @@ createWrappedFlakeDir( nix::EvalState &      state,
 
 
 /**
- * @brief Helper used to convert a `flox-nixpkgs` attribute set representation,
- *        to a `github` attribute set representation.
+ * @brief Convert a `flox-nixpkgs` attribute set to the underlying fetcher's
+ *        attribute set — `github` for github.com, `git` for any other host.
+ *
+ * github.com keeps the fast GitHub tarball fetcher. A non-github.com host
+ * (an on-premise GitHub Enterprise realm) is fetched over `git+https` instead:
+ * the GitHub REST tarball API authenticates only with access tokens, whereas
+ * git-over-https negotiates Kerberos/SPNEGO — which is how an enterprise host
+ * behind Kerberos is reached. This also matches the CLI's resolve prefetch,
+ * which already fetches the same rev over git, so it reuses Nix's git cache.
  */
 static nix::fetchers::Attrs
-floxNixpkgsAttrsToGithubAttrs( const nix::fetchers::Attrs & attrs )
+floxNixpkgsAttrsToFetcherAttrs( const nix::fetchers::Attrs & attrs )
 {
-  nix::fetchers::Attrs _attrs;
-  _attrs["type"] = "github";
-  _attrs["repo"] = "nixpkgs";
+  auto owner = nix::fetchers::getStrAttr( attrs, "owner" );
+  auto host  = nix::fetchers::maybeGetStrAttr( attrs, "host" );
 
-  /* Inherit owner field (could be NixOS or flox) */
-  _attrs["owner"] = nix::fetchers::getStrAttr( attrs, "owner" );
+  nix::fetchers::Attrs _attrs;
+
+  if ( host.has_value() && ( *host != "github.com" ) )
+    {
+      /* Enterprise host: fetch over git so the transport can do Kerberos. */
+      _attrs["type"]    = "git";
+      _attrs["url"]     = "https://" + *host + "/" + owner + "/nixpkgs";
+      _attrs["shallow"] = nix::Explicit<bool> { true };
+    }
+  else
+    {
+      /* Public github.com: keep the faster GitHub tarball fetcher. */
+      _attrs["type"]  = "github";
+      _attrs["repo"]  = "nixpkgs";
+      _attrs["owner"] = owner;
+    }
 
   /* Inherit `rev' and `ref' fields */
   if ( auto rev = nix::fetchers::maybeGetStrAttr( attrs, "rev" ) )
@@ -181,7 +201,7 @@ floxNixpkgsAttrsToGithubAttrs( const nix::fetchers::Attrs & attrs )
 /**
  * @brief Helper used to convert a `github` attribute set representation,
  *        to a `flox-nixpkgs` attribute set representation.
- * @note This is the inverse of `floxNixpkgsAttrsToGithubAttrs`.
+ * @note Inverse of the github branch of `floxNixpkgsAttrsToFetcherAttrs`.
  * @param attrs The attribute set representation of an (assumed) `github` input.
  * @return The attribute set representation of a `flox-nixpkgs` input.
  * @throws nix::Error If the input type is not `github`.
@@ -225,6 +245,12 @@ githubAttrsToFloxNixpkgsAttrs( const nix::fetchers::Attrs & attrs )
   /* Inherit `owner' field */
   _attrs["owner"] = owner;
 
+  /* Inherit an enterprise `host' if present (github.com when absent). */
+  if ( auto host = nix::fetchers::maybeGetStrAttr( attrs, "host" ) )
+    {
+      _attrs["host"] = *host;
+    }
+
   /* Inherit `rev' and `ref' fields */
   if ( auto rev = nix::fetchers::maybeGetStrAttr( attrs, "rev" ) )
     {
@@ -248,19 +274,20 @@ githubAttrsToFloxNixpkgsAttrs( const nix::fetchers::Attrs & attrs )
 
 std::optional<nix::fetchers::Input>
 WrappedNixpkgsInputScheme::inputFromAttrs(
-  const nix::fetchers::Settings & settings,
-  const nix::fetchers::Attrs &    attrs ) const
+  const nix::fetchers::Settings & /* settings */,
+  const nix::fetchers::Attrs & attrs ) const
 {
   if ( nix::fetchers::maybeGetStrAttr( attrs, "type" ) != "flox-nixpkgs" )
     {
       return std::nullopt;
     }
 
+  /* `Input::fromAttrs` already rejects attributes outside `allowedAttrs()`,
+   * but callers may reach this method directly, so check here as well. */
+  const auto & allowed = this->allowedAttrs();
   for ( const auto & [name, value] : attrs )
     {
-      if ( ( name != "owner" ) && ( name != "type" ) && ( name != "ref" )
-           && ( name != "rev" ) && ( name != "narHash" )
-           && ( name != "version" ) )
+      if ( ( name != "type" ) && ( ! allowed.contains( name ) ) )
         {
           throw nix::Error( "unsupported flox-nixpkgs input attribute '%s'",
                             name );
@@ -289,7 +316,7 @@ WrappedNixpkgsInputScheme::inputFromAttrs(
         }
     }
 
-  nix::fetchers::Input input( settings );
+  nix::fetchers::Input input;
   input.attrs = attrs;
   return input;
 }
@@ -303,19 +330,20 @@ WrappedNixpkgsInputScheme::inputFromAttrs(
  */
 std::optional<nix::fetchers::Input>
 WrappedNixpkgsInputScheme::inputFromURL(
-  const nix::fetchers::Settings & settings,
-  const nix::ParsedURL &          url,
+  const nix::fetchers::Settings & /* settings */,
+  const nix::ParsedURL & url,
   bool /* requireTree */
 ) const
 {
 
   if ( url.scheme != this->schemeName() ) { return std::nullopt; }
 
-  nix::fetchers::Input input( settings );
+  nix::fetchers::Input input;
 
   input.attrs.insert_or_assign( "type", std::string( this->schemeName() ) );
 
-  auto path = nix::tokenizeString<std::vector<std::string>>( url.path, "/" );
+  auto path = url.pathSegments( /* skipEmpty */ true )
+              | std::ranges::to<std::vector<std::string>>();
 
   if ( path.size() != 3 )
     {
@@ -384,6 +412,13 @@ WrappedNixpkgsInputScheme::inputFromURL(
         path[1] );
     }
 
+  /* Optional enterprise `host' (e.g. `?host=github.company.com'); defaults to
+   * github.com in the github fetcher when absent. */
+  if ( auto it = url.query.find( "host" ); it != url.query.end() )
+    {
+      input.attrs.insert_or_assign( "host", it->second );
+    }
+
   return input;
 }
 
@@ -398,7 +433,7 @@ WrappedNixpkgsInputScheme::toURL( const nix::fetchers::Input & input ) const
 
   if ( auto version = nix::fetchers::maybeGetIntAttr( input.attrs, "version" ) )
     {
-      url.path = "v" + std::to_string( *version );
+      url.path.push_back( "v" + std::to_string( *version ) );
     }
   else
     {
@@ -406,7 +441,7 @@ WrappedNixpkgsInputScheme::toURL( const nix::fetchers::Input & input ) const
     }
   if ( auto owner = nix::fetchers::maybeGetStrAttr( input.attrs, "owner" ) )
     {
-      url.path += "/" + *owner;
+      url.path.push_back( *owner );
     }
   else
     {
@@ -414,18 +449,42 @@ WrappedNixpkgsInputScheme::toURL( const nix::fetchers::Input & input ) const
     }
   if ( auto rev = nix::fetchers::maybeGetStrAttr( input.attrs, "rev" ) )
     {
-      url.path += "/" + *rev;
+      url.path.push_back( *rev );
     }
   else if ( auto ref = nix::fetchers::maybeGetStrAttr( input.attrs, "ref" ) )
     {
-      url.path += "/" + *ref;
+      url.path.push_back( *ref );
     }
   else
     {
       throw nix::Error( "missing 'rev' or 'ref' attribute in input" );
     }
 
+  /* Round-trip an enterprise `host' as a query attribute. */
+  if ( auto host = nix::fetchers::maybeGetStrAttr( input.attrs, "host" ) )
+    {
+      url.query.insert_or_assign( "host", *host );
+    }
+
   return url;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+const std::map<std::string, nix::fetchers::InputScheme::AttributeInfo> &
+WrappedNixpkgsInputScheme::allowedAttrs() const
+{
+  static const std::map<std::string, nix::fetchers::InputScheme::AttributeInfo>
+    attrs = {
+      { "version", { .type = "Integer", .required = false } },
+      { "owner", {} },
+      { "rev", { .required = false } },
+      { "ref", { .required = false } },
+      { "narHash", { .required = false } },
+      { "host", { .required = false } },
+    };
+  return attrs;
 }
 
 
@@ -437,7 +496,9 @@ WrappedNixpkgsInputScheme::toURL( const nix::fetchers::Input & input ) const
  * identify its contents.
  */
 bool
-WrappedNixpkgsInputScheme::isLocked( const nix::fetchers::Input & input ) const
+WrappedNixpkgsInputScheme::isLocked(
+  const nix::fetchers::Settings & /* settings */,
+  const nix::fetchers::Input & input ) const
 {
   return nix::fetchers::maybeGetStrAttr( input.attrs, "rev" ).has_value()
          && nix::fetchers::maybeGetIntAttr( input.attrs, "version" )
@@ -481,14 +542,15 @@ WrappedNixpkgsInputScheme::applyOverrides( const nix::fetchers::Input & _input,
 
 /** @brief Clones the repository for analysis, but does not modify/patch it. */
 void
-WrappedNixpkgsInputScheme::clone( const nix::fetchers::Input & input,
-
-                                  const nix::Path & destDir ) const
+WrappedNixpkgsInputScheme::clone( const nix::fetchers::Settings & settings,
+                                  nix::Store &                    store,
+                                  const nix::fetchers::Input &    input,
+                                  const std::filesystem::path & destDir ) const
 {
   auto githubInput = nix::fetchers::Input::fromAttrs(
-    *input.settings,
-    floxNixpkgsAttrsToGithubAttrs( input.attrs ) );
-  githubInput.clone( destDir );
+    settings,
+    floxNixpkgsAttrsToFetcherAttrs( input.attrs ) );
+  githubInput.clone( settings, store, destDir );
 }
 
 
@@ -496,8 +558,9 @@ WrappedNixpkgsInputScheme::clone( const nix::fetchers::Input & input,
 
 std::pair<nix::ref<nix::SourceAccessor>, nix::fetchers::Input>
 WrappedNixpkgsInputScheme::getAccessor(
-  nix::ref<nix::Store>         store,
-  const nix::fetchers::Input & _input ) const
+  const nix::fetchers::Settings & settings,
+  nix::Store &                    store,
+  const nix::fetchers::Input &    _input ) const
 {
   nix::fetchers::Input input( _input );
 
@@ -520,9 +583,9 @@ WrappedNixpkgsInputScheme::getAccessor(
     {
       /* Use existing GitHub fetcher in `nix' to lookup `rev'. */
       auto githubInput = nix::fetchers::Input::fromAttrs(
-        *input.settings,
-        floxNixpkgsAttrsToGithubAttrs( input.attrs ) );
-      rev = githubInput.getAccessor( store ).second.getRev();
+        settings,
+        floxNixpkgsAttrsToFetcherAttrs( input.attrs ) );
+      rev = githubInput.getAccessor( settings, store ).second.getRev();
     }
   /* Now that we have a `rev' we can drop the `ref' field. */
   input.attrs.erase( "ref" );
@@ -535,31 +598,37 @@ WrappedNixpkgsInputScheme::getAccessor(
       { "owner", nix::fetchers::getStrAttr( input.attrs, "owner" ) },
       { "rev", rev->gitRev() } } );
 
-  /* If we're already cached then we're done. */
-  nix::fetchers::Cache::Key storeKey( "flox-nixpkgs", lockedAttrs );
-  nix::fetchers::Settings   fetchSettings;
-
-  if ( auto res
-       = fetchSettings.getCache()->lookupStorePath( storeKey, *store ) )
+  /* Key the cache on the host too, so realms with distinct nixpkgs hosts do not
+   * collide (github.com is the implicit key when absent). */
+  if ( auto host = nix::fetchers::maybeGetStrAttr( input.attrs, "host" ) )
     {
-      auto accessor = nix::makeStorePathAccessor( store, res->storePath );
-      return { accessor, input };
+      lockedAttrs.insert_or_assign( "host", *host );
     }
 
+  /* If we're already cached then we're done. */
+  nix::fetchers::Cache::Key storeKey( "flox-nixpkgs", lockedAttrs );
+
+  if ( auto res = settings.getCache()->lookupStorePath( storeKey, store ) )
+    {
+      return { store.requireStoreObjectAccessor( res->storePath ), input };
+    }
+
+  /* `EvalState` wants shared ownership of the store, which `Store` can hand
+   * out for itself. */
   nix::EvalState state( nix::LookupPath(),
-                        store,
-                        *input.settings,
+                        nix::ref<nix::Store>( store.shared_from_this() ),
+                        settings,
                         nix::evalSettings );
 
   /* Otherwise create our flake and add it the `nix' store. */
   auto flakeDir = createWrappedFlakeDir(
     state,
-    nix::FlakeRef::fromAttrs( *input.settings,
-                              floxNixpkgsAttrsToGithubAttrs( input.attrs ) ),
+    nix::FlakeRef::fromAttrs( settings,
+                              floxNixpkgsAttrsToFetcherAttrs( input.attrs ) ),
     nix::fetchers::getIntAttr( input.attrs, "version" ) );
 
 
-  nix::StorePath storePath = store->addToStore(
+  nix::StorePath storePath = store.addToStore(
     input.getName(),
     nix::SourcePath( nix::getFSSourceAccessor(), flakeDir ) );
 
@@ -572,21 +641,21 @@ WrappedNixpkgsInputScheme::getAccessor(
       nix::fetchers::Cache::Key storeKeyOriginalInput( "flox-nixpkgs",
                                                        _input.attrs );
 
-      fetchSettings.getCache()->upsert( storeKeyOriginalInput,
-                                        *store,
-                                        { { "rev", rev->gitRev() } },
-                                        storePath );
+      settings.getCache()->upsert( storeKeyOriginalInput,
+                                   store,
+                                   { { "rev", rev->gitRev() } },
+                                   storePath );
     }
 
   /* Add a cache entry for our locked reference. */
-  fetchSettings.getCache()->upsert( storeKey,
-                                    *store,
-                                    { { "rev", rev->gitRev() } },
-                                    storePath );
+  settings.getCache()->upsert( storeKey,
+                               store,
+                               { { "rev", rev->gitRev() } },
+                               storePath );
 
   /* Return the store path for the generated flake, and it's
    * _locked_ input representation. */
-  return { nix::makeStorePathAccessor( store, storePath ), input };
+  return { store.requireStoreObjectAccessor( storePath ), input };
 }
 
 

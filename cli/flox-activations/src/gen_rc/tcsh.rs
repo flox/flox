@@ -432,7 +432,7 @@ mod tests {
             eval "`'/flox_activations' profile-scripts --shell tcsh --env-dirs $FLOX_ENV_DIRS:q $_already_sourced_args:q`";
             unhash;
             unset verbose;
-            /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
+            /coreutils/bin/rm /path/to/rc/file;
             setenv _FLOX_PROMPT_HOOK_VERSION 1:true;
             alias precmd 'if ( ! $?_FLOX_INVOCATION_TYPES ) set _FLOX_INVOCATION_TYPES=""; setenv _FLOX_INVOCATION_TYPES_WIRE $_FLOX_INVOCATION_TYPES:q; eval "`/flox hook-env --shell tcsh --shell-pid $$ --invocation-types-from-env`"; unsetenv _FLOX_INVOCATION_TYPES_WIRE; if ( $?_flox_exit ) exit';
             alias cwdcmd 'if ( ! $?_FLOX_INVOCATION_TYPES ) set _FLOX_INVOCATION_TYPES=""; setenv _FLOX_INVOCATION_TYPES_WIRE $_FLOX_INVOCATION_TYPES:q; eval "`/flox hook-env --shell tcsh --shell-pid $$ --invocation-types-from-env`"; unsetenv _FLOX_INVOCATION_TYPES_WIRE; if ( $?_flox_exit ) exit';
@@ -477,7 +477,7 @@ mod tests {
             eval "`'/flox_activations' profile-scripts --shell tcsh --env-dirs $FLOX_ENV_DIRS:q $_already_sourced_args:q`";
             unhash;
             unset verbose;
-            /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
+            /coreutils/bin/rm /path/to/rc/file;
             setenv _FLOX_PROMPT_HOOK_VERSION 1:true;
             alias precmd 'if ( ! $?_FLOX_INVOCATION_TYPES ) set _FLOX_INVOCATION_TYPES=""; setenv _FLOX_INVOCATION_TYPES_WIRE $_FLOX_INVOCATION_TYPES:q; eval "`/flox hook-env --shell tcsh --shell-pid $$ --invocation-types-from-env`"; unsetenv _FLOX_INVOCATION_TYPES_WIRE; if ( $?_flox_exit ) exit';
             alias cwdcmd 'if ( ! $?_FLOX_INVOCATION_TYPES ) set _FLOX_INVOCATION_TYPES=""; setenv _FLOX_INVOCATION_TYPES_WIRE $_FLOX_INVOCATION_TYPES:q; eval "`/flox hook-env --shell tcsh --shell-pid $$ --invocation-types-from-env`"; unsetenv _FLOX_INVOCATION_TYPES_WIRE; if ( $?_flox_exit ) exit';
