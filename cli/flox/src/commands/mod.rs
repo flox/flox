@@ -166,6 +166,13 @@ impl Verbosity {
     }
 }
 
+/// Whether temporary files kept for diagnosis outlive the command:
+/// `keep_tempdir` is set and debug or verbose logging is enabled.
+/// Verbosity alone is not the opt-in.
+pub fn retains_diagnostic_tempfiles(keep_tempdir: bool, debug: bool, verbosity: Verbosity) -> bool {
+    keep_tempdir && (debug || matches!(verbosity, Verbosity::Verbose(1..)))
+}
+
 impl Default for Verbosity {
     fn default() -> Self {
         Verbosity::Verbose(0)
@@ -453,6 +460,12 @@ impl FloxArgs {
         let system_hostname = sys_info::hostname().context("could not determine hostname")?;
         let argv = std::env::args().collect();
 
+        let retain_tempfiles = retains_diagnostic_tempfiles(
+            config.flox.keep_tempdir.unwrap_or_default(),
+            self.debug,
+            self.verbosity,
+        );
+
         let flox = Flox {
             cache_dir: config.flox.cache_dir.clone(),
             data_dir: config.flox.data_dir.clone(),
@@ -477,6 +490,7 @@ impl FloxArgs {
                 features
             },
             verbosity: self.verbosity.to_i32(),
+            retain_diagnostic_tempfiles: retain_tempfiles,
             metrics_device_uuid,
         };
         debug!(
@@ -485,7 +499,6 @@ impl FloxArgs {
         );
 
         let signal_handler = async { tokio::signal::ctrl_c().await.unwrap() };
-        let keep_tempfiles = config.flox.keep_tempdir.unwrap_or_default();
 
         let cli_worker = async move {
             // command handled above
@@ -551,7 +564,7 @@ impl FloxArgs {
             .await;
 
         // Remove tempdirs
-        if (self.debug || matches!(self.verbosity, Verbosity::Verbose(1..))) && keep_tempfiles {
+        if retain_tempfiles {
             debug!(temp_dir = ?temp_dir.path(), "leaving process tempdir in place");
             let _ = temp_dir.keep();
         } else {
@@ -1978,6 +1991,30 @@ fn render_composition_manifest(manifest: &Manifest<TypedOnly>) -> Result<String>
     toml_edit::visit_mut::visit_document_mut(&mut Visitor::new_for_document(), &mut document);
 
     Ok(document.to_string())
+}
+
+#[cfg(test)]
+mod retention_policy_tests {
+    use super::*;
+
+    #[test]
+    fn diagnostic_tempfiles_need_keep_tempdir_and_debug_or_verbose() {
+        let cases = [
+            (false, false, Verbosity::Verbose(0), false),
+            (false, true, Verbosity::Verbose(2), false),
+            (true, false, Verbosity::Verbose(0), false),
+            (true, false, Verbosity::Quiet, false),
+            (true, true, Verbosity::Verbose(0), true),
+            (true, false, Verbosity::Verbose(1), true),
+        ];
+        for (keep_tempdir, debug, verbosity, expected) in cases {
+            assert_eq!(
+                retains_diagnostic_tempfiles(keep_tempdir, debug, verbosity),
+                expected,
+                "keep_tempdir={keep_tempdir} debug={debug} verbosity={verbosity:?}"
+            );
+        }
+    }
 }
 
 #[cfg(test)]

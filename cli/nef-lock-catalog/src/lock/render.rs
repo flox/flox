@@ -1,11 +1,8 @@
-//! Developer-facing rendering of unresolvable catalog references (REQ-013).
+//! Render unresolvable catalog references and their dependency chains.
 //!
-//! When a lock fails because the catalog reports `unresolvable` references, the
-//! binary surfaces the dependency chains to the developer. The rendering is
-//! deliberately **cause-free** (it never claims *why* a reference is
-//! unresolvable — auth, missing publish, retention, etc. are indistinguishable
-//! and conflating them would leak information) and **hedged** in its
-//! remediation hint.
+//! Only a server-classified, readable `legacy_unindexed` cause gets a
+//! specific remedy. Other causes stay generic because inferring why a
+//! private reference failed could reveal its identity.
 
 use floxhub_client::UnresolvableEntry;
 use indent::indent_all_by;
@@ -18,18 +15,36 @@ use indoc::formatdoc;
 /// (`catalogs.<catalog>.<package>`).
 const CATALOG_ROOT: &str = "catalogs";
 
+/// The readable unindexed cause used by the server
+/// (`flox/floxhub@2f761a193:catalog_server/api/v1/endpoints/build_inputs.py`).
+const LEGACY_UNINDEXED_CAUSE_KEY: &str = "legacy_unindexed";
+
+/// A readable identity without a v2 index needs a new publish, not a relock
+/// of the same commit. Return a remedy only for that classified cause.
+fn legacy_unindexed_remedy(entry: &UnresolvableEntry) -> Option<String> {
+    entry
+        .leaf
+        .unresolvable
+        .contains_key(LEGACY_UNINDEXED_CAUSE_KEY)
+        .then(|| {
+            format!(
+                "Publish a new commit of '{}' with an upgraded CLI and a version 2 catalog lock.",
+                display_reference(entry.chain.last().unwrap_or(&entry.reference))
+            )
+        })
+}
+
 /// Prefix a server-returned, catalog-relative reference with the NEF
 /// [`CATALOG_ROOT`] for display.
 fn display_reference(reference: &str) -> String {
     format!("{CATALOG_ROOT}.{reference}")
 }
 
-/// Render the unresolvable references from a failed lock into a developer-facing
-/// error body per REQ-013:
+/// Render failed references into a developer-facing error body:
 /// - a `→`-arrow dependency path per reference, ending in `(unresolvable)`,
 /// - numbered entries under a `build failed: N inputs could not be resolved.`
 ///   header when there is more than one,
-/// - a single cause-free, hedged remediation footer.
+/// - a generic remediation footer when any entry lacks a classified cause.
 ///
 /// The returned string is the message body; the caller applies the `✘ ERROR:`
 /// decoration (e.g. via `flox_core::util::message::format_error`) and exits
@@ -63,17 +78,38 @@ fn render_path(chain: &[String]) -> String {
 }
 
 fn render_single(entry: &UnresolvableEntry) -> String {
+    let footer = match legacy_unindexed_remedy(entry) {
+        Some(remedy) => format!("  {remedy}"),
+        None => "  Possible causes: the input may not be visible to you, may have no\n  \
+                 published revision, or may have aged out of retention. Verify\n  \
+                 availability with the owner of the relevant catalog."
+            .to_string(),
+    };
     formatdoc! {"
         '{reference}' is unresolvable in this context.
 
           Dependency path:
         {path}
 
-          Possible causes: the input may not be visible to you, may have no
-          published revision, or may have aged out of retention. Verify
-          availability with the owner of the relevant catalog.",
+        {footer}",
         reference = display_reference(&entry.reference),
         path = indent_all_by(4, render_path(&entry.chain)),
+    }
+}
+
+/// Attach a specific remedy only to the entry the server classified.
+fn render_many_item(index: usize, entry: &UnresolvableEntry) -> String {
+    let header = formatdoc! {"
+          {n}. '{reference}' is unresolvable in this context.
+             Dependency path:
+        {path}",
+        n = index + 1,
+        reference = display_reference(&entry.reference),
+        path = indent_all_by(7, render_path(&entry.chain)),
+    };
+    match legacy_unindexed_remedy(entry) {
+        Some(remedy) => format!("{header}\n     {remedy}"),
+        None => header,
     }
 }
 
@@ -81,29 +117,29 @@ fn render_many(entries: &[UnresolvableEntry]) -> String {
     let blocks = entries
         .iter()
         .enumerate()
-        .map(|(i, entry)| {
-            formatdoc! {"
-                  {n}. '{reference}' is unresolvable in this context.
-                     Dependency path:
-                {path}",
-                n = i + 1,
-                reference = display_reference(&entry.reference),
-                path = indent_all_by(7, render_path(&entry.chain)),
-            }
-        })
+        .map(|(i, entry)| render_many_item(i, entry))
         .collect::<Vec<_>>()
         .join("\n\n");
 
-    formatdoc! {"
+    let mut message = formatdoc! {"
         build failed: {n} inputs could not be resolved.
 
-        {blocks}
-
-          Possible causes (each independently): an input may not be visible to
-          you, may have no published revision, or may have aged out of retention.
-          Verify availability with the owner of the relevant catalog.",
+        {blocks}",
         n = entries.len(),
+    };
+
+    // Unclassified entries still need the generic guidance in a mixed result.
+    if !entries
+        .iter()
+        .all(|entry| legacy_unindexed_remedy(entry).is_some())
+    {
+        message.push_str(
+            "\n\n  Possible causes (each independently): an input may not be visible to\n  \
+             you, may have no published revision, or may have aged out of retention.\n  \
+             Verify availability with the owner of the relevant catalog.",
+        );
     }
+    message
 }
 
 #[cfg(test)]
@@ -164,5 +200,82 @@ build failed: 2 inputs could not be resolved.
   Verify availability with the owner of the relevant catalog.";
 
         assert_eq!(render_unresolvable(&entries), expected);
+    }
+
+    #[test]
+    fn readable_legacy_unindexed_seed_shows_the_remedy() {
+        let mut readable = entry("acme.tool", &["acme.tool"]);
+        readable.leaf.unresolvable.insert(
+            "legacy_unindexed".to_string(),
+            serde_json::json!({"detail": "irrelevant to rendering"}),
+        );
+        let entries = [readable];
+
+        let expected = "\
+'catalogs.acme.tool' is unresolvable in this context.
+
+  Dependency path:
+    catalogs.acme.tool (unresolvable)
+
+  Publish a new commit of 'catalogs.acme.tool' with an upgraded CLI and a version 2 catalog lock.";
+
+        assert_eq!(render_unresolvable(&entries), expected);
+    }
+
+    #[test]
+    fn readable_legacy_unindexed_transitive_shows_the_remedy() {
+        let mut readable = entry("acme.app", &["acme.app", "acme.tool"]);
+        readable
+            .leaf
+            .unresolvable
+            .insert("legacy_unindexed".to_string(), serde_json::json!(true));
+        let entries = [readable];
+
+        assert!(
+            render_unresolvable(&entries).ends_with(
+                "Publish a new commit of 'catalogs.acme.tool' with an upgraded CLI and a version 2 catalog lock."
+            )
+        );
+    }
+
+    #[test]
+    fn unknown_cause_key_falls_through_to_generic_rendering() {
+        let mut unknown = entry("acme.tool", &["acme.tool"]);
+        unknown
+            .leaf
+            .unresolvable
+            .insert("some_other_cause".to_string(), serde_json::json!({}));
+        let entries = [unknown];
+
+        assert!(render_unresolvable(&entries).contains("Possible causes:"));
+    }
+
+    #[test]
+    fn mixed_readable_and_private_preserves_privacy() {
+        let mut readable = entry("acme.tool", &["acme.tool"]);
+        readable
+            .leaf
+            .unresolvable
+            .insert("legacy_unindexed".to_string(), serde_json::json!(true));
+        let private = entry("acme.secret", &["acme.secret"]);
+        let entries = [readable, private];
+
+        let rendered = render_unresolvable(&entries);
+        let expected = "\
+build failed: 2 inputs could not be resolved.
+
+  1. 'catalogs.acme.tool' is unresolvable in this context.
+     Dependency path:
+       catalogs.acme.tool (unresolvable)
+     Publish a new commit of 'catalogs.acme.tool' with an upgraded CLI and a version 2 catalog lock.
+
+  2. 'catalogs.acme.secret' is unresolvable in this context.
+     Dependency path:
+       catalogs.acme.secret (unresolvable)
+
+  Possible causes (each independently): an input may not be visible to
+  you, may have no published revision, or may have aged out of retention.
+  Verify availability with the owner of the relevant catalog.";
+        assert_eq!(rendered, expected);
     }
 }

@@ -26,6 +26,7 @@ use floxhub_client::{
     PackageDetails,
     PackageGroup,
     PackageSystem,
+    PublishReceipt,
     PublishResponse,
     ResolveError,
     ResolvedPackageGroup,
@@ -344,7 +345,7 @@ impl CatalogClientTrait for MockClient {
         _catalog_name: impl AsRef<str> + Send + Sync,
         _package_name: impl AsRef<str> + Send + Sync,
         build_info: &UserBuildPublish,
-    ) -> Result<(), FloxhubClientError> {
+    ) -> Result<PublishReceipt, FloxhubClientError> {
         *self
             .last_publish_build_info
             .lock()
@@ -355,7 +356,7 @@ impl CatalogClientTrait for MockClient {
             .expect("couldn't acquire mock lock")
             .pop_front();
         match mock_resp {
-            Some(Response::PublishBuild) => Ok(()),
+            Some(Response::PublishBuild) => Ok(PublishReceipt::default()),
             // We don't need to test errors at the moment
             _ => panic!("expected create package response, found {:?}", &mock_resp),
         }

@@ -364,6 +364,95 @@ develop_env_script_path() {
   assert_equal "$status" 7
 }
 
+# Write the project's committed catalog lock and keep its bytes for comparison.
+commit_empty_catalog_lock() {
+  printf '{"version":2,"locked_inputs":{},"direct_inputs":[]}\n' \
+    >"$PROJECT_DIR/.flox/catalog.lock"
+  cp "$PROJECT_DIR/.flox/catalog.lock" "$BATS_TEST_TMPDIR/catalog.lock.before"
+}
+
+assert_committed_catalog_lock_unchanged() {
+  cmp "$PROJECT_DIR/.flox/catalog.lock" "$BATS_TEST_TMPDIR/catalog.lock.before"
+}
+
+# The builder catalog lock's path, as logged by a `-v` run captured in $output.
+logged_catalog_lock_path() {
+  grep -oE "/[^[:space:]'\"=]*flox-catalog\.lock\.[[:alnum:]]+" <<<"$output" | head -1
+}
+
+@test "develop: removes its temporary catalog lock before exec" {
+  project_setup
+  git_init_project
+  nef_package_setup greet
+  commit_empty_catalog_lock
+  export _FLOX_USE_CATALOG_MOCK="$UNIT_TEST_GENERATED/get_base_catalog_nixpkgs_url.yaml"
+  local temp_dir="$BATS_TEST_TMPDIR/catalog-temp"
+  mkdir -p "$temp_dir"
+
+  run env TMPDIR="$temp_dir" "$FLOX_BIN" -v develop -d "$PROJECT_DIR" -c 'true'
+  assert_success
+  local lock_path
+  lock_path="$(logged_catalog_lock_path)"
+  assert [ -n "$lock_path" ]
+  assert_equal "$(dirname "$lock_path")" "$temp_dir"
+  refute [ -e "$lock_path" ]
+  assert_committed_catalog_lock_unchanged
+}
+
+@test "develop: keeps its catalog lock past exec when diagnostic retention is enabled" {
+  project_setup
+  git_init_project
+  nef_package_setup greet
+  commit_empty_catalog_lock
+  export _FLOX_USE_CATALOG_MOCK="$UNIT_TEST_GENERATED/get_base_catalog_nixpkgs_url.yaml"
+  local temp_dir="$BATS_TEST_TMPDIR/catalog-temp"
+  mkdir -p "$temp_dir"
+
+  # Verbose logging alone is not the opt-in; `keep_tempdir` is required too.
+  run env TMPDIR="$temp_dir" FLOX_KEEP_TEMPDIR=true \
+    "$FLOX_BIN" -v develop -d "$PROJECT_DIR" -c 'true'
+  assert_success
+  local lock_path
+  lock_path="$(logged_catalog_lock_path)"
+  assert [ -n "$lock_path" ]
+  assert_equal "$(dirname "$lock_path")" "$temp_dir"
+  run jq -e '.version == 2 and has("catalogs")' "$lock_path"
+  assert_success
+  assert_committed_catalog_lock_unchanged
+}
+
+@test "develop: keeps its catalog lock when the evaluation fails and retention is enabled" {
+  project_setup
+  git_init_project
+  nef_package_setup greet
+  mkdir -p "$PROJECT_DIR/.flox/pkgs/broken"
+  echo '{stdenv}: throw "broken on purpose"' >"$PROJECT_DIR/.flox/pkgs/broken/default.nix"
+  git -C "$PROJECT_DIR" add -A
+  git -C "$PROJECT_DIR" commit -q -m "add broken"
+  commit_empty_catalog_lock
+  export _FLOX_USE_CATALOG_MOCK="$UNIT_TEST_GENERATED/get_base_catalog_nixpkgs_url.yaml"
+  local temp_dir="$BATS_TEST_TMPDIR/catalog-temp"
+  mkdir -p "$temp_dir"
+
+  run env TMPDIR="$temp_dir" FLOX_KEEP_TEMPDIR=true \
+    "$FLOX_BIN" -v develop -d "$PROJECT_DIR" broken -c 'true'
+  assert_failure
+  assert_output --partial "broken on purpose"
+  local lock_path
+  lock_path="$(logged_catalog_lock_path)"
+  assert [ -n "$lock_path" ]
+  assert [ -s "$lock_path" ]
+
+  # Without retention the same failure leaves nothing behind.
+  run env TMPDIR="$temp_dir" "$FLOX_BIN" -v develop -d "$PROJECT_DIR" broken -c 'true'
+  assert_failure
+  local discarded_path
+  discarded_path="$(logged_catalog_lock_path)"
+  assert [ -n "$discarded_path" ]
+  refute [ -e "$discarded_path" ]
+  assert_committed_catalog_lock_unchanged
+}
+
 # ---------------------------------------------------------------------------- #
 # GC root: a live shell's build inputs are incidentally immune to GC on Linux
 # because Nix's collector treats runtime roots found by scanning
