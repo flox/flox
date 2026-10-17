@@ -33,6 +33,7 @@ use floxhub_client::{
     FloxhubClientError,
     PackageSystem,
     SourceLineageChange,
+    describe_source_move,
 };
 use indoc::formatdoc;
 use nef_lock_catalog::{
@@ -92,24 +93,21 @@ async fn finish_accepted_publish(
     Ok(())
 }
 
+pub(crate) fn lineage_change_warning(change: &SourceLineageChange) -> String {
+    formatdoc! {
+        "{description}
+
+        Continue only if the requested repository and ref are the intended source for
+        this package going forward.",
+        description = describe_source_move(&change.registered, &change.requested),
+    }
+}
+
 async fn confirm_lineage_change(change: &SourceLineageChange) -> Result<bool, PublishError> {
     if !Dialog::can_prompt() {
         return Ok(false);
     }
-    message::warning(formatdoc! {
-        "Package source repository or ref has changed.
-        Registered source: {registered}
-        Requested source: {requested}
-
-        Changing the repository can affect which build other packages lock as an input.
-        Where automated builds run, future builds use the newly registered source.
-        Previously published builds remain stored; existing locks are unchanged.
-
-        Continue only if the requested repository and ref are the intended source for
-        this package going forward.",
-        registered = change.registered,
-        requested = change.requested,
-    });
+    message::warning(lineage_change_warning(change));
     let confirmed = Dialog {
         message: "Change the registered source and publish?",
         help_message: None,
@@ -675,6 +673,39 @@ mod tests {
         assert_eq!(displayed, [
             "dependency: dependency moved to a newer source lineage"
         ]);
+    }
+
+    #[test]
+    fn lineage_change_warning_describes_a_confirmed_move() {
+        let moves = [
+            (
+                "github.com/org/pkg (ref main)",
+                "github.com/org/fork (ref main)",
+            ),
+            (
+                "github.com/org/pkg (ref main)",
+                "github.com/org/pkg (ref release)",
+            ),
+        ];
+        for (registered, requested) in moves {
+            let change = SourceLineageChange {
+                registered: registered.to_owned(),
+                requested: requested.to_owned(),
+            };
+            let expected = formatdoc! {"
+                Package source repository or ref has changed.
+                Registered source: {registered}
+                Requested source: {requested}
+
+                Changing the repository or the ref changes which build other packages lock
+                as an input from now on.
+                Where automated builds run, future builds use the newly registered source.
+                Previously published builds remain stored; existing locks are unchanged.
+
+                Continue only if the requested repository and ref are the intended source for
+                this package going forward."};
+            assert_eq!(lineage_change_warning(&change), expected);
+        }
     }
 
     #[tokio::test]
