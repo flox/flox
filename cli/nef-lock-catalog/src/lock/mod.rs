@@ -7,6 +7,7 @@
 //! builds into this module in ECO-93.
 
 pub(crate) mod build_lock;
+pub(crate) mod direct_input;
 pub(crate) mod flakeref;
 pub(crate) mod lookup;
 pub(crate) mod render;
