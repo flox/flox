@@ -3231,6 +3231,12 @@ mod buildenv_tests {
                 .is_none(),
             "include should be empty in develop environment with default outputs"
         );
+        // lib/ exists for the same reason as include/. No emptiness check:
+        // a selected "out" output can place shared libraries in lib/.
+        assert!(
+            develop.join("lib").exists(),
+            "lib should exist in develop environment (DEV-370)"
+        );
     }
 
     #[test]
@@ -3379,6 +3385,12 @@ mod buildenv_tests {
                 .next()
                 .is_none(),
             "include should be empty in develop environment with outputs=['out']"
+        );
+        // lib/ exists for the same reason as include/. No emptiness check:
+        // a selected "out" output can place shared libraries in lib/.
+        assert!(
+            develop.join("lib").exists(),
+            "lib should exist in develop environment (DEV-370)"
         );
     }
 }
