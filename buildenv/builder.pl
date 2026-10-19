@@ -901,6 +901,19 @@ if ($manifest) {
             mkdir $out or die "cannot create directory `$out': $!";
         }
 
+        # Ensure dev-mode compiler/linker search paths exist even when no
+        # package provides them, so LIBRARY_PATH/CPATH entries don't trigger
+        # "path not found" warnings (e.g. ld under cgo). Skipped when a
+        # package already provides the directory (symlink or real dir).
+        # See DEV-370.
+        if ($envName eq "dev") {
+            for my $dir ("$out/lib", "$out/include") {
+                unless (-e $dir) {
+                    mkpath $dir or die "cannot create directory `$dir': $!";
+                }
+            }
+        }
+
         # Walk the %{$requisites} data for each package in the %done hash
         # populating the %requisites_txt hash.
         my %requisites_txt = ();

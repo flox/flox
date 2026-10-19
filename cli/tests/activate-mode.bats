@@ -228,3 +228,10 @@ EOF
   run "$FLOX_BIN" activate -m run -c '[ "$CPATH" = "$outer_cpath" ]'
   assert_success
 }
+
+@test "dev: lib and include directories exist" {
+  skip_x86_64_darwin_replay
+  project_setup
+  run "$FLOX_BIN" activate -c '[ -d "$FLOX_ENV/lib" ] && [ -d "$FLOX_ENV/include" ]'
+  assert_success
+}
