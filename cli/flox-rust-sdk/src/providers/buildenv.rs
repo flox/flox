@@ -3216,9 +3216,20 @@ mod buildenv_tests {
             !runtime.join("include").exists(),
             "include should not exist in runtime environment with default outputs"
         );
+        // Dev mode always creates lib/ and include/ so LIBRARY_PATH/CPATH
+        // don't point at missing paths (DEV-370). When the package's dev
+        // output isn't selected, the directory must be empty — a non-empty
+        // include/ here would mean the dev output's headers leaked in.
         assert!(
-            !develop.join("include").exists(),
-            "include should not exist in develop environment with default outputs"
+            develop.join("include").exists(),
+            "include should exist in develop environment (DEV-370)"
+        );
+        assert!(
+            fs::read_dir(develop.join("include"))
+                .expect("include should be readable")
+                .next()
+                .is_none(),
+            "include should be empty in develop environment with default outputs"
         );
     }
 
@@ -3355,9 +3366,19 @@ mod buildenv_tests {
             !runtime.join("include").exists(),
             "include should not exist in runtime environment with outputs=['out']"
         );
+        // Dev mode always creates lib/ and include/ (DEV-370). With only the
+        // "out" output selected, the dev output's include/ is not linked, so
+        // the directory exists but must be empty.
         assert!(
-            !develop.join("include").exists(),
-            "include should not exist in develop environment with outputs=['out']"
+            develop.join("include").exists(),
+            "include should exist in develop environment (DEV-370)"
+        );
+        assert!(
+            fs::read_dir(develop.join("include"))
+                .expect("include should be readable")
+                .next()
+                .is_none(),
+            "include should be empty in develop environment with outputs=['out']"
         );
     }
 }
