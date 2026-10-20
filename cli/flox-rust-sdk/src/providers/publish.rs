@@ -1583,6 +1583,15 @@ pub mod tests {
     const LINEAGE_CHANGE_DETAIL: &str = "test/hello is registered to github.com/org/original (ref main); this publish is from github.com/org/moved (ref release). Retry with allow_lineage_change=true to replace the registered source.";
     const INPUT_LINEAGE_WARNING: &str = "dependency moved to a newer source lineage";
 
+    /// What the test observed during one publish through `publish_build_with_confirmation`.
+    #[derive(Debug, PartialEq)]
+    struct ObservedLineagePublish {
+        confirmations: usize,
+        initial_requests: usize,
+        retry_requests: usize,
+        result: Result<Vec<String>, String>,
+    }
+
     async fn exercise_lineage_publish(
         status: u16,
         detail: &str,
@@ -1590,7 +1599,7 @@ pub mod tests {
         confirm: bool,
         retry_status: u16,
         warn_on_success: bool,
-    ) -> (usize, usize, usize, Result<Vec<String>, String>) {
+    ) -> ObservedLineagePublish {
         let server = httpmock::MockServer::start_async().await;
         let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
         let build: UserBuildPublish = serde_json::from_value(serde_json::json!({
@@ -1689,18 +1698,25 @@ pub mod tests {
                     .collect()
             })
             .map_err(|err| err.to_string());
-        let retries = retry.map_or(0, |mock| mock.calls());
-        (confirmations, initial.calls(), retries, result)
+        let retry_requests = retry.map_or(0, |mock| mock.calls());
+        ObservedLineagePublish {
+            confirmations,
+            initial_requests: initial.calls(),
+            retry_requests,
+            result,
+        }
     }
 
     #[tokio::test]
     async fn publish_lineage_confirmation_retries_only_when_accepted() {
         let accepted =
             exercise_lineage_publish(409, LINEAGE_CHANGE_DETAIL, false, true, 200, true).await;
-        assert_eq!(
-            accepted,
-            (1, 1, 1, Ok(vec![INPUT_LINEAGE_WARNING.to_owned()]))
-        );
+        assert_eq!(accepted, ObservedLineagePublish {
+            confirmations: 1,
+            initial_requests: 1,
+            retry_requests: 1,
+            result: Ok(vec![INPUT_LINEAGE_WARNING.to_owned()])
+        });
 
         let declined =
             exercise_lineage_publish(409, LINEAGE_CHANGE_DETAIL, false, false, 200, true).await;
@@ -1709,36 +1725,55 @@ pub mod tests {
             requested: "github.com/org/moved (ref release)".to_owned(),
         }
         .to_string();
-        assert_eq!(declined, (1, 1, 0, Err(refusal.clone())));
+        assert_eq!(declined, ObservedLineagePublish {
+            confirmations: 1,
+            initial_requests: 1,
+            retry_requests: 0,
+            result: Err(refusal.clone())
+        });
 
         // Even a second lineage refusal must terminate, not prompt or loop again.
         let refused_retry =
             exercise_lineage_publish(409, LINEAGE_CHANGE_DETAIL, false, true, 409, true).await;
-        assert_eq!(refused_retry, (1, 1, 1, Err(refusal)));
+        assert_eq!(refused_retry, ObservedLineagePublish {
+            confirmations: 1,
+            initial_requests: 1,
+            retry_requests: 1,
+            result: Err(refusal)
+        });
     }
 
     #[tokio::test]
     async fn publish_lineage_flag_sends_override_without_confirmation() {
         let outcome = exercise_lineage_publish(200, "", true, false, 200, true).await;
-        assert_eq!(
-            outcome,
-            (0, 1, 0, Ok(vec![INPUT_LINEAGE_WARNING.to_owned()]))
-        );
+        assert_eq!(outcome, ObservedLineagePublish {
+            confirmations: 0,
+            initial_requests: 1,
+            retry_requests: 0,
+            result: Ok(vec![INPUT_LINEAGE_WARNING.to_owned()])
+        });
     }
 
     #[tokio::test]
     async fn publish_success_carries_input_lineage_warning_without_a_conflict() {
         let outcome = exercise_lineage_publish(200, "", false, false, 200, true).await;
-        assert_eq!(
-            outcome,
-            (0, 1, 0, Ok(vec![INPUT_LINEAGE_WARNING.to_owned()]))
-        );
+        assert_eq!(outcome, ObservedLineagePublish {
+            confirmations: 0,
+            initial_requests: 1,
+            retry_requests: 0,
+            result: Ok(vec![INPUT_LINEAGE_WARNING.to_owned()])
+        });
     }
 
     #[tokio::test]
     async fn publish_lineage_confirmation_ignores_other_responses() {
         let success = exercise_lineage_publish(200, "", false, true, 200, false).await;
-        assert_eq!(success, (0, 1, 0, Ok(vec![])));
+        assert_eq!(success, ObservedLineagePublish {
+            confirmations: 0,
+            initial_requests: 1,
+            retry_requests: 0,
+            result: Ok(vec![])
+        });
         for (status, detail, expected) in [
             (
                 409,
@@ -1757,7 +1792,12 @@ pub mod tests {
             ),
         ] {
             let outcome = exercise_lineage_publish(status, detail, false, true, 200, false).await;
-            assert_eq!(outcome, (0, 1, 0, Err(expected)));
+            assert_eq!(outcome, ObservedLineagePublish {
+                confirmations: 0,
+                initial_requests: 1,
+                retry_requests: 0,
+                result: Err(expected)
+            });
         }
     }
 
