@@ -10765,6 +10765,12 @@ rec {
             features = [ "tests" ];
           }
           {
+            name = "httpmock";
+            packageId = "httpmock";
+            usesDefaultFeatures = false;
+            features = [ "proxy" "record" ];
+          }
+          {
             name = "tempfile";
             packageId = "tempfile";
           }

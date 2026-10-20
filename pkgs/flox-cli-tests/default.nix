@@ -20,6 +20,7 @@
   flox-nix-plugins,
   flox,
   flox-interpreter,
+  flox-package-builder,
   glow,
   gawk,
   git,
@@ -207,6 +208,7 @@ writeShellScriptBin PROJECT_NAME ''
     export GLOW_BIN='${glow}/bin/glow'
     export FLOX_INTERPRETER='${flox-interpreter}'
     export FLOX_INTERPRETER_WRAPPER='${flox-interpreter.build_executable_wrapper}'
+    export FLOX_EXPRESSION_BUILD_NIX='${flox-package-builder}/libexec/nef/default.nix'
   ''}
 
   # Default flag values

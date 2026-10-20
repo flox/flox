@@ -213,14 +213,12 @@ $(PROJECT_TMPDIR)/check-build-prerequisites:
 	$(if $(EVAL_RESULT_FILE),$(if $(wildcard $(EVAL_RESULT_FILE)),, \
 	  $(error EVAL_RESULT_FILE $(EVAL_RESULT_FILE) not found)))
 	@# CATALOG_LOCKFILE is the catalog lock consumed by NEF evals. The flox
-	@# CLI owns the lock's entire lifecycle — creating the committed
-	@# .flox/catalog.lock, resolving a fresh ephemeral lock for lockless
-	@# builds, and cleaning up its own temp files — and passes the path in;
+	@# CLI reads a committed .flox/catalog.lock or resolves a fresh lock,
+	@# then materializes the catalog tree into a temporary builder file.
+	@# It cleans up that file and passes its absolute path in;
 	@# the package builder only hands the file to the NEF evals, and
 	@# requires it whenever the project has Nix expression builds.
-	@# The value is either relative to the project directory this make was
-	@# started in with -C (the committed lock's '.flox/catalog.lock') or an
-	@# absolute whitespace-free temp path (an ephemeral lock), so it never
+	@# The value is an absolute whitespace-free temporary path, so it never
 	@# carries whitespace into make's word-splitting positions — the
 	@# $(wildcard) here and the eval rule's prerequisite list. A project
 	@# path with whitespace never appears in either.
@@ -867,13 +865,11 @@ define NIX_EXPRESSION_BUILD_template =
   # this with "_" for use in variable names.
   $(eval _pvarname = $(call mkVarname,$(_pname)))
 
-  # Evaluate the build against the project catalog lock, listed as the
+  # Evaluate the build against the materialized builder lock, listed as the
   # first prerequisite so that make itself flags a missing lock in relation
   # to the target being evaluated, rather than leaving `nix eval` to report
-  # the absent file without that context. The committed lock's path is
-  # relative to the project directory this make was started in with -C, so
-  # the recipe absolutizes it — nix coerces the argument to a path, which
-  # must be absolute. The eval must run each invocation
+  # the absent file without that context. The CLI passes an absolute,
+  # temporary path. The eval must run each invocation
   # (the expressions the eval reads are not prerequisites make can see), so
   # the target is .PHONY: the recipe is triggered irrespective of the
   # eval.json file's presence or timestamp.

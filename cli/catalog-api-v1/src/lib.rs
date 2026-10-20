@@ -13,6 +13,8 @@ pub mod types {
     pub use crate::client::types::*;
     pub use crate::error::MessageType;
 
+    use std::collections::BTreeMap;
+
     use serde::{Deserialize, Serialize};
     /// Progenitor doesn't know how to use a discriminator as a tag, so add this
     /// enum manually.
@@ -31,6 +33,59 @@ pub mod types {
         /// Not yet supported
         Publisher(CatalogStoreConfigPublisher),
     }
+
+    /// Preserve unknown git attributes at initial API deserialization.
+    /// The schema permits them, but Progenitor's generated struct would drop
+    /// them before the lock could retain them.
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct LockedGitSource {
+        pub dir: ::std::string::String,
+        #[serde(rename = "ref")]
+        pub ref_: ::std::string::String,
+        pub rev: ::std::string::String,
+        #[serde(rename = "type")]
+        pub type_: ::std::string::String,
+        pub url: ::std::string::String,
+        #[serde(flatten)]
+        pub extra: BTreeMap<String, serde_json::Value>,
+    }
+
+    /// Preserve nullable informational fields on the wire and in the lock.
+    /// The generated type omits `None` fields; lock v2 serializes explicit nulls.
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct LockedInputEntry {
+        pub attr_path: Vec<String>,
+        #[serde(default)]
+        pub build: Option<String>,
+        pub build_type: BuildType,
+        pub catalog: String,
+        pub inputs: Option<Vec<String>>,
+        pub locked_inputs_hash: String,
+        pub source: LockedGitSource,
+        #[serde(
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "deserialize_deep_overrides"
+        )]
+        pub deep_overrides: Option<Vec<Vec<String>>>,
+        #[serde(default)]
+        pub version: Option<String>,
+    }
+
+
+    fn deserialize_deep_overrides<'de, D>(deserializer: D) -> Result<Option<Vec<Vec<String>>>, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let paths = Option::<Vec<Vec<DeepOverridesItemItem>>>::deserialize(deserializer)?;
+        Ok(paths.map(|paths| {
+            paths
+                .into_iter()
+                .map(|path| path.into_iter().map(String::from).collect())
+                .collect()
+        }))
+    }
+
 }
 
 #[cfg(test)]

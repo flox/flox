@@ -145,9 +145,9 @@ impl Develop {
         let built_environments = env.build(&flox)?;
 
         // The catalog lock the NEF eval consumes, created by the CLI
-        // exactly as `flox build` does: the committed .flox/catalog.lock as
-        // found, or a fresh ephemeral lock scoped to this package (the
-        // scanner follows its imports) living only as long as this command.
+        // exactly as `flox build` does: a temporary builder file materialized from the
+        // committed lock, or from fresh resolution scoped to this package
+        // (the scanner follows its imports).
         let rel_file_path = match target.kind() {
             PackageTargetKind::ExpressionBuild(expression) => expression.rel_file_path.clone(),
             // Guarded by `refuse_manifest_build` above.
@@ -155,11 +155,13 @@ impl Develop {
                 unreachable!("manifest builds are refused before the eval")
             },
         };
-        let catalog_lock =
-            BuildLockGuard::new_existing_or_ephemeral(&flox.floxhub_client, env.dot_flox_path(), [
-                &rel_file_path,
-            ])
-            .await?;
+        let catalog_lock = BuildLockGuard::new_existing_or_ephemeral(
+            &flox.floxhub_client,
+            env.dot_flox_path(),
+            [&rel_file_path],
+            flox.retain_diagnostic_tempfiles,
+        )
+        .await?;
 
         let expression_nixpkgs =
             base_nixpkgs_url_from_url_select(&flox, base_catalog_url_select).await?;
@@ -186,6 +188,9 @@ impl Develop {
             catalog_lock.path(),
             None,
         )?;
+        // eval has finished reading CATALOG_LOCKFILE through make and Nix.
+        // Release it before either shell path replaces this process.
+        drop(catalog_lock);
         let drv_path = eval_results
             .first()
             .context("eval() returned no results for the requested package")?

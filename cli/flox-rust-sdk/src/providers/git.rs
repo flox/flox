@@ -9,7 +9,7 @@ use std::sync::LazyLock;
 
 use chrono::{DateTime, Utc};
 use thiserror::Error;
-use tracing::{debug, warn};
+use tracing::debug;
 
 use crate::flox::FLOX_VERSION;
 use crate::utils::CommandExt;
@@ -27,11 +27,23 @@ pub trait GitDiscoverError {
     fn not_found(&self) -> bool;
 }
 
+#[derive(Debug)]
 pub struct OriginInfo {
     pub name: String,
     pub url: String,
+    /// The full upstream ref, e.g. `refs/heads/main`.
     pub reference: String,
-    pub revision: Option<String>,
+}
+
+impl OriginInfo {
+    /// Return the short upstream branch for user-facing messages.
+    /// Preserve the full ref if an `OriginInfo` was constructed without the
+    /// branch prefix, so this accessor remains infallible.
+    pub fn short_branch(&self) -> &str {
+        self.reference
+            .strip_prefix("refs/heads/")
+            .unwrap_or(&self.reference)
+    }
 }
 
 pub struct BranchInfo {
@@ -134,7 +146,12 @@ pub trait GitProvider: Sized + std::fmt::Debug {
     fn push(&self, remote: &str, force: bool) -> Result<(), Self::PushError>;
     fn set_origin(&self, branch: &str, origin_name: &str) -> Result<(), Self::SetOriginError>;
 
-    fn get_current_branch_remote_info(&self) -> Result<OriginInfo, Self::GetOriginError>;
+    /// Look up the upstream remote of `local_branch_ref` (a full local ref,
+    /// e.g. `refs/heads/main`).
+    fn get_current_branch_remote_info(
+        &self,
+        local_branch_ref: &str,
+    ) -> Result<OriginInfo, Self::GetOriginError>;
 
     fn workdir(&self) -> Option<&Path>;
     fn path(&self) -> &Path;
@@ -150,6 +167,15 @@ pub enum GitCommandError {
     InvalidOutput(String),
     #[error("Remote URL was invalid")]
     InvalidUrl(#[source] url::ParseError),
+    #[error("remote branch '{remote}/{branch}' does not exist")]
+    MissingRemoteBranch { remote: String, branch: String },
+    /// The local history is truncated, so ancestry and revision counts
+    /// computed from it would be unreliable.
+    #[error("the repository is a shallow clone")]
+    ShallowRepository,
+    /// The remote branch tip is not among the local objects.
+    #[error("tip of remote branch '{remote}/{branch}' is not present locally")]
+    RemoteTipNotFetched { remote: String, branch: String },
 }
 
 impl GitCommandError {
@@ -320,6 +346,89 @@ pub struct GitCommandProvider {
 }
 
 impl GitCommandProvider {
+    /// Verify `rev` is contained in the branch as the remote advertises it now.
+    ///
+    /// Read-only: the tip comes from `git ls-remote` and containment is tested
+    /// against local objects, so no ref, `FETCH_HEAD` or shallow file changes.
+    /// A shallow repository and a tip that was never fetched are refused rather
+    /// than repaired, because the caller must not mutate the checkout unasked.
+    pub fn rev_is_on_remote_branch(
+        &self,
+        rev: &str,
+        remote_name: &str,
+        branch_ref: &str,
+    ) -> Result<bool, GitCommandError> {
+        if !branch_ref.starts_with("refs/heads/") {
+            return Err(GitCommandError::InvalidOutput(format!(
+                "'{branch_ref}' is not a remote branch ref"
+            )));
+        }
+        let branch = branch_ref.trim_start_matches("refs/heads/").to_owned();
+
+        let shallow = Self::run_command(
+            self.new_command()
+                .args(["rev-parse", "--is-shallow-repository"]),
+        )?;
+        if shallow.to_string_lossy().trim() == "true" {
+            return Err(GitCommandError::ShallowRepository);
+        }
+
+        // `ls-remote` patterns match trailing path components, so keep only
+        // the row for exactly this ref.
+        let mut ls_remote = self.new_command();
+        ls_remote.args([
+            "ls-remote",
+            "--exit-code",
+            "--heads",
+            "--",
+            remote_name,
+            branch_ref,
+        ]);
+        let advertised = match Self::run_command(&mut ls_remote) {
+            Ok(out) => out,
+            Err(GitCommandError::BadExit(2, _, _)) => {
+                return Err(GitCommandError::MissingRemoteBranch {
+                    remote: remote_name.to_owned(),
+                    branch,
+                });
+            },
+            Err(err) => return Err(err),
+        };
+        let tip = advertised
+            .to_string_lossy()
+            .lines()
+            .find_map(|row| {
+                let (oid, name) = row.split_once('\t')?;
+                (name == branch_ref).then(|| oid.to_owned())
+            })
+            .ok_or_else(|| GitCommandError::MissingRemoteBranch {
+                remote: remote_name.to_owned(),
+                branch: branch.clone(),
+            })?;
+
+        let tip_present = Self::run_command(self.new_command().args([
+            "cat-file",
+            "-e",
+            &format!("{tip}^{{commit}}"),
+        ]));
+        if let Err(GitCommandError::BadExit(..)) = tip_present {
+            return Err(GitCommandError::RemoteTipNotFetched {
+                remote: remote_name.to_owned(),
+                branch,
+            });
+        }
+        tip_present?;
+
+        match Self::run_command(
+            self.new_command()
+                .args(["merge-base", "--is-ancestor", rev, &tip]),
+        ) {
+            Ok(_) => Ok(true),
+            Err(GitCommandError::BadExit(1, _, _)) => Ok(false),
+            Err(err) => Err(err),
+        }
+    }
+
     /// Create a new [Command] with the current [GitCommandOptions]
     /// and the current working directory set to the path of the repo.
     ///
@@ -773,6 +882,12 @@ pub enum GitCommandGetOriginError {
     NoUpstream,
     #[error("access denied: {0}")]
     AccessDenied(GitCommandError),
+    /// A tracked tag cannot serve as the publish branch.
+    #[error("upstream '{upstream}' is not a branch")]
+    UpstreamNotABranch { upstream: String },
+    /// Multiple exact rows violate Git's unique-ref invariant; do not choose one.
+    #[error("found multiple upstream rows for '{ref_}': {rows:?}")]
+    AmbiguousLocalRef { ref_: String, rows: Vec<String> },
 }
 
 impl From<GitCommandError> for GitCommandGetOriginError {
@@ -985,15 +1100,12 @@ impl GitProvider for GitCommandProvider {
         let ref_ = {
             let mut command = self.new_command();
             command.arg("symbolic-ref");
+            command.arg("--quiet");
             command.arg("HEAD");
             let ref_output_result = GitCommandProvider::run_command(&mut command);
             match ref_output_result {
                 Ok(ref_) => Some(ref_.to_string_lossy().trim().to_string()),
-                Err(GitCommandError::BadExit(128, _, stderr))
-                    if stderr == "fatal: ref HEAD is not a symbolic ref" =>
-                {
-                    None
-                },
+                Err(GitCommandError::BadExit(1, _, _)) => None,
                 Err(e) => Err(e)?,
             }
         };
@@ -1049,35 +1161,52 @@ impl GitProvider for GitCommandProvider {
         Ok(())
     }
 
-    /// Retrieve information about the remote origin for the current branch/repo
+    /// Retrieve the upstream remote of `local_branch_ref`, a full local ref
+    /// (e.g. `refs/heads/main`).
     ///
-    /// Return a tuple containing
-    ///
-    /// 1. the remote name of the current branch
-    /// 2. the remote url
-    /// 3. the upstream branch name
-    /// 4. the current revision of the upstream branch
-    ///
-    /// This is essentially
-    ///
-    ///   upstream_ref = git rev-parse @{u}
-    ///   (remote_name, branch_name) = split_once "/" upstream_ref
-    ///   upstream_url = git remote get-url ${remote_name}
-    ///   upstream_rev = git ls-remote ${remote_name} ${branch_name}
-    fn get_current_branch_remote_info(&self) -> Result<OriginInfo, Self::GetOriginError> {
-        let (remote_name, remote_branch) = {
-            let reference = GitCommandProvider::run_command(
-                self.new_command()
-                    .arg("rev-parse")
-                    .arg("--abbrev-ref")
-                    .arg("--symbolic-full-name")
-                    .arg("@{u}"),
-            )
-            .map_err(|_| GitCommandGetOriginError::NoUpstream)?;
-            let as_str = reference.to_string_lossy();
-            let (remote_name, remote_branch) = as_str.trim().split_once('/').unwrap();
-            (remote_name.to_string(), remote_branch.to_string())
+    /// Require an exact ref match: `for-each-ref <pattern>` also returns
+    /// deeper refs sharing its prefix. Read the remote name from Git's own
+    /// field because a remote name can itself contain `/`.
+    fn get_current_branch_remote_info(
+        &self,
+        local_branch_ref: &str,
+    ) -> Result<OriginInfo, Self::GetOriginError> {
+        let output = GitCommandProvider::run_command(
+            self.new_command()
+                .arg("for-each-ref")
+                .arg("--format=%(refname)\t%(upstream:remoteref)\t%(upstream:remotename)")
+                .arg(local_branch_ref),
+        )?;
+        let text = output.to_string_lossy();
+        let rows: Vec<&str> = text
+            .lines()
+            .filter(|line| line.split('\t').next() == Some(local_branch_ref))
+            .collect();
+
+        let row = match rows.as_slice() {
+            [] => return Err(GitCommandGetOriginError::NoUpstream),
+            [row] => *row,
+            _ => {
+                return Err(GitCommandGetOriginError::AmbiguousLocalRef {
+                    ref_: local_branch_ref.to_string(),
+                    rows: rows.into_iter().map(str::to_string).collect(),
+                });
+            },
         };
+
+        let mut fields = row.split('\t');
+        let _refname = fields.next();
+        let upstream_ref = fields.next().unwrap_or("").to_string();
+        let remote_name = fields.next().unwrap_or("").to_string();
+
+        if upstream_ref.is_empty() {
+            return Err(GitCommandGetOriginError::NoUpstream);
+        }
+        if !upstream_ref.starts_with("refs/heads/") {
+            return Err(GitCommandGetOriginError::UpstreamNotABranch {
+                upstream: upstream_ref,
+            });
+        }
 
         let url = GitCommandProvider::run_command(
             self.new_command()
@@ -1089,27 +1218,10 @@ impl GitProvider for GitCommandProvider {
         .trim()
         .to_string();
 
-        let remote_revision = {
-            let remote_revision = GitCommandProvider::run_command(
-                self.new_command()
-                    .arg("ls-remote")
-                    .arg(&remote_name)
-                    .arg(&remote_branch),
-            )?;
-
-            if remote_revision.len() < 40 {
-                warn!("No commit found upstream for ref {remote_branch}");
-                None
-            } else {
-                Some(remote_revision.to_string_lossy()[..40].to_string())
-            }
-        };
-
         Ok(OriginInfo {
             name: remote_name,
             url,
-            reference: remote_branch,
-            revision: remote_revision,
+            reference: upstream_ref,
         })
     }
 
@@ -1682,6 +1794,31 @@ pub mod tests {
     }
 
     #[test]
+    fn status_on_detached_head_has_no_branch_ref() {
+        let (repo, _tempdir_handle) = init_temp_repo(false);
+        repo.checkout("main", true).unwrap();
+        commit_file(&repo, "init.txt");
+        let current = repo.status().unwrap();
+
+        GitCommandProvider::run_command(repo.new_command().args(["tag", "v1"])).unwrap();
+        GitCommandProvider::run_command(repo.new_command().args(["checkout", "--detach", "v1"]))
+            .unwrap();
+        assert_eq!(repo.status().unwrap(), StatusInfo {
+            ref_: None,
+            ..current.clone()
+        });
+
+        repo.checkout("main", false).unwrap();
+        GitCommandProvider::run_command(repo.new_command().args(["checkout", "--detach", "HEAD"]))
+            .unwrap();
+
+        assert_eq!(repo.status().unwrap(), StatusInfo {
+            ref_: None,
+            ..current
+        });
+    }
+
+    #[test]
     fn test_rev_count() {
         let (repo, _tempdir_handle) = init_temp_repo(false);
         repo.checkout("branch_1", true).unwrap();
@@ -2066,6 +2203,197 @@ pub mod tests {
     }
 
     #[test]
+    fn verifies_containment_on_the_advertised_branch_instead_of_any_remote_ref() {
+        let (repo, _repo_dir) = init_temp_repo(false);
+        let _remotes = create_remotes(&repo, &["origin"]);
+        commit_file(&repo, "base");
+        let base = repo.status().unwrap().rev;
+        repo.create_branch("main", &base).unwrap();
+        repo.checkout("main", false).unwrap();
+        commit_file(&repo, "main_tip");
+        repo.push_ref("origin", "main", false).unwrap();
+
+        repo.create_branch("sibling", &base).unwrap();
+        repo.checkout("sibling", false).unwrap();
+        commit_file(&repo, "sibling_tip");
+        let sibling = repo.status().unwrap().rev;
+        repo.push_ref("origin", "sibling", false).unwrap();
+        let before = mutable_git_state(&repo);
+
+        assert!(
+            repo.rev_is_on_remote_branch(&base, "origin", "refs/heads/main")
+                .unwrap()
+        );
+        assert!(
+            !repo
+                .rev_is_on_remote_branch(&sibling, "origin", "refs/heads/main")
+                .unwrap()
+        );
+        assert!(
+            repo.rev_is_on_remote_branch(&sibling, "origin", "refs/heads/sibling")
+                .unwrap()
+        );
+        assert_eq!(mutable_git_state(&repo), before);
+
+        // Deliberately poison the cached tracking ref: the tip advertised by
+        // the remote must still decide, not the cached one.
+        GitCommandProvider::run_command(repo.new_command().args([
+            "update-ref",
+            "refs/remotes/origin/main",
+            &sibling,
+        ]))
+        .unwrap();
+        assert!(
+            repo.rev_is_on_remote_branch(&base, "origin", "refs/heads/main")
+                .unwrap()
+        );
+        assert!(
+            !repo
+                .rev_is_on_remote_branch(&sibling, "origin", "refs/heads/main")
+                .unwrap()
+        );
+    }
+
+    /// Clone `remote_url` into a fresh directory with the given extra flags.
+    fn clone_remote(remote_url: &str, flags: &[&str]) -> (GitCommandProvider, tempfile::TempDir) {
+        let clone_dir = tempfile::tempdir().unwrap();
+        GitCommandProvider::run_command(
+            test_git_options()
+                .new_command()
+                .arg("clone")
+                .args(flags)
+                .args([
+                    "--branch",
+                    "main",
+                    remote_url,
+                    clone_dir.path().to_str().unwrap(),
+                ]),
+        )
+        .unwrap();
+        (
+            GitCommandProvider::open(clone_dir.path()).unwrap(),
+            clone_dir,
+        )
+    }
+
+    /// The Git state a read-only check must leave untouched: every ref, the
+    /// contents of `FETCH_HEAD` (if any) and of the `shallow` file (if any).
+    fn mutable_git_state(repo: &GitCommandProvider) -> (String, Option<String>, Option<String>) {
+        let refs = GitCommandProvider::run_command(
+            repo.new_command()
+                .args(["for-each-ref", "--format=%(refname) %(objectname)"]),
+        )
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+        let git_dir = repo.path().join(".git");
+        (
+            refs,
+            std::fs::read_to_string(git_dir.join("FETCH_HEAD")).ok(),
+            std::fs::read_to_string(git_dir.join("shallow")).ok(),
+        )
+    }
+
+    /// A local repository whose remote `origin` has `main` holding `base`
+    /// then `tip`. The returned guards keep the temp directories alive.
+    struct RemoteFixture {
+        origin: GitCommandProvider,
+        base: String,
+        tip: String,
+        url: String,
+        _guards: (tempfile::TempDir, RemoteMap),
+    }
+
+    fn remote_with_base_and_tip() -> RemoteFixture {
+        let (repo, repo_dir) = init_temp_repo(false);
+        let remotes = create_remotes(&repo, &["origin"]);
+        commit_file(&repo, "base");
+        let base = repo.status().unwrap().rev;
+        repo.create_branch("main", &base).unwrap();
+        repo.checkout("main", false).unwrap();
+        commit_file(&repo, "tip");
+        let tip = repo.status().unwrap().rev;
+        repo.push_ref("origin", "main", false).unwrap();
+        RemoteFixture {
+            url: get_remote_url(&remotes, "origin"),
+            origin: repo,
+            base,
+            tip,
+            _guards: (repo_dir, remotes),
+        }
+    }
+
+    #[test]
+    fn refuses_a_shallow_repository_and_leaves_it_shallow() {
+        let RemoteFixture { base, tip, url, .. } = &remote_with_base_and_tip();
+        let (shallow, _dir) = clone_remote(url, &["--depth", "1"]);
+        let before = mutable_git_state(&shallow);
+        assert!(before.2.is_some(), "fixture must be shallow");
+
+        // Both a revision inside the truncated history and one outside it.
+        for rev in [tip, base] {
+            assert!(matches!(
+                shallow.rev_is_on_remote_branch(rev, "origin", "refs/heads/main"),
+                Err(GitCommandError::ShallowRepository)
+            ));
+        }
+        assert_eq!(mutable_git_state(&shallow), before);
+    }
+
+    #[test]
+    fn full_clone_is_verified_without_changing_git_state() {
+        let RemoteFixture { base, tip, url, .. } = &remote_with_base_and_tip();
+        let (clone, _dir) = clone_remote(url, &[]);
+        let before = mutable_git_state(&clone);
+        // A fresh clone has no FETCH_HEAD; a fetch would create one.
+        assert_eq!(before.1, None);
+
+        assert!(
+            clone
+                .rev_is_on_remote_branch(base, "origin", "refs/heads/main")
+                .unwrap()
+        );
+        assert!(
+            clone
+                .rev_is_on_remote_branch(tip, "origin", "refs/heads/main")
+                .unwrap()
+        );
+        assert_eq!(mutable_git_state(&clone), before);
+    }
+
+    #[test]
+    fn refuses_an_advertised_tip_that_is_missing_locally() {
+        let fixture = remote_with_base_and_tip();
+        let (clone, _dir) = clone_remote(&fixture.url, &[]);
+        let local = clone.status().unwrap().rev;
+
+        // The remote advances after the clone, so its tip is not fetched here.
+        commit_file(&fixture.origin, "newer");
+        fixture.origin.push_ref("origin", "main", false).unwrap();
+        let before = mutable_git_state(&clone);
+
+        assert!(matches!(
+            clone.rev_is_on_remote_branch(&local, "origin", "refs/heads/main"),
+            Err(GitCommandError::RemoteTipNotFetched { .. })
+        ));
+        assert_eq!(mutable_git_state(&clone), before);
+    }
+
+    #[test]
+    fn deleted_remote_branch_is_classified_without_changing_git_state() {
+        let (repo, _repo_dir) = init_temp_repo(false);
+        let _remotes = create_remotes(&repo, &["origin"]);
+        commit_file(&repo, "base");
+        let rev = repo.status().unwrap().rev;
+        let before = mutable_git_state(&repo);
+        assert!(matches!(
+            repo.rev_is_on_remote_branch(&rev, "origin", "refs/heads/deleted"),
+            Err(GitCommandError::MissingRemoteBranch { .. })
+        ));
+        assert_eq!(mutable_git_state(&repo), before);
+    }
+
+    #[test]
     fn is_access_denied() {
         let denied = GitCommandError::BadExit(
             128,
@@ -2091,5 +2419,106 @@ pub mod tests {
         let other =
             GitCommandError::BadExit(1, String::new(), "fatal: not a git repository".to_string());
         assert!(!other.is_access_denied());
+    }
+
+    #[test]
+    fn remote_named_with_a_slash_is_not_mis_split() {
+        let (remote, _remote_tempdir) = init_temp_repo(true);
+        let (git, _tempdir) = init_temp_repo(false);
+        git.checkout("main", true).unwrap();
+        commit_file(&git, "init.txt");
+        git.add_remote("a/b", &repo_local_url(&remote)).unwrap();
+        git.push_ref("a/b", "main", false).unwrap();
+        GitCommandProvider::run_command(
+            git.new_command()
+                .args(["branch", "--set-upstream-to=a/b/main"]),
+        )
+        .unwrap();
+
+        let info = git
+            .get_current_branch_remote_info("refs/heads/main")
+            .expect("upstream is configured");
+        assert_eq!(info.name, "a/b");
+        assert_eq!(info.reference, "refs/heads/main");
+        assert_eq!(info.short_branch(), "main");
+    }
+
+    #[test]
+    fn branch_name_with_slashes_reports_the_full_ref() {
+        let (remote, _remote_tempdir) = init_temp_repo(true);
+        let (git, _tempdir) = init_temp_repo(false);
+        git.checkout("feature/foo", true).unwrap();
+        commit_file(&git, "init.txt");
+        git.add_remote("origin", &repo_local_url(&remote)).unwrap();
+        git.push_ref("origin", "feature/foo", false).unwrap();
+        GitCommandProvider::run_command(
+            git.new_command()
+                .args(["branch", "--set-upstream-to=origin/feature/foo"]),
+        )
+        .unwrap();
+
+        let info = git
+            .get_current_branch_remote_info("refs/heads/feature/foo")
+            .expect("upstream is configured");
+        assert_eq!(info.name, "origin");
+        assert_eq!(info.reference, "refs/heads/feature/foo");
+        assert_eq!(info.short_branch(), "feature/foo");
+    }
+
+    #[test]
+    fn local_and_upstream_branch_names_may_differ() {
+        let (remote, _remote_tempdir) = init_temp_repo(true);
+        let (git, _tempdir) = init_temp_repo(false);
+        git.checkout("local-name", true).unwrap();
+        commit_file(&git, "init.txt");
+        git.add_remote("origin", &repo_local_url(&remote)).unwrap();
+        git.push_ref("origin", "local-name:remote-name", false)
+            .unwrap();
+        GitCommandProvider::run_command(
+            git.new_command()
+                .args(["branch", "--set-upstream-to=origin/remote-name"]),
+        )
+        .unwrap();
+
+        let info = git
+            .get_current_branch_remote_info("refs/heads/local-name")
+            .expect("upstream is configured");
+        assert_eq!(info.reference, "refs/heads/remote-name");
+    }
+
+    #[test]
+    fn no_upstream_configured_errors() {
+        let (git, _tempdir) = init_temp_repo(false);
+        git.checkout("main", true).unwrap();
+        commit_file(&git, "init.txt");
+
+        let err = git
+            .get_current_branch_remote_info("refs/heads/main")
+            .expect_err("no upstream is configured");
+        assert!(matches!(err, GitCommandGetOriginError::NoUpstream));
+    }
+
+    /// An absent ref can still match a deeper ref in `for-each-ref`'s prefix search.
+    #[test]
+    fn a_query_for_an_absent_ref_does_not_match_a_deeper_namesake() {
+        let (remote, _remote_tempdir) = init_temp_repo(true);
+        let (git, _tempdir) = init_temp_repo(false);
+        git.checkout("main", true).unwrap();
+        commit_file(&git, "init.txt");
+        let status = git.status().unwrap();
+        git.create_branch("release/1.0", &status.rev).unwrap();
+        git.add_remote("origin", &repo_local_url(&remote)).unwrap();
+        git.push_ref("origin", "release/1.0", false).unwrap();
+        GitCommandProvider::run_command(git.new_command().args([
+            "branch",
+            "--set-upstream-to=origin/release/1.0",
+            "release/1.0",
+        ]))
+        .unwrap();
+
+        let err = git
+            .get_current_branch_remote_info("refs/heads/release")
+            .expect_err("refs/heads/release does not exist as its own ref");
+        assert!(matches!(err, GitCommandGetOriginError::NoUpstream));
     }
 }
