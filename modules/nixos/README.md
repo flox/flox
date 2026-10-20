@@ -227,9 +227,13 @@ Both methods also support the following module-wide options:
     - _Default_: `0700`
 
 * `services.flox.metrics.enable`
-    Whether to let `flox` submit metrics for Flox-managed services.
+    Whether Flox sends telemetry for Flox-managed services.
     Each service runs with its own Flox configuration directory,
     so this is the only place the setting can be made for them.
+    The default, `true`, sets `FLOX_DISABLE_METRICS=false` for each service,
+    which overrides `disable_metrics = true` in `/etc/flox.toml`.
+    This option does not apply to people who run `flox` themselves;
+    for them, set `environment.etc."flox.toml".text = "disable_metrics = true\n";`.
 
     - _Type_: boolean
     - _Default_: `true`
