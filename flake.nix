@@ -60,8 +60,16 @@
 
           process-compose = final.callPackage ./pkgs/process-compose { inherit (prev) process-compose; };
 
-          # TODO: remove this override once the upstream nixpkgs cacert distrusts these roots.
-          cacert = prev.cacert.override {
+          # The CA bundle flox bakes in and ships, with four compromised roots
+          # distrusted. Kept under its own name rather than overriding
+          # `cacert`: an override changes every nixpkgs package that depends
+          # on `cacert`, none of which can then be substituted, and those only
+          # use it inside the build sandbox, where fetches are verified by
+          # hash. `overlays.flox` passes this as `cacert` to flox's own
+          # packages; downstream consumers such as the installers read it as
+          # `cacert-distrusted` from `pkgsFor`.
+          # TODO: drop once the upstream nixpkgs cacert distrusts these roots.
+          cacert-distrusted = prev.cacert.override {
             blacklist = [
               "Comodo AAA Services root"
               "emSign ECC Root CA - G3"
@@ -69,19 +77,6 @@
               "emSign ECC Root CA - C3"
             ];
           };
-
-          # The cacert override above changes fish's build inputs, so fish is
-          # built from source instead of substituted. Its
-          # test_replace_home_directory_with_tilde test sets the global HOME
-          # without `#[serial]` and races the serial tests that also set it.
-          # TODO: remove once the cacert override is gone or fish ships the fix.
-          fish = prev.fish.overrideAttrs (old: {
-            postPatch = (old.postPatch or "") + ''
-              substituteInPlace src/expand.rs \
-                --replace-fail "fn test_replace_home_directory_with_tilde()" \
-                               "#[serial] fn test_replace_home_directory_with_tilde()"
-            '';
-          });
 
         })
         inputs.fenix.overlays.default
@@ -97,6 +92,9 @@
               inherit inputs; # passing in inputs... beware
               inherit (inputs) self;
               pkgsFor = final;
+              # Every flox package that bakes in a CA bundle takes it as
+              # `cacert`; see `cacert-distrusted` in `overlays.deps`.
+              cacert = final.cacert-distrusted;
             }
           );
           nixpkgsInputLockedURL =
@@ -234,6 +232,7 @@
           inherit pkgs nixpkgs;
           module = import ./modules/nixos pkgsContext;
         };
+        cacert-distrusted = import ./checks/cacert-distrusted.nix { inherit pkgs; };
       }) pkgsContext;
 
       # ------------------------------------------------------------------------ #
