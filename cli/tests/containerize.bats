@@ -364,7 +364,7 @@ function assert_container_output() {
 
   # It is the bundle the activation exports as NIX_SSL_CERT_FILE, not
   # nixpkgs' cacert, which lacks any roots flox distrusts in its own bundle.
-  run podman run -q "$CONTAINER_ID" bash -c \
+  run --separate-stderr podman run -q "$CONTAINER_ID" bash -c \
     'readlink -f /etc/ssl/certs/ca-bundle.crt; readlink -f "$NIX_SSL_CERT_FILE"'
   assert_success
   assert_equal "${#lines[@]}" 2
