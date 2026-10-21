@@ -595,6 +595,15 @@
           },
           "trigger": {
             "$ref": "#/components/schemas/BuildTrigger"
+          },
+          "published_package": {
+            "description": "The package the build published, null when no publish is linked.",
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PublishedPackage"
+              }
+            ]
           }
         },
         "type": "object",
@@ -754,6 +763,48 @@
         ],
         "title": "ErrorResponse",
         "description": "JSON body returned for all error responses on the builds and\nstats endpoints."
+      },
+      "PublishedPackage": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "The published derivation's name, such as `hello-2.12.1`."
+          },
+          "version": {
+            "title": "Version",
+            "description": "The published derivation's version, null when it has none.",
+            "nullable": true,
+            "type": "string"
+          },
+          "source_rev_count": {
+            "type": "integer",
+            "title": "Source Rev Count",
+            "description": "The revision count of the source page the package was built from. One part of the build's coordinate: builds of the same source revision with different locked inputs or base page share it."
+          },
+          "description": {
+            "title": "Description",
+            "description": "The published derivation's description, null when it has none.",
+            "nullable": true,
+            "type": "string"
+          },
+          "license": {
+            "title": "License",
+            "description": "The published derivation's license as the catalog records it, such as `MIT` or `[ MIT, Apache-2.0 ]`; null when it has none.",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "version",
+          "source_rev_count",
+          "description",
+          "license"
+        ],
+        "title": "PublishedPackage",
+        "description": "The catalog package a build published."
       },
       "SystemBuildStats": {
         "properties": {

@@ -251,6 +251,21 @@ coordinator-reported status appears.*/
     ///      "title": "Nixpkgs Revision",
     ///      "type": "string"
     ///    },
+    ///    "published_package": {
+    ///      "description": "The package the build published, null when no publish is linked.",
+    ///      "oneOf": [
+    ///        {
+    ///          "type": "null"
+    ///        },
+    ///        {
+    ///          "allOf": [
+    ///            {
+    ///              "$ref": "#/components/schemas/PublishedPackage"
+    ///            }
+    ///          ]
+    ///        }
+    ///      ]
+    ///    },
     ///    "source_commit_sha": {
     ///      "title": "Source Commit Sha",
     ///      "type": "string"
@@ -297,6 +312,9 @@ coordinator-reported status appears.*/
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub exit_code: ::std::option::Option<i64>,
         pub nixpkgs_revision: ::std::string::String,
+        ///The package the build published, null when no publish is linked.
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub published_package: ::std::option::Option<PublishedPackage>,
         pub source_commit_sha: ::std::string::String,
         pub source_repo_url: ::std::string::String,
         pub status: crate::status::EffectiveBuildStatus,
@@ -606,6 +624,79 @@ stats endpoints.*/
     }
     impl ::std::convert::From<&ErrorResponse> for ErrorResponse {
         fn from(value: &ErrorResponse) -> Self {
+            value.clone()
+        }
+    }
+    ///The catalog package a build published.
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "PublishedPackage",
+    ///  "description": "The catalog package a build published.",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "description",
+    ///    "license",
+    ///    "name",
+    ///    "source_rev_count",
+    ///    "version"
+    ///  ],
+    ///  "properties": {
+    ///    "description": {
+    ///      "title": "Description",
+    ///      "description": "The published derivation's description, null when it has none.",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "license": {
+    ///      "title": "License",
+    ///      "description": "The published derivation's license as the catalog records it, such as `MIT` or `[ MIT, Apache-2.0 ]`; null when it has none.",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "name": {
+    ///      "title": "Name",
+    ///      "description": "The published derivation's name, such as `hello-2.12.1`.",
+    ///      "type": "string"
+    ///    },
+    ///    "source_rev_count": {
+    ///      "title": "Source Rev Count",
+    ///      "description": "The revision count of the source page the package was built from. One part of the build's coordinate: builds of the same source revision with different locked inputs or base page share it.",
+    ///      "type": "integer"
+    ///    },
+    ///    "version": {
+    ///      "title": "Version",
+    ///      "description": "The published derivation's version, null when it has none.",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct PublishedPackage {
+        ///The published derivation's description, null when it has none.
+        pub description: ::std::option::Option<::std::string::String>,
+        ///The published derivation's license as the catalog records it, such as `MIT` or `[ MIT, Apache-2.0 ]`; null when it has none.
+        pub license: ::std::option::Option<::std::string::String>,
+        ///The published derivation's name, such as `hello-2.12.1`.
+        pub name: ::std::string::String,
+        ///The revision count of the source page the package was built from. One part of the build's coordinate: builds of the same source revision with different locked inputs or base page share it.
+        pub source_rev_count: i64,
+        ///The published derivation's version, null when it has none.
+        pub version: ::std::option::Option<::std::string::String>,
+    }
+    impl ::std::convert::From<&PublishedPackage> for PublishedPackage {
+        fn from(value: &PublishedPackage) -> Self {
             value.clone()
         }
     }
