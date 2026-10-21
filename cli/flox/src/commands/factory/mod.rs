@@ -204,6 +204,7 @@ pub(crate) mod test_helpers {
             nixpkgs_revision: "deadbeef1234567890deadbeef1234567890dead".to_string(),
             created_at: chrono::Utc.with_ymd_and_hms(2025, 1, 1, 0, 0, 0).unwrap(),
             exit_code: None,
+            published_package: None,
             task,
             // A build from a Factory that predates trigger reporting; tests
             // covering the trigger set it on the result.
