@@ -60,32 +60,33 @@
 
           process-compose = final.callPackage ./pkgs/process-compose { inherit (prev) process-compose; };
 
-          # Distrust four CA roots whose private keys were compromised.
+          # CA bundle with roots distrusted after the October 2026 eMudhra
+          # incident. Eight emSign intermediate CAs were issued with weak,
+          # recoverable private keys (Mozilla bug 2083449); Mozilla removed
+          # the roots they chain to from NSS 3.131.1 (bugs 2084101, 2083709),
+          # and Go's crypto/x509 denylists the intermediates, including
+          # those cross-signed under Sectigo's AAA Certificate Services root
+          # (CVE-2026-111943). The nixpkgs pin ships NSS 3.121, which still
+          # trusts the emSign roots, so the distrust is applied here. The
+          # Comodo entry stays until NSS itself removes or distrusts that
+          # root.
           #
-          # The three emSign entries are a backport of the distrust that
-          # upstream nixpkgs applied natively in NSS 3.131.1 (nixpkgs
-          # #576390, then #576347). flox pins NSS 3.121, so we carry them
-          # here. On a future nixpkgs bump to ≥3.131.1 they become
-          # harmless no-ops (NSS already rejects them in certdata).
+          # This affects every platform: `default_nix_env_vars` in flox-core
+          # points SSL_CERT_FILE / NIX_SSL_CERT_FILE at this bundle for Nix
+          # subprocesses and activated environments, and the installers bake
+          # it into the nix-daemon environment.
           #
-          # "Comodo AAA Services root" is a separate compromise; NSS never
-          # distrusted it, so this entry must remain regardless of the NSS
-          # version we pin.
+          # buildcatrust keeps a rejected root in the bundle as a
+          # `TRUSTED CERTIFICATE` block carrying "Rejected Uses" and omits
+          # its plain `CERTIFICATE` block, so OpenSSL, Go and rustls
+          # consumers all stop trusting it.
           #
-          # buildcatrust keeps the certs in the bundle and marks them
-          # "Rejected Uses: TLS Web Server Authentication" — grep-for-absence
-          # is the wrong check; use `openssl x509 -text | grep Rejected`.
-          #
-          # macOS is unaffected (Keychain); this override matters on Linux
-          # where reqwest → native-tls → OpenSSL, Nix subprocess downloads,
-          # and NIX_SSL_CERT_FILE all read NIXPKGS_CACERT_BUNDLE_CRT.
-          #
-          # Deliberately not an override of `cacert` itself: `cacert` is in the
-          # closure of a large part of nixpkgs (python3Packages.certifi, and
-          # through sphinx also ghc), so a global override forces source
+          # Deliberately not an override of `cacert` itself: `cacert` is in
+          # the closure of a large part of nixpkgs (python3Packages.certifi,
+          # and through sphinx also ghc), so a global override forces source
           # rebuilds of pandoc, shellcheck, nixfmt and hundreds of other
-          # derivations. Only the flox packages that bake the bundle take this
-          # attribute (see overlays.flox).
+          # derivations. Only the flox packages that bake the bundle take
+          # this attribute (see overlays.flox).
           flox-cacert = prev.cacert.override {
             blacklist = [
               "Comodo AAA Services root"
