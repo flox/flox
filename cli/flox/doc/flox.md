@@ -123,11 +123,26 @@ sharing environments, and administration.
 :   Override the default editor used for editing environment manifests and commit messages.
 
 `$SSL_CERT_FILE`, `$NIX_SSL_CERT_FILE`
-:   If set, overrides the path to the default Flox provided SSL certificate bundle.
-    Set `NIX_SSL_CERT_FILE` to only override packages built with Nix,
-    and otherwise set `SSL_CERT_FILE` to override the value for all packages.
+:   Certificate bundles for TLS. `SSL_CERT_FILE` is the system-wide setting
+    that every program honors, and Flox never sets it. `NIX_SSL_CERT_FILE`
+    is read by Nix and by Nix-built software (ahead of `SSL_CERT_FILE`); set
+    it to give those a bundle of their own, for example when `SSL_CERT_FILE`
+    is in a format they cannot read. If neither is set, Flox sets
+    `NIX_SSL_CERT_FILE` to the bundle it ships, for Nix software alone, and
+    exports it into activated environments. Once an activation has applied
+    that default, an `SSL_CERT_FILE` exported later in the shell does not
+    reach Nix-built software; set `NIX_SSL_CERT_FILE` as well. For Nix
+    itself, an `ssl-cert-file` setting in `nix.conf` outranks both
+    variables. Flox does not pass `SSL_CERT_DIR` on to Nix-built software
+    either; an environment that needs a directory of certificates can
+    export it from `[vars]`.
 
     See also: [Nix environment variables - `NIX_SSL_CERT_FILE`](https://nixos.org/manual/nix/stable/installation/env-variables.html#nix_ssl_cert_file)
+
+`$LOCALE_ARCHIVE` (Linux), `$PATH_LOCALE` (macOS)
+:   Locale data for Nix-built software, which does not find the system's
+    own. If unset, Flox sets the variable to the locale data it ships and
+    exports it into activated environments. A value you set is left alone.
 
 # SEE ALSO
 
