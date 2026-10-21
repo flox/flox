@@ -142,6 +142,7 @@ pub(crate) mod test_helpers {
     use chrono::TimeZone;
     use factory_api_v1::types::{TaskErrorClass, TaskResponse, TaskStatus};
     use floxhub_client::{
+        BuildDetailResponse,
         BuildFilters,
         BuildId,
         BuildResponse,
@@ -209,6 +210,48 @@ pub(crate) mod test_helpers {
             // A build from a Factory that predates trigger reporting; tests
             // covering the trigger set it on the result.
             trigger: None,
+        }
+    }
+
+    /// Extend a `BuildResponse` fixture into the `BuildDetailResponse` that
+    /// `get_build` returns, with no published outputs.
+    ///
+    /// The destructuring is exhaustive, so a field added to either type fails
+    /// to compile here rather than going unset.
+    pub fn make_build_detail(build: BuildResponse) -> BuildDetailResponse {
+        let BuildResponse {
+            attr_path,
+            build_id,
+            build_type,
+            catalog_name,
+            created_at,
+            exit_code,
+            nixpkgs_revision,
+            published_package,
+            source_commit_sha,
+            source_repo_url,
+            status,
+            system,
+            task,
+            trigger,
+        } = build;
+
+        BuildDetailResponse {
+            attr_path,
+            build_id,
+            build_type,
+            catalog_name,
+            created_at,
+            exit_code,
+            nixpkgs_revision,
+            outputs: vec![],
+            published_package,
+            source_commit_sha,
+            source_repo_url,
+            status,
+            system,
+            task,
+            trigger,
         }
     }
 
@@ -319,8 +362,11 @@ pub(crate) mod test_helpers {
             })
         }
 
-        async fn get_build(&self, _build_id: BuildId) -> Result<BuildResponse, FactoryClientError> {
-            self.get_build.realize()
+        async fn get_build(
+            &self,
+            _build_id: BuildId,
+        ) -> Result<BuildDetailResponse, FactoryClientError> {
+            self.get_build.realize().map(make_build_detail)
         }
 
         async fn cancel_build(

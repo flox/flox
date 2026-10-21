@@ -1,6 +1,6 @@
 use anyhow::Result;
 use bpaf::Bpaf;
-use floxhub_client::{BuildId, BuildResponse, FactoryClientTrait};
+use floxhub_client::{BuildDetailResponse, BuildId, FactoryClientTrait};
 use indoc::formatdoc;
 use tracing::instrument;
 
@@ -42,9 +42,9 @@ impl Status {
 
 /// Render a single build as either raw JSON or a human-readable table.
 ///
-/// The JSON form is intentionally the bare [`BuildResponse`] object, with no
-/// surrounding envelope: a single build has no pagination to report.
-fn render(build: BuildResponse, json: bool) -> Result<String> {
+/// The JSON form is intentionally the bare [`BuildDetailResponse`] object, with
+/// no surrounding envelope: a single build has no pagination to report.
+fn render(build: BuildDetailResponse, json: bool) -> Result<String> {
     if json {
         Ok(format!("{}\n", serde_json::to_string_pretty(&build)?))
     } else {
@@ -63,8 +63,8 @@ struct BuildStatusDisplay {
     created_at: String,
 }
 
-impl From<BuildResponse> for BuildStatusDisplay {
-    fn from(b: BuildResponse) -> Self {
+impl From<BuildDetailResponse> for BuildStatusDisplay {
+    fn from(b: BuildDetailResponse) -> Self {
         let status = effective_status(&b.status);
         let trigger = trigger_label(b.trigger.as_ref());
 
@@ -98,7 +98,11 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use super::*;
-    use crate::commands::factory::test_helpers::{StubFactoryClient, make_build};
+    use crate::commands::factory::test_helpers::{
+        StubFactoryClient,
+        make_build,
+        make_build_detail,
+    };
 
     #[tokio::test]
     async fn status_renders_not_found_message() {
@@ -126,7 +130,7 @@ mod tests {
             kind: Some("source_push".to_string().into()),
             stabilities: vec!["staging".to_string()],
         });
-        assert_eq!(render(build, false).unwrap(), indoc! {"
+        assert_eq!(render(make_build_detail(build), false).unwrap(), indoc! {"
             Build ID:      42
             Package:       my-catalog/hello
             System:        x86_64-linux
@@ -138,7 +142,7 @@ mod tests {
 
     #[test]
     fn status_table_shows_pending_before_dispatch() {
-        let build = make_build(42, "x86_64-linux", "hello", None);
+        let build = make_build_detail(make_build(42, "x86_64-linux", "hello", None));
         assert_eq!(render(build, false).unwrap(), indoc! {"
             Build ID:      42
             Package:       my-catalog/hello

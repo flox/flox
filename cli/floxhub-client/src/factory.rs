@@ -15,6 +15,7 @@ use std::str::FromStr;
 use chrono::{DateTime, Utc};
 use factory_api_v1::types::{
     AttrPathItem,
+    BuildDetailResponse,
     BuildResponse,
     EffectiveBuildStatus,
     ErrorResponse,
@@ -266,7 +267,7 @@ pub struct BuildFilters {
 /// The factory builds API interface, implemented for [`FloxhubClient`].
 ///
 /// Methods return domain types (`ResultsPage<BuildResponse>`, `BuildResponse`,
-/// `ByteStream`) and domain errors (`FactoryClientError`), keeping generated
+/// `BuildDetailResponse`, `ByteStream`) and domain errors (`FactoryClientError`), keeping generated
 /// HTTP types contained within the `floxhub-client` crate.
 #[allow(async_fn_in_trait)]
 pub trait FactoryClientTrait {
@@ -276,8 +277,9 @@ pub trait FactoryClientTrait {
         filters: &BuildFilters,
     ) -> Result<ResultsPage<BuildResponse>, FactoryClientError>;
 
-    /// Fetch a single build by its ID.
-    async fn get_build(&self, build_id: BuildId) -> Result<BuildResponse, FactoryClientError>;
+    /// Fetch a single build by its ID, with the outputs it published.
+    async fn get_build(&self, build_id: BuildId)
+    -> Result<BuildDetailResponse, FactoryClientError>;
 
     /// Cancel a single build by its ID (DELETE).
     ///
@@ -339,7 +341,10 @@ impl FactoryClientTrait for crate::FloxhubClient {
         Ok(ResultsPage { results, count })
     }
 
-    async fn get_build(&self, build_id: BuildId) -> Result<BuildResponse, FactoryClientError> {
+    async fn get_build(
+        &self,
+        build_id: BuildId,
+    ) -> Result<BuildDetailResponse, FactoryClientError> {
         // A 404 on this resource-specific endpoint means the build ID does not
         // exist; reclassify it so the `status` verb can report it as such. Other
         // endpoints leave a 404 as the underlying API error.
