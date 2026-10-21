@@ -114,6 +114,149 @@ pub mod types {
                 })
         }
     }
+    ///A single build, with the outputs of the derivation it published.
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "BuildDetailResponse",
+    ///  "description": "A single build, with the outputs of the derivation it published.",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "attr_path",
+    ///    "build_id",
+    ///    "build_type",
+    ///    "catalog_name",
+    ///    "created_at",
+    ///    "nixpkgs_revision",
+    ///    "source_commit_sha",
+    ///    "source_repo_url",
+    ///    "status",
+    ///    "system"
+    ///  ],
+    ///  "properties": {
+    ///    "attr_path": {
+    ///      "title": "Attr Path",
+    ///      "type": "string"
+    ///    },
+    ///    "build_id": {
+    ///      "title": "Build Id",
+    ///      "type": "integer"
+    ///    },
+    ///    "build_type": {
+    ///      "title": "Build Type",
+    ///      "type": "string"
+    ///    },
+    ///    "catalog_name": {
+    ///      "title": "Catalog Name",
+    ///      "type": "string"
+    ///    },
+    ///    "created_at": {
+    ///      "title": "Created At",
+    ///      "type": "string",
+    ///      "format": "date-time"
+    ///    },
+    ///    "exit_code": {
+    ///      "title": "Exit Code",
+    ///      "type": [
+    ///        "integer",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "nixpkgs_revision": {
+    ///      "title": "Nixpkgs Revision",
+    ///      "type": "string"
+    ///    },
+    ///    "outputs": {
+    ///      "title": "Outputs",
+    ///      "description": "Every output of the derivation the build published, with its recorded sizes. Empty when no published package is linked to the build.",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "$ref": "#/components/schemas/BuildOutput"
+    ///      }
+    ///    },
+    ///    "published_package": {
+    ///      "description": "The package the build published, null when no publish is linked.",
+    ///      "oneOf": [
+    ///        {
+    ///          "type": "null"
+    ///        },
+    ///        {
+    ///          "allOf": [
+    ///            {
+    ///              "$ref": "#/components/schemas/PublishedPackage"
+    ///            }
+    ///          ]
+    ///        }
+    ///      ]
+    ///    },
+    ///    "source_commit_sha": {
+    ///      "title": "Source Commit Sha",
+    ///      "type": "string"
+    ///    },
+    ///    "source_repo_url": {
+    ///      "title": "Source Repo Url",
+    ///      "type": "string"
+    ///    },
+    ///    "status": {
+    ///      "$ref": "#/components/schemas/EffectiveBuildStatus"
+    ///    },
+    ///    "system": {
+    ///      "title": "System",
+    ///      "type": "string"
+    ///    },
+    ///    "task": {
+    ///      "oneOf": [
+    ///        {
+    ///          "type": "null"
+    ///        },
+    ///        {
+    ///          "allOf": [
+    ///            {
+    ///              "$ref": "#/components/schemas/TaskResponse"
+    ///            }
+    ///          ]
+    ///        }
+    ///      ]
+    ///    },
+    ///    "trigger": {
+    ///      "$ref": "#/components/schemas/BuildTrigger"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct BuildDetailResponse {
+        pub attr_path: ::std::string::String,
+        pub build_id: i64,
+        pub build_type: ::std::string::String,
+        pub catalog_name: ::std::string::String,
+        pub created_at: ::chrono::DateTime<::chrono::offset::Utc>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub exit_code: ::std::option::Option<i64>,
+        pub nixpkgs_revision: ::std::string::String,
+        ///Every output of the derivation the build published, with its recorded sizes. Empty when no published package is linked to the build.
+        #[serde(default, skip_serializing_if = "::std::vec::Vec::is_empty")]
+        pub outputs: ::std::vec::Vec<BuildOutput>,
+        ///The package the build published, null when no publish is linked.
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub published_package: ::std::option::Option<PublishedPackage>,
+        pub source_commit_sha: ::std::string::String,
+        pub source_repo_url: ::std::string::String,
+        pub status: crate::status::EffectiveBuildStatus,
+        pub system: ::std::string::String,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub task: ::std::option::Option<TaskResponse>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub trigger: ::std::option::Option<BuildTrigger>,
+    }
+    impl ::std::convert::From<&BuildDetailResponse> for BuildDetailResponse {
+        fn from(value: &BuildDetailResponse) -> Self {
+            value.clone()
+        }
+    }
     ///Paginated list of builds.
     ///
     /// <details><summary>JSON schema</summary>
@@ -162,6 +305,72 @@ pub mod types {
     }
     impl ::std::convert::From<&BuildListResponse> for BuildListResponse {
         fn from(value: &BuildListResponse) -> Self {
+            value.clone()
+        }
+    }
+    ///An output of the derivation a build published.
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "BuildOutput",
+    ///  "description": "An output of the derivation a build published.",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "is_default",
+    ///    "name",
+    ///    "store_path"
+    ///  ],
+    ///  "properties": {
+    ///    "closure_size": {
+    ///      "title": "Closure Size",
+    ///      "description": "Total size in bytes of the NARs in the store path's closure. Null when none has been recorded. The base-catalog crawler records none, so a base-catalog store path has one only when a publish recorded it as part of a closure.",
+    ///      "type": [
+    ///        "integer",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "is_default": {
+    ///      "title": "Is Default",
+    ///      "description": "Whether the output is installed by default: it is named in the derivation's `outputs_to_install`.",
+    ///      "type": "boolean"
+    ///    },
+    ///    "name": {
+    ///      "title": "Name",
+    ///      "type": "string"
+    ///    },
+    ///    "nar_size": {
+    ///      "title": "Nar Size",
+    ///      "description": "Size in bytes of the store path's NAR. Null when no size has been recorded: the publish has not finished uploading, failed to record it, or went to a store that records no sizes. On a base-catalog store path, also null when the crawler has not recorded the path or cache.nixos.org has no NAR for it.",
+    ///      "type": [
+    ///        "integer",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "store_path": {
+    ///      "title": "Store Path",
+    ///      "type": "string"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct BuildOutput {
+        ///Total size in bytes of the NARs in the store path's closure. Null when none has been recorded. The base-catalog crawler records none, so a base-catalog store path has one only when a publish recorded it as part of a closure.
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub closure_size: ::std::option::Option<i64>,
+        ///Whether the output is installed by default: it is named in the derivation's `outputs_to_install`.
+        pub is_default: bool,
+        pub name: ::std::string::String,
+        ///Size in bytes of the store path's NAR. Null when no size has been recorded: the publish has not finished uploading, failed to record it, or went to a store that records no sizes. On a base-catalog store path, also null when the crawler has not recorded the path or cache.nixos.org has no NAR for it.
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub nar_size: ::std::option::Option<i64>,
+        pub store_path: ::std::string::String,
+    }
+    impl ::std::convert::From<&BuildOutput> for BuildOutput {
+        fn from(value: &BuildOutput) -> Self {
             value.clone()
         }
     }
@@ -251,6 +460,21 @@ coordinator-reported status appears.*/
     ///      "title": "Nixpkgs Revision",
     ///      "type": "string"
     ///    },
+    ///    "published_package": {
+    ///      "description": "The package the build published, null when no publish is linked.",
+    ///      "oneOf": [
+    ///        {
+    ///          "type": "null"
+    ///        },
+    ///        {
+    ///          "allOf": [
+    ///            {
+    ///              "$ref": "#/components/schemas/PublishedPackage"
+    ///            }
+    ///          ]
+    ///        }
+    ///      ]
+    ///    },
     ///    "source_commit_sha": {
     ///      "title": "Source Commit Sha",
     ///      "type": "string"
@@ -297,6 +521,9 @@ coordinator-reported status appears.*/
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub exit_code: ::std::option::Option<i64>,
         pub nixpkgs_revision: ::std::string::String,
+        ///The package the build published, null when no publish is linked.
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub published_package: ::std::option::Option<PublishedPackage>,
         pub source_commit_sha: ::std::string::String,
         pub source_repo_url: ::std::string::String,
         pub status: crate::status::EffectiveBuildStatus,
@@ -606,6 +833,79 @@ stats endpoints.*/
     }
     impl ::std::convert::From<&ErrorResponse> for ErrorResponse {
         fn from(value: &ErrorResponse) -> Self {
+            value.clone()
+        }
+    }
+    ///The catalog package a build published.
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "PublishedPackage",
+    ///  "description": "The catalog package a build published.",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "description",
+    ///    "license",
+    ///    "name",
+    ///    "source_rev_count",
+    ///    "version"
+    ///  ],
+    ///  "properties": {
+    ///    "description": {
+    ///      "title": "Description",
+    ///      "description": "The published derivation's description, null when it has none.",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "license": {
+    ///      "title": "License",
+    ///      "description": "The published derivation's license as the catalog records it, such as `MIT` or `[ MIT, Apache-2.0 ]`; null when it has none.",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "name": {
+    ///      "title": "Name",
+    ///      "description": "The published derivation's name, such as `hello-2.12.1`.",
+    ///      "type": "string"
+    ///    },
+    ///    "source_rev_count": {
+    ///      "title": "Source Rev Count",
+    ///      "description": "The revision count of the source page the package was built from. One part of the build's coordinate: builds of the same source revision with different locked inputs or base page share it.",
+    ///      "type": "integer"
+    ///    },
+    ///    "version": {
+    ///      "title": "Version",
+    ///      "description": "The published derivation's version, null when it has none.",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct PublishedPackage {
+        ///The published derivation's description, null when it has none.
+        pub description: ::std::option::Option<::std::string::String>,
+        ///The published derivation's license as the catalog records it, such as `MIT` or `[ MIT, Apache-2.0 ]`; null when it has none.
+        pub license: ::std::option::Option<::std::string::String>,
+        ///The published derivation's name, such as `hello-2.12.1`.
+        pub name: ::std::string::String,
+        ///The revision count of the source page the package was built from. One part of the build's coordinate: builds of the same source revision with different locked inputs or base page share it.
+        pub source_rev_count: i64,
+        ///The published derivation's version, null when it has none.
+        pub version: ::std::option::Option<::std::string::String>,
+    }
+    impl ::std::convert::From<&PublishedPackage> for PublishedPackage {
+        fn from(value: &PublishedPackage) -> Self {
             value.clone()
         }
     }
@@ -1302,7 +1602,7 @@ Arguments:
     }
     /**Get Build
 
-Return a single build by ID with its task sub-object.
+Return a single build by ID with its task sub-object and outputs.
 
 Sends a `GET` request to `/api/v1/factory/builds/{build_id}`
 
@@ -1310,7 +1610,7 @@ Sends a `GET` request to `/api/v1/factory/builds/{build_id}`
     pub async fn get_build_api_v1_factory_builds_build_id_get<'a>(
         &'a self,
         build_id: i64,
-    ) -> Result<ResponseValue<types::BuildResponse>, Error<types::ErrorResponse>> {
+    ) -> Result<ResponseValue<types::BuildDetailResponse>, Error<types::ErrorResponse>> {
         let url = format!(
             "{}/api/v1/factory/builds/{}",
             self.baseurl,
