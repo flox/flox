@@ -12,7 +12,7 @@ use anyhow::{Result, anyhow};
 use bpaf::Bpaf;
 use chrono::{DateTime, Utc};
 use flox_rust_sdk::flox::Flox;
-use floxhub_client::{BuildResponse, EffectiveBuildStatus, FactoryClientError};
+use floxhub_client::{BuildResponse, BuildTrigger, EffectiveBuildStatus, FactoryClientError};
 use indoc::indoc;
 use tracing::instrument;
 
@@ -23,8 +23,8 @@ use crate::commands::display_help;
 ///
 /// An unrecognized future status renders as `unknown: <value>` rather than
 /// blanking the row; every other status renders as its wire word.
-fn effective_status(build: &BuildResponse) -> String {
-    match &build.status {
+fn effective_status(status: &EffectiveBuildStatus) -> String {
+    match status {
         EffectiveBuildStatus::Unknown(value) => format!("unknown: {value}"),
         status => status.to_string(),
     }
@@ -45,8 +45,8 @@ fn effective_updated_at(build: &BuildResponse) -> DateTime<Utc> {
 }
 
 /// Compute the label describing what scheduled a build.
-fn trigger_label(build: &BuildResponse) -> String {
-    let Some(trigger) = &build.trigger else {
+fn trigger_label(trigger: Option<&BuildTrigger>) -> String {
+    let Some(trigger) = trigger else {
         return "-".to_string();
     };
     // The Factory sends a null kind for an event it does not classify.
@@ -371,10 +371,9 @@ mod parser_tests {
 
 #[cfg(test)]
 mod trigger_label_tests {
-    use floxhub_client::{BuildResponse, BuildTrigger};
+    use floxhub_client::BuildTrigger;
     use pretty_assertions::assert_eq;
 
-    use super::test_helpers::make_build;
     use super::trigger_label;
 
     #[test]
@@ -405,13 +404,7 @@ mod trigger_label_tests {
 
         let actual: Vec<_> = cases
             .iter()
-            .map(|(name, trigger, _)| {
-                let build = BuildResponse {
-                    trigger: trigger.clone(),
-                    ..make_build(1, "x86_64-linux", "hello", None)
-                };
-                (*name, trigger_label(&build))
-            })
+            .map(|(name, trigger, _)| (*name, trigger_label(trigger.as_ref())))
             .collect();
         let expected: Vec<_> = cases
             .iter()
