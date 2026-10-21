@@ -5,11 +5,12 @@ use std::process::{Command, Stdio};
 use std::sync::LazyLock;
 
 use flox_core::activate::mode::ActivateMode;
+use flox_core::util::NIXPKGS_CACERT_BUNDLE_CRT;
 use flox_manifest::parsed::common::ContainerizeConfig;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 use thiserror::Error;
-use tracing::{debug, info, instrument};
+use tracing::{debug, info, instrument, warn};
 
 use super::buildenv::BuiltStorePath;
 use crate::flox::Flox;
@@ -23,6 +24,19 @@ static MK_CONTAINER_NIX: LazyLock<PathBuf> = LazyLock::new(|| {
         .unwrap_or_else(|_| env!("FLOX_MK_CONTAINER_NIX").to_string())
         .into()
 });
+
+/// The store path of the cacert package whose bundle is `bundle`, given as
+/// `<store path>/etc/ssl/certs/ca-bundle.crt`.
+///
+/// The image installs this package as its system trust store, so that
+/// software reading `/etc/ssl/certs` trusts the same roots as the
+/// `NIX_SSL_CERT_FILE` the activation exports, including any roots flox
+/// distrusts that nixpkgs' cacert does not.
+fn cacert_store_path(bundle: &str) -> Option<&str> {
+    bundle
+        .strip_suffix("/etc/ssl/certs/ca-bundle.crt")
+        .filter(|path| !path.is_empty())
+}
 
 pub trait ContainerBuilder {
     type Error: std::error::Error;
@@ -163,6 +177,15 @@ impl ContainerBuilder for MkContainerNix {
             "interpreterPath",
             (*FLOX_INTERPRETER).to_string_lossy().as_ref(),
         ]);
+        match cacert_store_path(NIXPKGS_CACERT_BUNDLE_CRT) {
+            Some(cacert) => {
+                command.args(["--argstr", "cacertPath", cacert]);
+            },
+            None => warn!(
+                bundle = NIXPKGS_CACERT_BUNDLE_CRT,
+                "unexpected CA bundle path; the image's system trust store falls back to nixpkgs' cacert"
+            ),
+        }
         command.args(["--argstr", "containerName", name.as_ref()]);
         command.args(["--argstr", "containerTag", tag.as_ref()]);
         if let Some(container_config) = &self.container_config {
@@ -286,6 +309,29 @@ mod container_source_tests {
     use tempfile::TempDir;
 
     use super::*;
+
+    #[test]
+    fn cacert_store_path_strips_the_bundle_location() {
+        assert_eq!(
+            cacert_store_path("/nix/store/abc-nss-cacert-3.121/etc/ssl/certs/ca-bundle.crt"),
+            Some("/nix/store/abc-nss-cacert-3.121")
+        );
+    }
+
+    #[test]
+    fn cacert_store_path_rejects_other_paths() {
+        assert_eq!(cacert_store_path("/etc/ssl/certs/ca-bundle.crt"), None);
+        assert_eq!(cacert_store_path("/nix/store/abc-nss-cacert-3.121"), None);
+    }
+
+    /// The bundle compiled into flox has the layout the image relies on, so
+    /// containerize never falls back to nixpkgs' cacert.
+    #[test]
+    fn cacert_store_path_of_compiled_in_bundle() {
+        let cacert = cacert_store_path(NIXPKGS_CACERT_BUNDLE_CRT)
+            .expect("NIXPKGS_CACERT_BUNDLE_CRT is <store path>/etc/ssl/certs/ca-bundle.crt");
+        assert!(cacert.starts_with("/nix/store/"), "{cacert}");
+    }
 
     #[test]
     fn oci_config_from_manifest() {
