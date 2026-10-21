@@ -107,10 +107,28 @@ function source_plugin_profile_d {
 # set_manifest_vars <flox_env>
 #
 # Set static environment variables from the manifest.
+#
+# The envrc of an environment rendered by flox before 1.19.1 opens by
+# defaulting SSL_CERT_FILE to the environment's CA bundle and copying it
+# into NIX_SSL_CERT_FILE. Those bundles include CAs that have since been
+# compromised, and an environment keeps its envrc until it is next
+# rebuilt, so the default is undone after sourcing. flox exports
+# NIX_SSL_CERT_FILE ahead of this script and leaves SSL_CERT_FILE alone,
+# so an SSL_CERT_FILE that was empty before sourcing and differs from
+# NIX_SSL_CERT_FILE afterwards is the envrc's default and is unset. One
+# the user had already set is left in place: the default never replaced
+# it, and flox then sets no NIX_SSL_CERT_FILE, so the envrc copies the
+# user's value and the two agree.
 function set_manifest_vars {
   local _flox_env="${1?}"
-  if [ -f "$_flox_env/activate.d/envrc" ]; then
-    # shellcheck disable=SC1091 # from rendered environment
-    source "$_flox_env/activate.d/envrc"
+  local _envrc="$_flox_env/activate.d/envrc"
+  [ -f "$_envrc" ] || return 0
+
+  local _ssl_cert_file_before="${SSL_CERT_FILE-}"
+  # shellcheck disable=SC1090,SC1091 # from rendered environment
+  source "$_envrc"
+  if [ -z "$_ssl_cert_file_before" ] && [ -n "${SSL_CERT_FILE-}" ] \
+    && [ -n "${NIX_SSL_CERT_FILE-}" ] && [ "$SSL_CERT_FILE" != "$NIX_SSL_CERT_FILE" ]; then
+    unset SSL_CERT_FILE
   fi
 }
