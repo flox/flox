@@ -218,9 +218,9 @@ struct BuildRowDisplay {
 
 impl BuildRowDisplay {
     fn new(b: BuildResponse, now: DateTime<Utc>) -> Self {
-        let status = effective_status(&b);
+        let status = effective_status(&b.status);
         let updated = format_age(effective_updated_at(&b), now);
-        let trigger = trigger_label(&b);
+        let trigger = trigger_label(b.trigger.as_ref());
 
         BuildRowDisplay {
             build_id: b.build_id,

@@ -65,8 +65,8 @@ struct BuildStatusDisplay {
 
 impl From<BuildResponse> for BuildStatusDisplay {
     fn from(b: BuildResponse) -> Self {
-        let status = effective_status(&b);
-        let trigger = trigger_label(&b);
+        let status = effective_status(&b.status);
+        let trigger = trigger_label(b.trigger.as_ref());
 
         BuildStatusDisplay {
             build_id: b.build_id,
