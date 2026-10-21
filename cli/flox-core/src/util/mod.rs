@@ -78,8 +78,10 @@ pub const LOCALE: (&str, &str) = ("LOCALE_ARCHIVE", env!("LOCALE_ARCHIVE"));
 /// `flox-activations` and into the installer's wrappers must be the same
 /// store paths, since the clause recognizes flox's own default by value.
 /// That holds by construction: the installer builds from flox's own
-/// package set (`passthru.pkgsFor`), and flox-cli and flox-activations take
-/// `cacert` from that same set. The locale value is the Linux package from
+/// package set (`passthru.pkgsFor`) and ships its `cacert-distrusted`, and
+/// flox-cli and flox-activations are given that same bundle as their
+/// `cacert`. The `cacert-distrusted` flake check enforces the flox side. The
+/// locale value is the Linux package from
 /// that set; on Darwin it is the `PATH_LOCALE` the stdenv hook exports at
 /// build time, which resolves to the same store path today but is not
 /// pinned by name (flox/flox#4749). A flox not built
