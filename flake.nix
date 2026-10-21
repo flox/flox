@@ -70,6 +70,19 @@
             ];
           };
 
+          # The cacert override above changes fish's build inputs, so fish is
+          # built from source instead of substituted. Its
+          # test_replace_home_directory_with_tilde test sets the global HOME
+          # without `#[serial]` and races the serial tests that also set it.
+          # TODO: remove once the cacert override is gone or fish ships the fix.
+          fish = prev.fish.overrideAttrs (old: {
+            postPatch = (old.postPatch or "") + ''
+              substituteInPlace src/expand.rs \
+                --replace-fail "fn test_replace_home_directory_with_tilde()" \
+                               "#[serial] fn test_replace_home_directory_with_tilde()"
+            '';
+          });
+
         })
         inputs.fenix.overlays.default
       ];
