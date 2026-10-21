@@ -15,6 +15,18 @@
   nixpkgsFlake ? builtins.getFlake nixpkgsFlakeRef,
   pkgs ? nixpkgsFlake.legacyPackages.${system},
   containerPkgs ? nixpkgsFlake.legacyPackages.${containerSystem},
+  # the store path of the CA bundle flox itself uses (NIXPKGS_CACERT_BUNDLE_CRT);
+  # nixpkgs' cacert lacks any roots flox distrusts in its own bundle
+  cacertPath ? null,
+  # (outPath and meta are what lowPrio and buildEnv read from a package)
+  cacert ?
+    if cacertPath == null then
+      containerPkgs.cacert
+    else
+      {
+        outPath = builtins.storePath cacertPath;
+        meta = { };
+      },
   containerName ? "flox-env-container",
   containerTag ? null,
   containerCreated ? "now",
@@ -178,8 +190,9 @@ let
           # A system trust store at /etc/ssl/certs. The activation exports
           # NIX_SSL_CERT_FILE for Nix software, and never SSL_CERT_FILE;
           # software that reads only the system locations (Go, rustls) has
-          # nowhere else to look in an image.
-          (lowPrio containerPkgs.cacert)
+          # nowhere else to look in an image. It is the same bundle the
+          # activation exports, so both kinds of software trust the same roots.
+          (lowPrio cacert)
         ];
       };
       config = containerConfig // {
