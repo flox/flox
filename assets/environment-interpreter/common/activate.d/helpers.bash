@@ -117,7 +117,7 @@ function set_manifest_vars {
   [ -f "$_envrc" ] || return 0
 
   local _first_line=""
-  IFS= read -r _first_line < "$_envrc" || true
+  read -r _first_line < "$_envrc" || true
   if [ "$_first_line" != "# Default environment variables" ]; then
     # shellcheck disable=SC1090 # from rendered environment
     source "$_envrc"
