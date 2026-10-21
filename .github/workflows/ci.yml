@@ -238,6 +238,11 @@ jobs:
       - name: "Test buildenvLib"
         run: nix develop -L --no-update-lock-file --command just test-buildenvLib
 
+      # Not part of `packages.*`, so it is built here explicitly: it guards
+      # the CA-root distrust override on the bundle flox bakes in.
+      - name: "Check CA bundle distrust"
+        run: nix build -L --no-update-lock-file '.#checks.x86_64-linux.cacert-distrust'
+
   cli-unit:
     name: "unit"
     runs-on: ${{ matrix.os }}

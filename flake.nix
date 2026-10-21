@@ -258,25 +258,28 @@
           module = import ./modules/nixos pkgsContext;
         };
 
-        # Regression test: verify that the four distrusted CA roots are
-        # rejected for TLS Web Server Authentication in the overridden
-        # bundle, and that emSign Root CA - G1 remains trusted.
-        #
-        # buildcatrust marks blocklisted CAs with "Rejected Uses:" in the
-        # p11-kit file that OpenSSL reads; `isTrusted` below mirrors the
-        # nixpkgs cacert passthru.tests.blacklist-utf8 pattern exactly.
-        #
-        # Fingerprints verified against nss-cacert-3.121-unbundled.
-        cacert-emudhra-distrust =
-          pkgs.runCommand "verify-cacert-emudhra-distrust"
+        # Regression test for the `flox-cacert` override: every blocklisted
+        # root must be present and not TLS-rejected in the stock nixpkgs
+        # bundle, rejected in ours, and emSign Root CA - G1 must stay
+        # trusted in both. Checking the stock bundle first is what makes the test real:
+        # `isTrusted` reports "rejected" for a fingerprint that matches no
+        # certificate, so a typo or a root that NSS has since removed would
+        # otherwise pass silently. buildcatrust already refuses unknown
+        # blocklist labels, so what this guards is the override being
+        # removed, narrowed, or detached from the packages that bake it.
+        cacert-distrust =
+          pkgs.runCommand "verify-cacert-distrust"
             {
-              cacertUnbundled = pkgs.flox-cacert.unbundled;
+              cacertStock = pkgs.cacert.unbundled;
+              cacertFlox = pkgs.flox-cacert.unbundled;
               nativeBuildInputs = [ pkgs.openssl ];
             }
             ''
               isTrusted() {
                 # isTrusted <unbundled-dir> <sha256-fingerprint>
-                # Returns 0 (trusted) or 1 (rejected/absent for TLS).
+                # Returns 0 when the certificate is present and not rejected
+                # for TLS Web Server Authentication, 1 otherwise (rejected or
+                # absent). Mirrors nixpkgs cacert passthru.tests.
                 for f in $1/etc/ssl/certs/*.crt; do
                   if ! [[ -s "$f" ]]; then continue; fi
                   fingerprint="$(openssl x509 -in "$f" -noout -fingerprint -sha256 | cut -f2 -d=)"
@@ -292,8 +295,8 @@
                 return 1
               }
 
-              # These roots must be rejected for TLS. The emSign entries are
-              # only present while the pinned NSS still ships them (see the
+              # Roots the override must reject. The emSign entries are only
+              # present while the pinned NSS still ships them (see the
               # version gate on the override).
               declare -A distrusted=(
                 ["Comodo AAA Services root"]="D7:A7:A0:FB:5D:7E:27:31:D7:71:E9:48:4E:BC:DE:F7:1D:5F:0C:3E:0A:29:48:78:2B:C8:3E:E0:EA:69:9E:F4"
@@ -306,27 +309,30 @@
 
               for name in "''${!distrusted[@]}"; do
                 fp="''${distrusted[$name]}"
-                if isTrusted "$cacertUnbundled" "$fp"; then
-                  echo "FAIL: $name ($fp) is still trusted for TLS — distrust override did not apply" >&2
+                if ! isTrusted "$cacertStock" "$fp"; then
+                  echo "FAIL: $name ($fp) is absent from or already rejected by the stock bundle; the fingerprint or blocklist entry is stale" >&2
                   exit 1
-                else
-                  echo "OK: $name is rejected for TLS"
                 fi
+                if isTrusted "$cacertFlox" "$fp"; then
+                  echo "FAIL: $name ($fp) is still trusted for TLS in flox-cacert; the distrust override did not apply" >&2
+                  exit 1
+                fi
+                echo "OK: $name is present in the stock bundle and rejected by flox-cacert"
               done
 
               # emSign Root CA - G1 was NOT distrusted by Mozilla and must
-              # remain trusted.
+              # remain trusted in both bundles.
               G1_FP="40:F6:AF:03:46:A9:9A:A1:CD:1D:55:5A:4E:9C:CE:62:C7:F9:63:46:03:EE:40:66:15:83:3D:C8:C8:D0:03:67"
-              if isTrusted "$cacertUnbundled" "$G1_FP"; then
-                echo "OK: emSign Root CA - G1 remains trusted"
-              else
-                echo "FAIL: emSign Root CA - G1 was incorrectly distrusted" >&2
-                exit 1
-              fi
+              for bundle in "$cacertStock" "$cacertFlox"; do
+                if ! isTrusted "$bundle" "$G1_FP"; then
+                  echo "FAIL: emSign Root CA - G1 is not trusted in $bundle" >&2
+                  exit 1
+                fi
+              done
+              echo "OK: emSign Root CA - G1 remains trusted"
 
               touch "$out"
             '';
-
       }) pkgsContext;
 
       # ------------------------------------------------------------------------ #
