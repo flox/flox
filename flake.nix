@@ -80,11 +80,13 @@
           # where reqwest → native-tls → OpenSSL, Nix subprocess downloads,
           # and NIX_SSL_CERT_FILE all read NIXPKGS_CACERT_BUNDLE_CRT.
           #
-          # Every cacert-baking package (flox-cli, flox-activations,
-          # rust-internal-deps, crate2nix, nef-lock-catalog) takes `cacert`
-          # from the overlays.flox fixed point (`pkgsFor = final`), so this
-          # single override propagates to all of them.
-          cacert = prev.cacert.override {
+          # Deliberately not an override of `cacert` itself: `cacert` is in the
+          # closure of a large part of nixpkgs (python3Packages.certifi, and
+          # through sphinx also ghc), so a global override forces source
+          # rebuilds of pandoc, shellcheck, nixfmt and hundreds of other
+          # derivations. Only the flox packages that bake the bundle take this
+          # attribute (see overlays.flox).
+          flox-cacert = prev.cacert.override {
             blacklist = [
               "Comodo AAA Services root"
               "emSign ECC Root CA - G3"
@@ -133,7 +135,10 @@
           rust-toolchain = final.fenix.stable;
 
           rust-external-deps = callPackage ./pkgs/rust-external-deps { };
-          rust-internal-deps = callPackage ./pkgs/rust-internal-deps { inherit nixpkgsInputLockedURL; };
+          rust-internal-deps = callPackage ./pkgs/rust-internal-deps {
+            inherit nixpkgsInputLockedURL;
+            cacert = final.flox-cacert;
+          };
 
           # Same binaries built from the generated Cargo.nix.
           #
@@ -144,6 +149,7 @@
           crate2nix-builds = callPackage ./pkgs/crate2nix {
             inherit nixpkgsInputLockedURL;
             inherit (final.crate2nix-builds) flox-activations;
+            cacert = final.flox-cacert;
           };
 
           # (Linux-only) LD_AUDIT library for using dynamic libraries in Flox envs.
@@ -155,12 +161,12 @@
           # Package Database Utilities: scrape, search, and resolve.
           flox-nix-plugins = callPackage ./pkgs/flox-nix-plugins { };
           flox-buildenv = callPackage ./pkgs/flox-buildenv { };
-          flox-activations = callPackage ./pkgs/flox-activations { };
-          nef-lock-catalog = callPackage ./pkgs/nef-lock-catalog { };
-          flox-cli = callPackage ./pkgs/flox-cli { };
+          flox-activations = callPackage ./pkgs/flox-activations { cacert = final.flox-cacert; };
+          nef-lock-catalog = callPackage ./pkgs/nef-lock-catalog { cacert = final.flox-cacert; };
+          flox-cli = callPackage ./pkgs/flox-cli { cacert = final.flox-cacert; };
 
           flox-manpages = callPackage ./pkgs/flox-manpages { }; # Flox Command Line Interface Manpages
-          flox = callPackage ./pkgs/flox { }; # Flox Command Line Interface ( production build ).
+          flox = callPackage ./pkgs/flox { cacert = final.flox-cacert; }; # Flox Command Line Interface ( production build ).
 
           # Wrapper scripts for running test suites.
           flox-cli-tests = callPackage ./pkgs/flox-cli-tests { };
@@ -259,7 +265,7 @@
         cacert-emudhra-distrust =
           pkgs.runCommand "verify-cacert-emudhra-distrust"
             {
-              cacertUnbundled = pkgs.cacert.unbundled;
+              cacertUnbundled = pkgs.flox-cacert.unbundled;
               nativeBuildInputs = [ pkgs.openssl ];
             }
             ''

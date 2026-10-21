@@ -12,6 +12,9 @@
   glow,
   process-compose,
   pkgsFor,
+  # The CA bundle baked into flox-cli; exposed so that downstream packaging
+  # (flox-installers) bakes the same bundle into the nix-daemon environment.
+  cacert,
   SENTRY_DSN ? null,
   SENTRY_ENV ? null,
   FLOX_VERSION ? null,
@@ -55,6 +58,6 @@ symlinkJoin {
   '';
 
   passthru = {
-    inherit pkgsFor;
+    inherit pkgsFor cacert;
   };
 }
