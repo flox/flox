@@ -1411,6 +1411,93 @@
         }
       }
     },
+    "/api/v1/catalog/catalogs/{catalog_name}/packages/{package_name}/builds/{rev_count}": {
+      "get": {
+        "tags": [
+          "catalogs"
+        ],
+        "summary": "Get a package's builds at one revision count",
+        "description": "Get a package's builds at one revision count, with each output's\nrecorded sizes. Builds against the newest base catalog come first. Within\na base catalog, builds are ordered as the resolver prefers them.\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n- **package_name**: The name of the package\n- **rev_count**: The source revision count of the builds\n\nReturns:\n- **PackageRevisionBuilds**",
+        "operationId": "get_package_revision_builds_api_v1_catalog_catalogs__catalog_name__packages__package_name__builds__rev_count__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "HTTPBasic": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "rev_count",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 2147483647,
+              "minimum": 0,
+              "title": "Rev Count"
+            }
+          },
+          {
+            "name": "catalog_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9\\-_]{3,63}$",
+              "title": "Catalog Name",
+              "name": "catalog_name",
+              "example": "mycatalog"
+            }
+          },
+          {
+            "name": "package_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9.\\-_]{1,128}$",
+              "title": "Package Name",
+              "name": "package_name",
+              "example": "curl"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The builds at the revision count, with recorded output sizes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackageRevisionBuilds"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The catalog, package or build could not be found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request parameters are invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/catalog/catalogs/{catalog_name}/packages/{package_name}/check-build": {
       "post": {
         "tags": [
@@ -3345,7 +3432,9 @@
           "narSize": {
             "title": "Narsize",
             "nullable": true,
-            "type": "integer"
+            "type": "integer",
+            "maximum": 9.223372036854776e+18,
+            "minimum": 0.0
           },
           "references": {
             "title": "References",
@@ -3396,7 +3485,9 @@
           "closureSize": {
             "title": "Closuresize",
             "nullable": true,
-            "type": "integer"
+            "type": "integer",
+            "maximum": 9.223372036854776e+18,
+            "minimum": 0.0
           },
           "compresssize": {
             "title": "Compresssize",
@@ -3750,6 +3841,118 @@
           "url": "https://github.com/org/example"
         }
       },
+      "PackageBuildWithSizes": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "rev": {
+            "type": "string",
+            "title": "Rev"
+          },
+          "rev_count": {
+            "type": "integer",
+            "title": "Rev Count"
+          },
+          "rev_date": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Rev Date"
+          },
+          "locked_base_catalog_url": {
+            "title": "Locked Base Catalog Url",
+            "nullable": true,
+            "type": "string"
+          },
+          "base_catalog_rev_date": {
+            "title": "Base Catalog Rev Date",
+            "nullable": true,
+            "type": "string",
+            "format": "date-time"
+          },
+          "base_catalog_rev_count": {
+            "title": "Base Catalog Rev Count",
+            "nullable": true,
+            "type": "integer"
+          },
+          "derivation": {
+            "$ref": "#/components/schemas/PackageDerivationResponse"
+          },
+          "cache_uri": {
+            "title": "Cache Uri",
+            "nullable": true,
+            "type": "string"
+          },
+          "ref": {
+            "title": "Ref",
+            "nullable": true,
+            "type": "string"
+          },
+          "dot_flox_dir": {
+            "type": "string",
+            "title": "Dot Flox Dir",
+            "default": ".flox"
+          },
+          "build_type": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BuildType"
+              }
+            ]
+          },
+          "allow_lineage_change": {
+            "type": "boolean",
+            "title": "Allow Lineage Change",
+            "description": "Allow this publish to replace the package's registered source repository or ref.",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "url",
+          "rev",
+          "rev_count",
+          "rev_date",
+          "derivation"
+        ],
+        "title": "PackageBuildWithSizes",
+        "example": {
+          "base_catalog_rev_count": 11000,
+          "base_catalog_rev_date": "2021-08-15T00:00:00Z",
+          "derivation": {
+            "broken": false,
+            "description": "A command line tool for transferring files with URL syntax",
+            "drv_path": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
+            "license": "curl",
+            "name": "curl-8.5.0",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
+              },
+              {
+                "name": "man",
+                "store_path": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man"
+              }
+            ],
+            "outputs_to_install": [
+              "out",
+              "man"
+            ],
+            "pname": "curl",
+            "system": "x86_64-linux",
+            "unfree": false,
+            "version": "8.5.0"
+          },
+          "locked_base_catalog_url": "https://github.com/flox/nixpkgs?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
+          "rev": "99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
+          "rev_count": 12345,
+          "rev_date": "2021-09-01T00:00:00Z",
+          "url": "https://github.com/org/example"
+        }
+      },
       "PackageDerivation": {
         "properties": {
           "drv_path": {
@@ -3821,6 +4024,107 @@
           "outputs"
         ],
         "title": "PackageDerivation",
+        "example": {
+          "broken": false,
+          "description": "A command line tool for transferring files with URL syntax",
+          "drv_path": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
+          "license": "curl",
+          "name": "curl-8.5.0",
+          "outputs": [
+            {
+              "name": "out",
+              "store_path": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
+            },
+            {
+              "name": "man",
+              "store_path": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man"
+            }
+          ],
+          "outputs_to_install": [
+            "out",
+            "man"
+          ],
+          "pname": "curl",
+          "system": "x86_64-linux",
+          "unfree": false,
+          "version": "8.5.0"
+        }
+      },
+      "PackageDerivationResponse": {
+        "properties": {
+          "drv_path": {
+            "type": "string",
+            "title": "Drv Path"
+          },
+          "system": {
+            "$ref": "#/components/schemas/PackageSystem"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "outputs": {
+            "items": {
+              "$ref": "#/components/schemas/PackageOutputResponse"
+            },
+            "type": "array",
+            "title": "Outputs"
+          },
+          "outputs_to_install": {
+            "title": "Outputs To Install",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "description": {
+            "title": "Description",
+            "nullable": true,
+            "type": "string"
+          },
+          "pname": {
+            "title": "Pname",
+            "nullable": true,
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "nullable": true,
+            "type": "string"
+          },
+          "license": {
+            "title": "License",
+            "nullable": true,
+            "type": "string"
+          },
+          "licenses": {
+            "title": "Licenses",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "broken": {
+            "title": "Broken",
+            "nullable": true,
+            "type": "boolean"
+          },
+          "unfree": {
+            "title": "Unfree",
+            "nullable": true,
+            "type": "boolean"
+          }
+        },
+        "type": "object",
+        "required": [
+          "drv_path",
+          "system",
+          "name",
+          "outputs"
+        ],
+        "title": "PackageDerivationResponse",
         "example": {
           "broken": false,
           "description": "A command line tool for transferring files with URL syntax",
@@ -4171,6 +4475,36 @@
         ],
         "title": "PackageOutput"
       },
+      "PackageOutputResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "store_path": {
+            "type": "string",
+            "title": "Store Path"
+          },
+          "nar_size": {
+            "title": "Nar Size",
+            "description": "Size in bytes of the store path's NAR. Null when no size has been recorded: the publish has not finished uploading, failed to record it, or went to a store that records no sizes. On a base-catalog store path, also null when the crawler has not recorded the path or cache.nixos.org has no NAR for it.",
+            "nullable": true,
+            "type": "integer"
+          },
+          "closure_size": {
+            "title": "Closure Size",
+            "description": "Total size in bytes of the NARs in the store path's closure. Null when none has been recorded. The base-catalog crawler records none, so a base-catalog store path has one only when a publish recorded it as part of a closure.",
+            "nullable": true,
+            "type": "integer"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "store_path"
+        ],
+        "title": "PackageOutputResponse"
+      },
       "PackageOutputs": {
         "items": {
           "$ref": "#/components/schemas/PackageOutput"
@@ -4315,6 +4649,23 @@
           "scrape_date"
         ],
         "title": "PackageResolutionInfo"
+      },
+      "PackageRevisionBuilds": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PackageBuildWithSizes"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "PackageRevisionBuilds",
+        "description": "A package's builds at one revision count, with recorded output sizes."
       },
       "PackageSbomRequest": {
         "properties": {},

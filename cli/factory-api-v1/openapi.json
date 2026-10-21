@@ -183,7 +183,7 @@
           "builds"
         ],
         "summary": "Get Build",
-        "description": "Return a single build by ID with its task sub-object.",
+        "description": "Return a single build by ID with its task sub-object and outputs.",
         "operationId": "get_build_api_v1_factory_builds__build_id__get",
         "security": [
           {
@@ -210,7 +210,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BuildResponse"
+                  "$ref": "#/components/schemas/BuildDetailResponse"
                 }
               }
             }
@@ -506,6 +506,98 @@
   },
   "components": {
     "schemas": {
+      "BuildDetailResponse": {
+        "properties": {
+          "build_id": {
+            "type": "integer",
+            "title": "Build Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/EffectiveBuildStatus"
+          },
+          "source_repo_url": {
+            "type": "string",
+            "title": "Source Repo Url"
+          },
+          "source_commit_sha": {
+            "type": "string",
+            "title": "Source Commit Sha"
+          },
+          "nixpkgs_revision": {
+            "type": "string",
+            "title": "Nixpkgs Revision"
+          },
+          "system": {
+            "type": "string",
+            "title": "System"
+          },
+          "attr_path": {
+            "type": "string",
+            "title": "Attr Path"
+          },
+          "build_type": {
+            "type": "string",
+            "title": "Build Type"
+          },
+          "catalog_name": {
+            "type": "string",
+            "title": "Catalog Name"
+          },
+          "exit_code": {
+            "title": "Exit Code",
+            "nullable": true,
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "task": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TaskResponse"
+              }
+            ]
+          },
+          "trigger": {
+            "$ref": "#/components/schemas/BuildTrigger"
+          },
+          "published_package": {
+            "description": "The package the build published, null when no publish is linked.",
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PublishedPackage"
+              }
+            ]
+          },
+          "outputs": {
+            "items": {
+              "$ref": "#/components/schemas/BuildOutput"
+            },
+            "type": "array",
+            "title": "Outputs",
+            "description": "Every output of the derivation the build published, with its recorded sizes. Empty when no published package is linked to the build."
+          }
+        },
+        "type": "object",
+        "required": [
+          "build_id",
+          "status",
+          "source_repo_url",
+          "source_commit_sha",
+          "nixpkgs_revision",
+          "system",
+          "attr_path",
+          "build_type",
+          "catalog_name",
+          "created_at"
+        ],
+        "title": "BuildDetailResponse",
+        "description": "A single build, with the outputs of the derivation it published."
+      },
       "BuildListResponse": {
         "properties": {
           "builds": {
@@ -537,6 +629,43 @@
         ],
         "title": "BuildListResponse",
         "description": "Paginated list of builds."
+      },
+      "BuildOutput": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "store_path": {
+            "type": "string",
+            "title": "Store Path"
+          },
+          "nar_size": {
+            "title": "Nar Size",
+            "description": "Size in bytes of the store path's NAR. Null when no size has been recorded: the publish has not finished uploading, failed to record it, or went to a store that records no sizes. On a base-catalog store path, also null when the crawler has not recorded the path or cache.nixos.org has no NAR for it.",
+            "nullable": true,
+            "type": "integer"
+          },
+          "closure_size": {
+            "title": "Closure Size",
+            "description": "Total size in bytes of the NARs in the store path's closure. Null when none has been recorded. The base-catalog crawler records none, so a base-catalog store path has one only when a publish recorded it as part of a closure.",
+            "nullable": true,
+            "type": "integer"
+          },
+          "is_default": {
+            "type": "boolean",
+            "title": "Is Default",
+            "description": "Whether the output is installed by default: it is named in the derivation's `outputs_to_install`."
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "store_path",
+          "is_default"
+        ],
+        "title": "BuildOutput",
+        "description": "An output of the derivation a build published."
       },
       "BuildResponse": {
         "properties": {
@@ -595,6 +724,15 @@
           },
           "trigger": {
             "$ref": "#/components/schemas/BuildTrigger"
+          },
+          "published_package": {
+            "description": "The package the build published, null when no publish is linked.",
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PublishedPackage"
+              }
+            ]
           }
         },
         "type": "object",
@@ -754,6 +892,48 @@
         ],
         "title": "ErrorResponse",
         "description": "JSON body returned for all error responses on the builds and\nstats endpoints."
+      },
+      "PublishedPackage": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "The published derivation's name, such as `hello-2.12.1`."
+          },
+          "version": {
+            "title": "Version",
+            "description": "The published derivation's version, null when it has none.",
+            "nullable": true,
+            "type": "string"
+          },
+          "source_rev_count": {
+            "type": "integer",
+            "title": "Source Rev Count",
+            "description": "The revision count of the source page the package was built from. One part of the build's coordinate: builds of the same source revision with different locked inputs or base page share it."
+          },
+          "description": {
+            "title": "Description",
+            "description": "The published derivation's description, null when it has none.",
+            "nullable": true,
+            "type": "string"
+          },
+          "license": {
+            "title": "License",
+            "description": "The published derivation's license as the catalog records it, such as `MIT` or `[ MIT, Apache-2.0 ]`; null when it has none.",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "version",
+          "source_rev_count",
+          "description",
+          "license"
+        ],
+        "title": "PublishedPackage",
+        "description": "The catalog package a build published."
       },
       "SystemBuildStats": {
         "properties": {
