@@ -107,10 +107,34 @@ function source_plugin_profile_d {
 # set_manifest_vars <flox_env>
 #
 # Set static environment variables from the manifest.
+#
+# Renders from Flox 1.19.0 and earlier open the envrc with certificate and
+# locale defaults that Flox no longer sets. Skip that block so the stale
+# SSL_CERT_FILE does not reach the shell, without requiring a rebuild.
 function set_manifest_vars {
   local _flox_env="${1?}"
-  if [ -f "$_flox_env/activate.d/envrc" ]; then
-    # shellcheck disable=SC1091 # from rendered environment
-    source "$_flox_env/activate.d/envrc"
+  local _envrc="$_flox_env/activate.d/envrc"
+  [ -f "$_envrc" ] || return 0
+
+  local _first_line=""
+  IFS= read -r _first_line < "$_envrc" || true
+  if [ "$_first_line" != "# Default environment variables" ]; then
+    # shellcheck disable=SC1090 # from rendered environment
+    source "$_envrc"
+    return 0
   fi
+
+  local _line _in_defaults=true
+  # shellcheck disable=SC1090 # from rendered environment
+  source <(
+    while IFS= read -r _line || [ -n "$_line" ]; do
+      if [ "$_in_defaults" = true ]; then
+        if [ "$_line" = "# Static environment variables" ]; then
+          _in_defaults=false
+        fi
+        continue
+      fi
+      printf '%s\n' "$_line"
+    done < "$_envrc"
+  )
 }
