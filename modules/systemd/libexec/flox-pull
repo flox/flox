@@ -1,0 +1,130 @@
+#!/bin/sh
+#
+# Provision and refresh the Flox environment for one service.
+#
+#   flox-pull <instance> start   -- run before the service, as a dependency
+#   flox-pull <instance> timer   -- run on the autopull schedule
+#
+# Runs as root so it can create the working directory, create the service
+# account and restart the unit, but every flox invocation drops privileges to
+# the service user.
+set -eu
+
+# Resolve the shared library next to this script, so the entry points work
+# both installed under /usr/libexec/flox and straight from a checkout.
+FLOX_LIBEXEC=${FLOX_LIBEXEC:-$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)}
+. "$FLOX_LIBEXEC/flox-common.sh"
+
+name=${1:?usage: flox-pull <instance> (start|timer)}
+mode=${2:?usage: flox-pull <instance> (start|timer)}
+
+flox_load_conf "$name"
+
+# Account creation and ownership only apply to the system manager. Running
+# unprivileged the service user is the invoking user, so there is nothing to
+# create and nothing to chown.
+if [ "$(id -u)" = 0 ]; then
+  # sysusers.d cannot do this: it is static, and instance names are not known
+  # until an operator enables one.
+  if ! getent group "$flox_group" >/dev/null 2>&1; then
+    groupadd --system "$flox_group"
+  fi
+  if ! getent passwd "$flox_user" >/dev/null 2>&1; then
+    useradd --system --gid "$flox_group" --home-dir "$flox_workdir" \
+      --shell /sbin/nologin --comment "Flox service $name" "$flox_user"
+  fi
+elif [ "$flox_user" != "$(id -un)" ]; then
+  die "cannot run as $flox_user: not running as root, and FLOX_USER is not $(id -un)"
+fi
+
+mkdir -p "$flox_workdir"
+if [ "$(id -u)" = 0 ]; then
+  chown "$flox_user:$flox_group" "$flox_workdir"
+fi
+chmod "${FLOX_WORKDIR_MODE:-0700}" "$flox_workdir"
+cd "$flox_workdir"
+
+# Serialize pulls against this working directory: a service-start pull
+# (flox-pull@) and a scheduled pull (flox-autopull@) are separate units and
+# may otherwise run concurrently, e.g. when a persistent timer fires its
+# catch-up run around boot.
+exec 9>.flox-pull.lock
+flock 9
+
+# Export the token for the flox invocations below. This script runs as root,
+# so it reads the operator's file directly rather than needing a credential.
+if [ -n "$flox_token_file" ]; then
+  [ -r "$flox_token_file" ] || die "token file $flox_token_file is not readable"
+  FLOX_FLOXHUB_TOKEN="$(cat "$flox_token_file")"
+  export FLOX_FLOXHUB_TOKEN
+fi
+
+# Run a command as the service user, preserving the environment (including an
+# exported FLOX_FLOXHUB_TOKEN).
+as_user() {
+  # shellcheck disable=SC2046
+  if [ "$(id -u)" = 0 ]; then
+    setpriv --reuid "$flox_user" --regid "$flox_group" --init-groups \
+      env $(flox_service_env) "$@"
+  else
+    env $(flox_service_env) "$@"
+  fi
+}
+
+# Run flox as the service user with the configured global arguments. Those
+# arguments are shell-quoted in the conf file, so they are expanded with eval
+# to keep an argument containing whitespace intact.
+run_flox() {
+  eval "set -- \"\$FLOX_BIN\" $FLOX_ARGS \"\$@\""
+  as_user "$@"
+}
+
+# Fingerprint of the local generation history, used to detect whether a pull
+# fetched a new generation.
+generation_state() {
+  run_flox generations list --json 2>/dev/null | sha256sum
+}
+
+if [ ! -e "$flox_workdir/.flox" ]; then
+  # First start: provision the environment. Failure is fatal - there is
+  # nothing to run without an environment.
+  eval "set -- $FLOX_PULL_ARGS"
+  run_flox pull "$@" "$flox_env"
+  exit 0
+fi
+
+if [ "$mode" = start ] && [ "$FLOX_PULL_AT_SERVICE_START" != 1 ]; then
+  # The environment is provisioned and refresh-on-start is disabled.
+  exit 0
+fi
+
+before="$(generation_state)" || before=""
+eval "set -- $FLOX_PULL_ARGS"
+if ! run_flox pull --force "$@"; then
+  if [ "$mode" = timer ]; then
+    echo "ERROR: failed to pull updates for $flox_env." >&2
+    exit 1
+  fi
+  # The environment is already present; a failed refresh must not prevent the
+  # service from (re)starting.
+  echo "WARNING: failed to pull updates for $flox_env; starting with the existing environment." >&2
+  exit 0
+fi
+after="$(generation_state)" || after=""
+
+if [ "$FLOX_AUTORESTART" = 1 ] && [ "$mode" = timer ] && [ "$before" != "$after" ]; then
+  echo "Flox environment $flox_env changed; restarting $flox_unit" >&2
+  # --no-block is required, not an optimization. The unit being restarted
+  # depends on flox-pull@<name>.service, which takes the same lock this script
+  # is holding. Waiting for the restart to finish would deadlock: the restart
+  # cannot proceed until the lock is released, and the lock is not released
+  # until this script exits.
+  #
+  # Restart through the manager that owns the unit: the system manager as
+  # root, the caller's own user manager otherwise.
+  if [ "$(id -u)" = 0 ]; then
+    systemctl --no-block try-restart "$flox_unit"
+  else
+    systemctl --user --no-block try-restart "$flox_unit"
+  fi
+fi
