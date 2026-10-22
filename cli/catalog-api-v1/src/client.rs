@@ -1042,6 +1042,12 @@ manifest packages were built via the traditional flox manifest workflow.*/
     ///      "title": "Already Published",
     ///      "type": "boolean"
     ///    },
+    ///    "lineage_changed": {
+    ///      "title": "Lineage Changed",
+    ///      "description": "Whether publishing from the requested source would replace `registered_source`.",
+    ///      "default": false,
+    ///      "type": "boolean"
+    ///    },
     ///    "published_at": {
     ///      "title": "Published At",
     ///      "type": [
@@ -1049,6 +1055,21 @@ manifest packages were built via the traditional flox manifest workflow.*/
     ///        "null"
     ///      ],
     ///      "format": "date-time"
+    ///    },
+    ///    "registered_source": {
+    ///      "description": "The package's current source registration, if any.",
+    ///      "oneOf": [
+    ///        {
+    ///          "type": "null"
+    ///        },
+    ///        {
+    ///          "allOf": [
+    ///            {
+    ///              "$ref": "#/components/schemas/RegisteredSource"
+    ///            }
+    ///          ]
+    ///        }
+    ///      ]
     ///    },
     ///    "source_rev": {
     ///      "title": "Source Rev",
@@ -1072,10 +1093,16 @@ manifest packages were built via the traditional flox manifest workflow.*/
     #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct CheckBuildResponse {
         pub already_published: bool,
+        ///Whether publishing from the requested source would replace `registered_source`.
+        #[serde(default)]
+        pub lineage_changed: bool,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub published_at: ::std::option::Option<
             ::chrono::DateTime<::chrono::offset::Utc>,
         >,
+        ///The package's current source registration, if any.
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub registered_source: ::std::option::Option<RegisteredSource>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub source_rev: ::std::option::Option<::std::string::String>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
@@ -2151,7 +2178,9 @@ Examples: `owner.package`, `owner.*` for the whole catalog, and
     ///      "type": [
     ///        "integer",
     ///        "null"
-    ///      ]
+    ///      ],
+    ///      "maximum": 9.223372036854776e+18,
+    ///      "minimum": 0.0
     ///    },
     ///    "compression": {
     ///      "title": "Compression",
@@ -2201,7 +2230,9 @@ Examples: `owner.package`, `owner.*` for the whole catalog, and
     ///      "type": [
     ///        "integer",
     ///        "null"
-    ///      ]
+    ///      ],
+    ///      "maximum": 9.223372036854776e+18,
+    ///      "minimum": 0.0
     ///    },
     ///    "path": {
     ///      "title": "Path",
@@ -2643,6 +2674,21 @@ Examples: `owner.package`, `owner.*` for the whole catalog, and
     ///      "default": ".flox",
     ///      "type": "string"
     ///    },
+    ///    "expected_registered_source": {
+    ///      "description": "With `allow_lineage_change`, replace the registration only while it still equals this source.",
+    ///      "oneOf": [
+    ///        {
+    ///          "type": "null"
+    ///        },
+    ///        {
+    ///          "allOf": [
+    ///            {
+    ///              "$ref": "#/components/schemas/RegisteredSource"
+    ///            }
+    ///          ]
+    ///        }
+    ///      ]
+    ///    },
     ///    "locked_base_catalog_url": {
     ///      "title": "Locked Base Catalog Url",
     ///      "type": [
@@ -2696,6 +2742,9 @@ Examples: `owner.package`, `owner.*` for the whole catalog, and
         pub derivation: PackageDerivation,
         #[serde(default = "defaults::package_build_dot_flox_dir")]
         pub dot_flox_dir: ::std::string::String,
+        ///With `allow_lineage_change`, replace the registration only while it still equals this source.
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub expected_registered_source: ::std::option::Option<RegisteredSource>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub locked_base_catalog_url: ::std::option::Option<::std::string::String>,
         #[serde(
@@ -2928,6 +2977,21 @@ Examples: `owner.package`, `owner.*` for the whole catalog, and
     ///      "default": ".flox",
     ///      "type": "string"
     ///    },
+    ///    "expected_registered_source": {
+    ///      "description": "With `allow_lineage_change`, replace the registration only while it still equals this source.",
+    ///      "oneOf": [
+    ///        {
+    ///          "type": "null"
+    ///        },
+    ///        {
+    ///          "allOf": [
+    ///            {
+    ///              "$ref": "#/components/schemas/RegisteredSource"
+    ///            }
+    ///          ]
+    ///        }
+    ///      ]
+    ///    },
     ///    "factory_build_token": {
     ///      "title": "Factory Build Token",
     ///      "type": [
@@ -3032,6 +3096,9 @@ Examples: `owner.package`, `owner.*` for the whole catalog, and
         pub direct_inputs: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
         #[serde(default = "defaults::package_build_with_nar_info_dot_flox_dir")]
         pub dot_flox_dir: ::std::string::String,
+        ///With `allow_lineage_change`, replace the registration only while it still equals this source.
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub expected_registered_source: ::std::option::Option<RegisteredSource>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub factory_build_token: ::std::option::Option<::std::string::String>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
@@ -3062,6 +3129,197 @@ Examples: `owner.package`, `owner.*` for the whole catalog, and
     }
     impl ::std::convert::From<&PackageBuildWithNarInfo> for PackageBuildWithNarInfo {
         fn from(value: &PackageBuildWithNarInfo) -> Self {
+            value.clone()
+        }
+    }
+    ///`PackageBuildWithSizes`
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "PackageBuildWithSizes",
+    ///  "examples": [
+    ///    {
+    ///      "base_catalog_rev_count": 11000,
+    ///      "base_catalog_rev_date": "2021-08-15T00:00:00Z",
+    ///      "derivation": {
+    ///        "broken": false,
+    ///        "description": "A command line tool for transferring files with URL syntax",
+    ///        "drv_path": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
+    ///        "license": "curl",
+    ///        "name": "curl-8.5.0",
+    ///        "outputs": [
+    ///          {
+    ///            "name": "out",
+    ///            "store_path": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
+    ///          },
+    ///          {
+    ///            "name": "man",
+    ///            "store_path": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man"
+    ///          }
+    ///        ],
+    ///        "outputs_to_install": [
+    ///          "out",
+    ///          "man"
+    ///        ],
+    ///        "pname": "curl",
+    ///        "system": "x86_64-linux",
+    ///        "unfree": false,
+    ///        "version": "8.5.0"
+    ///      },
+    ///      "locked_base_catalog_url": "https://github.com/flox/nixpkgs?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
+    ///      "rev": "99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
+    ///      "rev_count": 12345,
+    ///      "rev_date": "2021-09-01T00:00:00Z",
+    ///      "url": "https://github.com/org/example"
+    ///    }
+    ///  ],
+    ///  "type": "object",
+    ///  "required": [
+    ///    "derivation",
+    ///    "rev",
+    ///    "rev_count",
+    ///    "rev_date",
+    ///    "url"
+    ///  ],
+    ///  "properties": {
+    ///    "allow_lineage_change": {
+    ///      "title": "Allow Lineage Change",
+    ///      "description": "Allow this publish to replace the package's registered source repository or ref.",
+    ///      "default": false,
+    ///      "type": "boolean"
+    ///    },
+    ///    "base_catalog_rev_count": {
+    ///      "title": "Base Catalog Rev Count",
+    ///      "type": [
+    ///        "integer",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "base_catalog_rev_date": {
+    ///      "title": "Base Catalog Rev Date",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ],
+    ///      "format": "date-time"
+    ///    },
+    ///    "build_type": {
+    ///      "oneOf": [
+    ///        {
+    ///          "type": "null"
+    ///        },
+    ///        {
+    ///          "allOf": [
+    ///            {
+    ///              "$ref": "#/components/schemas/BuildType"
+    ///            }
+    ///          ]
+    ///        }
+    ///      ]
+    ///    },
+    ///    "cache_uri": {
+    ///      "title": "Cache Uri",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "derivation": {
+    ///      "$ref": "#/components/schemas/PackageDerivationResponse"
+    ///    },
+    ///    "dot_flox_dir": {
+    ///      "title": "Dot Flox Dir",
+    ///      "default": ".flox",
+    ///      "type": "string"
+    ///    },
+    ///    "expected_registered_source": {
+    ///      "description": "With `allow_lineage_change`, replace the registration only while it still equals this source.",
+    ///      "oneOf": [
+    ///        {
+    ///          "type": "null"
+    ///        },
+    ///        {
+    ///          "allOf": [
+    ///            {
+    ///              "$ref": "#/components/schemas/RegisteredSource"
+    ///            }
+    ///          ]
+    ///        }
+    ///      ]
+    ///    },
+    ///    "locked_base_catalog_url": {
+    ///      "title": "Locked Base Catalog Url",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "ref": {
+    ///      "title": "Ref",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "rev": {
+    ///      "title": "Rev",
+    ///      "type": "string"
+    ///    },
+    ///    "rev_count": {
+    ///      "title": "Rev Count",
+    ///      "type": "integer"
+    ///    },
+    ///    "rev_date": {
+    ///      "title": "Rev Date",
+    ///      "type": "string",
+    ///      "format": "date-time"
+    ///    },
+    ///    "url": {
+    ///      "title": "Url",
+    ///      "type": "string"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct PackageBuildWithSizes {
+        ///Allow this publish to replace the package's registered source repository or ref.
+        #[serde(default)]
+        pub allow_lineage_change: bool,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub base_catalog_rev_count: ::std::option::Option<i64>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub base_catalog_rev_date: ::std::option::Option<
+            ::chrono::DateTime<::chrono::offset::Utc>,
+        >,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub build_type: ::std::option::Option<BuildType>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub cache_uri: ::std::option::Option<::std::string::String>,
+        pub derivation: PackageDerivationResponse,
+        #[serde(default = "defaults::package_build_with_sizes_dot_flox_dir")]
+        pub dot_flox_dir: ::std::string::String,
+        ///With `allow_lineage_change`, replace the registration only while it still equals this source.
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub expected_registered_source: ::std::option::Option<RegisteredSource>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub locked_base_catalog_url: ::std::option::Option<::std::string::String>,
+        #[serde(
+            rename = "ref",
+            default,
+            skip_serializing_if = "::std::option::Option::is_none"
+        )]
+        pub ref_: ::std::option::Option<::std::string::String>,
+        pub rev: ::std::string::String,
+        pub rev_count: i64,
+        pub rev_date: ::chrono::DateTime<::chrono::offset::Utc>,
+        pub url: ::std::string::String,
+    }
+    impl ::std::convert::From<&PackageBuildWithSizes> for PackageBuildWithSizes {
+        fn from(value: &PackageBuildWithSizes) -> Self {
             value.clone()
         }
     }
@@ -3214,6 +3472,162 @@ Examples: `owner.package`, `owner.*` for the whole catalog, and
     }
     impl ::std::convert::From<&PackageDerivation> for PackageDerivation {
         fn from(value: &PackageDerivation) -> Self {
+            value.clone()
+        }
+    }
+    ///`PackageDerivationResponse`
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "PackageDerivationResponse",
+    ///  "examples": [
+    ///    {
+    ///      "broken": false,
+    ///      "description": "A command line tool for transferring files with URL syntax",
+    ///      "drv_path": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
+    ///      "license": "curl",
+    ///      "name": "curl-8.5.0",
+    ///      "outputs": [
+    ///        {
+    ///          "name": "out",
+    ///          "store_path": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
+    ///        },
+    ///        {
+    ///          "name": "man",
+    ///          "store_path": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man"
+    ///        }
+    ///      ],
+    ///      "outputs_to_install": [
+    ///        "out",
+    ///        "man"
+    ///      ],
+    ///      "pname": "curl",
+    ///      "system": "x86_64-linux",
+    ///      "unfree": false,
+    ///      "version": "8.5.0"
+    ///    }
+    ///  ],
+    ///  "type": "object",
+    ///  "required": [
+    ///    "drv_path",
+    ///    "name",
+    ///    "outputs",
+    ///    "system"
+    ///  ],
+    ///  "properties": {
+    ///    "broken": {
+    ///      "title": "Broken",
+    ///      "type": [
+    ///        "boolean",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "description": {
+    ///      "title": "Description",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "drv_path": {
+    ///      "title": "Drv Path",
+    ///      "type": "string"
+    ///    },
+    ///    "license": {
+    ///      "title": "License",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "licenses": {
+    ///      "title": "Licenses",
+    ///      "type": [
+    ///        "array",
+    ///        "null"
+    ///      ],
+    ///      "items": {
+    ///        "type": "string"
+    ///      }
+    ///    },
+    ///    "name": {
+    ///      "title": "Name",
+    ///      "type": "string"
+    ///    },
+    ///    "outputs": {
+    ///      "title": "Outputs",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "$ref": "#/components/schemas/PackageOutputResponse"
+    ///      }
+    ///    },
+    ///    "outputs_to_install": {
+    ///      "title": "Outputs To Install",
+    ///      "type": [
+    ///        "array",
+    ///        "null"
+    ///      ],
+    ///      "items": {
+    ///        "type": "string"
+    ///      }
+    ///    },
+    ///    "pname": {
+    ///      "title": "Pname",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "system": {
+    ///      "$ref": "#/components/schemas/PackageSystem"
+    ///    },
+    ///    "unfree": {
+    ///      "title": "Unfree",
+    ///      "type": [
+    ///        "boolean",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "version": {
+    ///      "title": "Version",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct PackageDerivationResponse {
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub broken: ::std::option::Option<bool>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub description: ::std::option::Option<::std::string::String>,
+        pub drv_path: ::std::string::String,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub license: ::std::option::Option<::std::string::String>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub licenses: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
+        pub name: ::std::string::String,
+        pub outputs: ::std::vec::Vec<PackageOutputResponse>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub outputs_to_install: ::std::option::Option<
+            ::std::vec::Vec<::std::string::String>,
+        >,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub pname: ::std::option::Option<::std::string::String>,
+        pub system: PackageSystem,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub unfree: ::std::option::Option<bool>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub version: ::std::option::Option<::std::string::String>,
+    }
+    impl ::std::convert::From<&PackageDerivationResponse> for PackageDerivationResponse {
+        fn from(value: &PackageDerivationResponse) -> Self {
             value.clone()
         }
     }
@@ -3812,6 +4226,63 @@ state implies. Absent (null) means ordinary circulation.*/
             value.clone()
         }
     }
+    ///`PackageOutputResponse`
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "PackageOutputResponse",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "name",
+    ///    "store_path"
+    ///  ],
+    ///  "properties": {
+    ///    "closure_size": {
+    ///      "title": "Closure Size",
+    ///      "description": "Total size in bytes of the NARs in the store path's closure. Null when none has been recorded. The base-catalog crawler records none, so a base-catalog store path has one only when a publish recorded it as part of a closure.",
+    ///      "type": [
+    ///        "integer",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "name": {
+    ///      "title": "Name",
+    ///      "type": "string"
+    ///    },
+    ///    "nar_size": {
+    ///      "title": "Nar Size",
+    ///      "description": "Size in bytes of the store path's NAR. Null when no size has been recorded: the publish has not finished uploading, failed to record it, or went to a store that records no sizes. On a base-catalog store path, also null when the crawler has not recorded the path or cache.nixos.org has no NAR for it.",
+    ///      "type": [
+    ///        "integer",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "store_path": {
+    ///      "title": "Store Path",
+    ///      "type": "string"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct PackageOutputResponse {
+        ///Total size in bytes of the NARs in the store path's closure. Null when none has been recorded. The base-catalog crawler records none, so a base-catalog store path has one only when a publish recorded it as part of a closure.
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub closure_size: ::std::option::Option<i64>,
+        pub name: ::std::string::String,
+        ///Size in bytes of the store path's NAR. Null when no size has been recorded: the publish has not finished uploading, failed to record it, or went to a store that records no sizes. On a base-catalog store path, also null when the crawler has not recorded the path or cache.nixos.org has no NAR for it.
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub nar_size: ::std::option::Option<i64>,
+        pub store_path: ::std::string::String,
+    }
+    impl ::std::convert::From<&PackageOutputResponse> for PackageOutputResponse {
+        fn from(value: &PackageOutputResponse) -> Self {
+            value.clone()
+        }
+    }
     ///`PackageOutputs`
     ///
     /// <details><summary>JSON schema</summary>
@@ -4051,6 +4522,39 @@ state implies. Absent (null) means ordinary circulation.*/
     }
     impl ::std::convert::From<&PackageResolutionInfo> for PackageResolutionInfo {
         fn from(value: &PackageResolutionInfo) -> Self {
+            value.clone()
+        }
+    }
+    ///A package's builds at one revision count, with recorded output sizes.
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "PackageRevisionBuilds",
+    ///  "description": "A package's builds at one revision count, with recorded output sizes.",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "items"
+    ///  ],
+    ///  "properties": {
+    ///    "items": {
+    ///      "title": "Items",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "$ref": "#/components/schemas/PackageBuildWithSizes"
+    ///      }
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct PackageRevisionBuilds {
+        pub items: ::std::vec::Vec<PackageBuildWithSizes>,
+    }
+    impl ::std::convert::From<&PackageRevisionBuilds> for PackageRevisionBuilds {
+        fn from(value: &PackageRevisionBuilds) -> Self {
             value.clone()
         }
     }
@@ -4888,6 +5392,51 @@ state implies. Absent (null) means ordinary circulation.*/
                 .map_err(|e: self::error::ConversionError| {
                     <D::Error as ::serde::de::Error>::custom(e.to_string())
                 })
+        }
+    }
+    ///The source repository and branch a package is registered to.
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "RegisteredSource",
+    ///  "description": "The source repository and branch a package is registered to.",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "url"
+    ///  ],
+    ///  "properties": {
+    ///    "ref": {
+    ///      "title": "Ref",
+    ///      "description": "Full ref name, such as `refs/heads/main`.",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "url": {
+    ///      "title": "Url",
+    ///      "type": "string"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct RegisteredSource {
+        ///Full ref name, such as `refs/heads/main`.
+        #[serde(
+            rename = "ref",
+            default,
+            skip_serializing_if = "::std::option::Option::is_none"
+        )]
+        pub ref_: ::std::option::Option<::std::string::String>,
+        pub url: ::std::string::String,
+    }
+    impl ::std::convert::From<&RegisteredSource> for RegisteredSource {
+        fn from(value: &RegisteredSource) -> Self {
+            value.clone()
         }
     }
     ///`ResolutionMessageGeneral`
@@ -6194,6 +6743,9 @@ causes.*/
         pub(super) fn package_build_with_nar_info_dot_flox_dir() -> ::std::string::String {
             ".flox".to_string()
         }
+        pub(super) fn package_build_with_sizes_dot_flox_dir() -> ::std::string::String {
+            ".flox".to_string()
+        }
         pub(super) fn package_descriptor_allow_broken() -> ::std::option::Option<bool> {
             ::std::option::Option::Some(false)
         }
@@ -7048,6 +7600,75 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pac
             _ => Err(Error::UnexpectedResponse(response)),
         }
     }
+    /**Get a package's builds at one revision count
+
+Get a package's builds at one revision count, with each output's
+recorded sizes. Builds against the newest base catalog come first. Within
+a base catalog, builds are ordered as the resolver prefers them.
+
+Path Parameters:
+- **catalog_name**: The name of the catalog
+- **package_name**: The name of the package
+- **rev_count**: The source revision count of the builds
+
+Returns:
+- **PackageRevisionBuilds**
+
+Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{package_name}/builds/{rev_count}`
+
+*/
+    pub async fn get_package_revision_builds_api_v1_catalog_catalogs_catalog_name_packages_package_name_builds_rev_count_get<
+        'a,
+    >(
+        &'a self,
+        catalog_name: &'a types::CatalogName,
+        package_name: &'a types::PackageName,
+        rev_count: i64,
+    ) -> Result<
+        ResponseValue<types::PackageRevisionBuilds>,
+        Error<types::ErrorResponse>,
+    > {
+        let url = format!(
+            "{}/api/v1/catalog/catalogs/{}/packages/{}/builds/{}",
+            self.baseurl,
+            encode_path(&catalog_name.to_string()),
+            encode_path(&package_name.to_string()),
+            encode_path(&rev_count.to_string()),
+        );
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
+            );
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .get(url)
+            .header(
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .headers(header_map)
+            .build()?;
+        let info = OperationInfo {
+            operation_id: "get_package_revision_builds_api_v1_catalog_catalogs_catalog_name_packages_package_name_builds_rev_count_get",
+        };
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            404u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
     /**Check if a build already exists
 
 Check whether a build already exists for the given source tuple.
@@ -7076,6 +7697,10 @@ Request Body:
 Returns:
 - **CheckBuildResponse** with already_published=true and provenance
   if a matching build exists, or already_published=false otherwise.
+  A v2 check also reports **registered_source**, the package's current
+  registration, and **lineage_changed**, whether a publish from
+  source_url and source_ref would replace it. A lineage change is never
+  reported as already published.
 
 Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{package_name}/check-build`
 

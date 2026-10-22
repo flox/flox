@@ -879,7 +879,9 @@ mod tests {
     fn make_check_response(already_published: bool) -> CheckBuildResponse {
         CheckBuildResponse {
             already_published,
+            lineage_changed: false,
             published_at: None,
+            registered_source: None,
             source_rev: None,
             source_rev_date: None,
         }

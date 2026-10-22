@@ -12,7 +12,7 @@ use anyhow::{Result, anyhow};
 use bpaf::Bpaf;
 use chrono::{DateTime, Utc};
 use flox_rust_sdk::flox::Flox;
-use floxhub_client::{BuildResponse, EffectiveBuildStatus, FactoryClientError};
+use floxhub_client::{BuildResponse, BuildTrigger, EffectiveBuildStatus, FactoryClientError};
 use indoc::indoc;
 use tracing::instrument;
 
@@ -23,8 +23,8 @@ use crate::commands::display_help;
 ///
 /// An unrecognized future status renders as `unknown: <value>` rather than
 /// blanking the row; every other status renders as its wire word.
-fn effective_status(build: &BuildResponse) -> String {
-    match &build.status {
+fn effective_status(status: &EffectiveBuildStatus) -> String {
+    match status {
         EffectiveBuildStatus::Unknown(value) => format!("unknown: {value}"),
         status => status.to_string(),
     }
@@ -45,8 +45,8 @@ fn effective_updated_at(build: &BuildResponse) -> DateTime<Utc> {
 }
 
 /// Compute the label describing what scheduled a build.
-fn trigger_label(build: &BuildResponse) -> String {
-    let Some(trigger) = &build.trigger else {
+fn trigger_label(trigger: Option<&BuildTrigger>) -> String {
+    let Some(trigger) = trigger else {
         return "-".to_string();
     };
     // The Factory sends a null kind for an event it does not classify.
@@ -142,6 +142,7 @@ pub(crate) mod test_helpers {
     use chrono::TimeZone;
     use factory_api_v1::types::{TaskErrorClass, TaskResponse, TaskStatus};
     use floxhub_client::{
+        BuildDetailResponse,
         BuildFilters,
         BuildId,
         BuildResponse,
@@ -204,10 +205,53 @@ pub(crate) mod test_helpers {
             nixpkgs_revision: "deadbeef1234567890deadbeef1234567890dead".to_string(),
             created_at: chrono::Utc.with_ymd_and_hms(2025, 1, 1, 0, 0, 0).unwrap(),
             exit_code: None,
+            published_package: None,
             task,
             // A build from a Factory that predates trigger reporting; tests
             // covering the trigger set it on the result.
             trigger: None,
+        }
+    }
+
+    /// Extend a `BuildResponse` fixture into the `BuildDetailResponse` that
+    /// `get_build` returns, with no published outputs.
+    ///
+    /// The destructuring is exhaustive, so a field added to either type fails
+    /// to compile here rather than going unset.
+    pub fn make_build_detail(build: BuildResponse) -> BuildDetailResponse {
+        let BuildResponse {
+            attr_path,
+            build_id,
+            build_type,
+            catalog_name,
+            created_at,
+            exit_code,
+            nixpkgs_revision,
+            published_package,
+            source_commit_sha,
+            source_repo_url,
+            status,
+            system,
+            task,
+            trigger,
+        } = build;
+
+        BuildDetailResponse {
+            attr_path,
+            build_id,
+            build_type,
+            catalog_name,
+            created_at,
+            exit_code,
+            nixpkgs_revision,
+            outputs: vec![],
+            published_package,
+            source_commit_sha,
+            source_repo_url,
+            status,
+            system,
+            task,
+            trigger,
         }
     }
 
@@ -318,8 +362,11 @@ pub(crate) mod test_helpers {
             })
         }
 
-        async fn get_build(&self, _build_id: BuildId) -> Result<BuildResponse, FactoryClientError> {
-            self.get_build.realize()
+        async fn get_build(
+            &self,
+            _build_id: BuildId,
+        ) -> Result<BuildDetailResponse, FactoryClientError> {
+            self.get_build.realize().map(make_build_detail)
         }
 
         async fn cancel_build(
@@ -371,10 +418,9 @@ mod parser_tests {
 
 #[cfg(test)]
 mod trigger_label_tests {
-    use floxhub_client::{BuildResponse, BuildTrigger};
+    use floxhub_client::BuildTrigger;
     use pretty_assertions::assert_eq;
 
-    use super::test_helpers::make_build;
     use super::trigger_label;
 
     #[test]
@@ -405,13 +451,7 @@ mod trigger_label_tests {
 
         let actual: Vec<_> = cases
             .iter()
-            .map(|(name, trigger, _)| {
-                let build = BuildResponse {
-                    trigger: trigger.clone(),
-                    ..make_build(1, "x86_64-linux", "hello", None)
-                };
-                (*name, trigger_label(&build))
-            })
+            .map(|(name, trigger, _)| (*name, trigger_label(trigger.as_ref())))
             .collect();
         let expected: Vec<_> = cases
             .iter()

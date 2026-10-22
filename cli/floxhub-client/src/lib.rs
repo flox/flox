@@ -108,6 +108,7 @@ pub use factory::{
 };
 pub use factory_api_v1::types::{
     AttrPathItem,
+    BuildDetailResponse,
     BuildResponse,
     BuildTrigger,
     BuildTriggerKind,
