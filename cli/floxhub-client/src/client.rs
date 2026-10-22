@@ -1864,7 +1864,9 @@ pub mod tests {
         mock.assert();
         assert_eq!(result.expect("expected Ok"), CheckBuildResponse {
             already_published: false,
+            lineage_changed: false,
             published_at: None,
+            registered_source: None,
             source_rev: None,
             source_rev_date: None,
         });
@@ -1895,7 +1897,9 @@ pub mod tests {
         mock.assert();
         assert_eq!(result.expect("expected Ok"), CheckBuildResponse {
             already_published: false,
+            lineage_changed: false,
             published_at: None,
+            registered_source: None,
             source_rev: None,
             source_rev_date: None,
         });
@@ -1987,6 +1991,7 @@ pub mod tests {
             },
             direct_inputs: None,
             dot_flox_dir: ".flox".to_string(),
+            expected_registered_source: None,
             factory_build_token: factory_build_token.map(str::to_string),
             locked_base_catalog_url: None,
             locked_inputs: None,

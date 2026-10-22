@@ -783,6 +783,7 @@ where
                 .to_string_lossy()
                 .into_owned(),
             allow_lineage_change,
+            expected_registered_source: None,
             factory_build_token: factory_build_token.map(str::to_string),
             // Always sent, mirroring `locked_inputs` above: an empty list
             // states that the repository declares no overrides, rather
