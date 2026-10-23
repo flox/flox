@@ -81,13 +81,36 @@ pub enum PublishError {
 pub type ApiErrorResponse = api_types::ErrorResponse;
 pub type ApiErrorResponseValue = ResponseValue<ApiErrorResponse>;
 
+/// What a confirmed source move does. Written for the two surfaces that show it
+/// after a move is requested: the interactive prompt and the refusal shown when
+/// stdin, stdout or stderr is not a terminal. Read via [`describe_source_move`].
+pub const SOURCE_MOVE_EFFECTS: &str = concat!(
+    "Changing the repository or the ref changes which build other packages lock\n",
+    "as an input from now on.\n",
+    "Where automated builds run, future builds use the newly registered source.\n",
+    "Previously published builds remain stored; existing locks are unchanged.",
+);
+
+/// The header, both sources and [`SOURCE_MOVE_EFFECTS`], with no trailing
+/// newline. Takes the registered source first; swapping the arguments reports
+/// the move in the opposite direction.
+pub fn describe_source_move(registered: &str, requested: &str) -> String {
+    format!(
+        "Package source repository or ref has changed.\n\
+         Registered source: {registered}\n\
+         Requested source: {requested}\n\
+         \n\
+         {SOURCE_MOVE_EFFECTS}"
+    )
+}
+
 /// The sources as reported by the server in a publish refusal.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 #[error(
-    "Package source repository or ref has changed.\n\
-     Registered source: {registered}\n\
-     Requested source: {requested}\n\
-     To replace the registered source, retry your publish command with '--allow-lineage-change' added."
+    "{}\n\
+     \n\
+     To replace the registered source, retry your publish command with '--allow-lineage-change' added.",
+    describe_source_move(.registered, .requested)
 )]
 pub struct SourceLineageChange {
     pub registered: String,
@@ -206,6 +229,39 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn source_lineage_change_refusal_describes_a_confirmed_move() {
+        let moves = [
+            (
+                "github.com/org/pkg (ref main)",
+                "github.com/org/fork (ref main)",
+            ),
+            (
+                "github.com/org/pkg (ref main)",
+                "github.com/org/pkg (ref release)",
+            ),
+        ];
+        for (registered, requested) in moves {
+            let change = SourceLineageChange {
+                registered: registered.to_owned(),
+                requested: requested.to_owned(),
+            };
+            let expected = format!(
+                "Package source repository or ref has changed.\n\
+                 Registered source: {registered}\n\
+                 Requested source: {requested}\n\
+                 \n\
+                 Changing the repository or the ref changes which build other packages lock\n\
+                 as an input from now on.\n\
+                 Where automated builds run, future builds use the newly registered source.\n\
+                 Previously published builds remain stored; existing locks are unchanged.\n\
+                 \n\
+                 To replace the registered source, retry your publish command with '--allow-lineage-change' added."
+            );
+            assert_eq!(change.to_string(), expected);
+        }
+    }
 
     #[tokio::test]
     async fn map_api_error_ok() {
