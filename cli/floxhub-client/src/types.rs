@@ -109,6 +109,7 @@ pub use api_types::{
     PackageDerivation as UserDerivationInfo,
     PublishInfoResponseCatalog as PublishResponse,
     PublishWarning,
+    RegisteredSource,
     StoreInfo,
     StoreInfoRequest,
     StoreInfoResponse,

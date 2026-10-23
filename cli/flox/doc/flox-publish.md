@@ -88,6 +88,19 @@ Finally, the package is uploaded to the default Catalog, which is named after
 your user, but you may specify the catalog to publish to via the `--catalog`
 option.
 
+## Source registration
+
+Each package is registered to the source repository and ref it is published
+from.
+Before building, `flox publish` checks whether this publish would change that
+registration.
+If it would, an interactive publish shows the registered and requested sources
+and asks for confirmation, which defaults to no.
+A non-interactive publish stops instead.
+If the registration changes again while the package builds, the publish stops.
+Run it again to confirm the new source.
+To replace the registration without asking, use `--allow-lineage-change`.
+
 ## After publishing
 
 After the package is published, it will be available to the `flox install`,
@@ -147,26 +160,11 @@ Note that this is a paid feature available with Flox for Teams.
     'flox config'.
 
 `--allow-lineage-change`
-:   Explicitly authorize replacing the package's registered source repository
-    or ref. Use it only when that replacement is intentional.
-    Without this option, a refused source change requires interactive
-    confirmation showing the registered and requested sources. Confirmation
-    defaults to no. In a non-interactive environment, a refused source change
-    fails without prompting. For an intentional replacement, repeat the
-    original command with `--allow-lineage-change` added. Leave this option
-    unset for routine CI publishing.
-
-    This option bypasses the check for an already-published build, even when
-    the registered source has not changed. Publishing can therefore repeat
-    build and upload preparation.
-
-    Without this option, changing only the ref at an already-published commit
-    with the same build inputs can report "already published" without prompting
-    or updating the registered ref. Moving back to a previously published
-    repository and revision can also report "already published" without
-    prompting or updating the registration. Both cases affect interactive and
-    non-interactive publishing. Use `--allow-lineage-change` only when the
-    replacement is intentional.
+:   Replace the package's registered source without asking.
+    The publish replaces whichever source is registered when it completes.
+    It also skips the already-published check, so the publish may repeat build
+    and upload preparation.
+    Use it only for an intentional replacement, not for routine CI publishing.
 
 `--stability <stability>`
 :   Perform a Nix expression build using a base package set of the given

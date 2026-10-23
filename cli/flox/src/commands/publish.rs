@@ -17,6 +17,7 @@ use flox_rust_sdk::providers::build::{
 };
 use flox_rust_sdk::providers::nix_auth::NixAuth;
 use flox_rust_sdk::providers::publish::{
+    LineageOverride,
     PublishError,
     PublishOutcome,
     PublishProvider,
@@ -32,6 +33,7 @@ use floxhub_client::{
     CheckBuildResponse,
     FloxhubClientError,
     PackageSystem,
+    RegisteredSource,
     SourceLineageChange,
 };
 use indoc::formatdoc;
@@ -92,10 +94,14 @@ async fn finish_accepted_publish(
     Ok(())
 }
 
-async fn confirm_lineage_change(change: &SourceLineageChange) -> Result<bool, PublishError> {
-    if !Dialog::can_prompt() {
-        return Ok(false);
-    }
+/// Format a source for the lineage prompt as its URL and bare branch name.
+fn display_source(url: &str, ref_: Option<&str>) -> String {
+    let ref_ = ref_.map(|ref_| ref_.strip_prefix("refs/heads/").unwrap_or(ref_));
+    format!("{url} (ref {})", ref_.unwrap_or("unset"))
+}
+
+/// Ask to replace the registered source; declining cancels the publish.
+async fn prompt_lineage_change(registered: &str, requested: &str) -> Result<(), PublishError> {
     message::warning(formatdoc! {
         "Package source repository or ref has changed.
         Registered source: {registered}
@@ -107,8 +113,6 @@ async fn confirm_lineage_change(change: &SourceLineageChange) -> Result<bool, Pu
 
         Continue only if the requested repository and ref are the intended source for
         this package going forward.",
-        registered = change.registered,
-        requested = change.requested,
     });
     let confirmed = Dialog {
         message: "Change the registered source and publish?",
@@ -128,7 +132,23 @@ async fn confirm_lineage_change(change: &SourceLineageChange) -> Result<bool, Pu
     if !confirmed {
         return Err(PublishError::LineageChangeDeclined);
     }
+    Ok(())
+}
+
+async fn confirm_lineage_change(change: &SourceLineageChange) -> Result<bool, PublishError> {
+    if !Dialog::can_prompt() {
+        return Ok(false);
+    }
+    prompt_lineage_change(&change.registered, &change.requested).await?;
     Ok(true)
+}
+
+/// A declined confirmation is a deliberate cancel, not a failure.
+fn publish_failure(err: PublishError) -> anyhow::Error {
+    match err {
+        err @ PublishError::LineageChangeDeclined => err.into(),
+        err => anyhow!("Failed to publish package: {}", display_chain(&err)),
+    }
 }
 
 /// Carries the Factory's per-build token into the build pod. Read by
@@ -158,39 +178,72 @@ fn factory_build_token_from_env() -> Option<String> {
     token
 }
 
-/// Outcome of the dedup pre-check against the catalog.
+/// What the check-build preflight reports about this publish.
 #[derive(Debug)]
-enum DedupOutcome {
-    /// The server confirmed this exact build (by closure identity) was already
-    /// published. The caller should display provenance and skip the upload.
+enum Preflight {
+    /// Publishing would replace this registered source.
+    LineageChanged(RegisteredSource),
+    /// The server confirmed this exact build (by closure identity) was
+    /// already published. The caller should display provenance and skip the
+    /// upload.
     AlreadyPublished(CheckBuildResponse),
     /// The build is new; proceed with the publish.
     New,
-    /// The check request itself failed (network error, server error, etc.).
-    /// A failed check must never block a publish — it is a best-effort
-    /// optimisation only.
-    CheckFailed(FloxhubClientError),
 }
 
-/// Map the raw check-build result to a [`DedupOutcome`].
-///
-/// An `Err` result (network failure, server error, etc.) maps to
-/// `CheckFailed` rather than propagating: the dedup pre-check must never
-/// prevent a legitimate publish.
-fn dedup_outcome(result: Result<CheckBuildResponse, FloxhubClientError>) -> DedupOutcome {
-    match result {
-        Ok(resp) if resp.already_published => DedupOutcome::AlreadyPublished(resp),
-        Ok(_) => DedupOutcome::New,
-        Err(e) => DedupOutcome::CheckFailed(e),
+/// Classify a check-build response. A lineage change wins over a
+/// duplicate: replacing the registration still needs a publish.
+fn preflight(response: CheckBuildResponse) -> Preflight {
+    match response {
+        CheckBuildResponse {
+            lineage_changed: true,
+            registered_source: Some(registered),
+            ..
+        } => Preflight::LineageChanged(registered),
+        response if response.already_published => Preflight::AlreadyPublished(response),
+        _ => Preflight::New,
     }
 }
 
-/// Run the dedup check and report whether the publish should stop because
-/// this exact build was already published, printing its provenance when so.
-/// A failed check warns and lets the publish continue.
-async fn dedup_short_circuit(client: &impl CatalogClientTrait, query: CheckBuildQuery<'_>) -> bool {
-    match dedup_outcome(client.check_build_already_recorded(query).await) {
-        DedupOutcome::AlreadyPublished(resp) => {
+/// Run the check-build preflight before the build.
+///
+/// Returns `None` when this exact build was already published, after
+/// printing its provenance, and otherwise the lineage override the publish
+/// carries. A lineage change is confirmed here, bound to the registration
+/// the server reported, or refused when no prompt is possible. A failed
+/// check is only an optimization lost: it warns and lets the publish
+/// continue.
+async fn run_preflight(
+    client: &impl CatalogClientTrait,
+    query: CheckBuildQuery<'_>,
+    requested_source: &str,
+) -> Result<Option<LineageOverride>, PublishError> {
+    let response = match client.check_build_already_recorded(query).await {
+        Ok(response) => response,
+        Err(e) => {
+            message::warning("Unable to check if already published — continuing with publish.");
+            warn!(
+                error = %e,
+                "Dedup check failed, proceeding with publish"
+            );
+            return Ok(Some(LineageOverride::Refuse));
+        },
+    };
+    match preflight(response) {
+        Preflight::LineageChanged(registered) => {
+            let registered_display = display_source(&registered.url, registered.ref_.as_deref());
+            if !Dialog::can_prompt() {
+                return Err(PublishError::CatalogError(
+                    FloxhubClientError::SourceLineageChange(SourceLineageChange {
+                        registered: registered_display,
+                        requested: requested_source.to_owned(),
+                    }),
+                ));
+            }
+            prompt_lineage_change(&registered_display, requested_source).await?;
+            Ok(Some(LineageOverride::Expected(registered)))
+        },
+        Preflight::AlreadyPublished(resp) => {
             message::updated(formatdoc! {"
                 Package already published.
 
@@ -202,18 +255,9 @@ async fn dedup_short_circuit(client: &impl CatalogClientTrait, query: CheckBuild
                     .map_or_else(|| "unknown".to_string(), |d| d.to_string()),
                 rev = resp.source_rev.unwrap_or_else(|| "unknown".to_string()),
             });
-            true
+            Ok(None)
         },
-        DedupOutcome::New => false,
-        DedupOutcome::CheckFailed(e) => {
-            // A failed check must never block a publish; warn and continue.
-            message::warning("Unable to check if already published — continuing with publish.");
-            warn!(
-                error = %e,
-                "Dedup check failed, proceeding with publish"
-            );
-            false
-        },
+        Preflight::New => Ok(Some(LineageOverride::Refuse)),
     }
 }
 
@@ -547,6 +591,11 @@ impl Publish {
         // publish makes.
         let factory_build_token = factory_build_token_from_env();
 
+        let mut lineage_override = if publish_config.allow_lineage_change {
+            LineageOverride::Unbound
+        } else {
+            LineageOverride::Refuse
+        };
         // Explicit source replacement must reach publish even for an existing build.
         if let Some(system) = dedup_system
             && !publish_config.allow_lineage_change
@@ -569,8 +618,15 @@ impl Publish {
                 source_ref: &publish_provider.env_metadata.build_repo_meta.ref_,
                 dot_flox_dir: &dot_flox_dir,
             };
-            if dedup_short_circuit(&flox.floxhub_client, query).await {
-                return Ok(());
+            let build_repo_meta = &publish_provider.env_metadata.build_repo_meta;
+            let requested_source =
+                display_source(build_repo_meta.url.as_str(), Some(&build_repo_meta.ref_));
+            match run_preflight(&flox.floxhub_client, query, &requested_source)
+                .await
+                .map_err(publish_failure)?
+            {
+                Some(confirmed) => lineage_override = confirmed,
+                None => return Ok(()),
             }
         }
 
@@ -595,7 +651,7 @@ impl Publish {
             &publish_provider.package_metadata.package
         );
         let catalog = &flox.floxhub_client;
-        let outcome = match publish_provider
+        let outcome = publish_provider
             .publish(
                 catalog,
                 &catalog_name,
@@ -605,16 +661,11 @@ impl Publish {
                 key_file,
                 publish_config.metadata_only,
                 factory_build_token.as_deref(),
-                publish_config.allow_lineage_change,
+                lineage_override,
                 confirm_lineage_change,
             )
             .await
-        {
-            Ok(outcome) => outcome,
-            // A declined confirmation is a deliberate cancel, not a failure.
-            Err(e @ PublishError::LineageChangeDeclined) => return Err(e.into()),
-            Err(e) => bail!("Failed to publish package: {}", display_chain(&e)),
-        };
+            .map_err(publish_failure)?;
 
         finish_accepted_publish(
             &outcome,
@@ -874,43 +925,122 @@ mod tests {
         );
     }
 
-    // --- dedup_outcome unit tests ---
+    // --- preflight unit tests ---
 
-    fn make_check_response(already_published: bool) -> CheckBuildResponse {
+    fn make_check_response(
+        already_published: bool,
+        registered_source: Option<RegisteredSource>,
+        lineage_changed: bool,
+    ) -> CheckBuildResponse {
         CheckBuildResponse {
             already_published,
-            lineage_changed: false,
+            lineage_changed,
             published_at: None,
-            registered_source: None,
+            registered_source,
             source_rev: None,
             source_rev_date: None,
         }
     }
 
-    #[test]
-    fn dedup_outcome_already_published_passes_response_through() {
-        let input = make_check_response(true);
-        let expected = input.clone();
-        let DedupOutcome::AlreadyPublished(got) = dedup_outcome(Ok(input)) else {
-            panic!("expected AlreadyPublished variant");
+    /// Tests cannot prompt, so a lineage change stops the publish before
+    /// the build.
+    #[tokio::test]
+    async fn run_preflight_acts_on_the_check_build_answer() {
+        use std::collections::BTreeMap;
+
+        use floxhub_client::FloxhubClient;
+        use floxhub_client::client::test_helpers::client_config;
+        use httpmock::MockServer;
+
+        let registered = RegisteredSource {
+            ref_: Some("refs/heads/main".to_owned()),
+            url: "https://github.com/org/repo".to_owned(),
         };
-        assert_eq!(got, expected);
+        let requested_source = "https://github.com/org/fork (ref topic)";
+        let lineage_change = SourceLineageChange {
+            registered: "https://github.com/org/repo (ref main)".to_owned(),
+            requested: requested_source.to_owned(),
+        };
+        let source_url = url::Url::parse("https://github.com/org/fork").unwrap();
+        let locked_inputs = BTreeMap::new();
+        for (status, body, expected) in [
+            (
+                200,
+                serde_json::to_value(make_check_response(true, Some(registered.clone()), true))
+                    .unwrap(),
+                Err(lineage_change),
+            ),
+            (
+                200,
+                serde_json::to_value(make_check_response(false, None, true)).unwrap(),
+                Ok(Some(LineageOverride::Refuse)),
+            ),
+            (
+                200,
+                serde_json::to_value(make_check_response(true, None, false)).unwrap(),
+                Ok(None),
+            ),
+            (
+                200,
+                serde_json::to_value(make_check_response(false, None, false)).unwrap(),
+                Ok(Some(LineageOverride::Refuse)),
+            ),
+            (
+                500,
+                serde_json::json!({"detail": "Internal Server Error"}),
+                Ok(Some(LineageOverride::Refuse)),
+            ),
+        ] {
+            let server = MockServer::start_async().await;
+            let mock = server.mock(|when, then| {
+                when.method("POST")
+                    .path("/api/v1/catalog/catalogs/myorg/packages/mypkg/check-build");
+                then.status(status).json_body(body.clone());
+            });
+            let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
+            let query = CheckBuildQuery {
+                catalog_name: "myorg",
+                package_name: "mypkg",
+                source_url: &source_url,
+                source_rev: "deadbeef",
+                nixpkgs_rev: "cafebabe",
+                system: PackageSystem::X8664Linux,
+                locked_inputs: &locked_inputs,
+                factory_build_token: None,
+                direct_inputs: &[],
+                source_ref: "refs/heads/topic",
+                dot_flox_dir: ".flox",
+            };
+
+            let result = run_preflight(&client, query, requested_source)
+                .await
+                .map_err(|err| match err {
+                    PublishError::CatalogError(FloxhubClientError::SourceLineageChange(change)) => {
+                        change
+                    },
+                    err => panic!("unexpected error: {err}"),
+                });
+
+            mock.assert();
+            assert_eq!(result, expected, "{status} {body}");
+        }
     }
 
     #[test]
-    fn dedup_outcome_not_published_maps_to_new() {
-        let resp = make_check_response(false);
-        assert!(matches!(dedup_outcome(Ok(resp)), DedupOutcome::New));
-    }
-
-    #[test]
-    fn dedup_outcome_err_maps_to_check_failed() {
-        let result: Result<CheckBuildResponse, FloxhubClientError> =
-            Err(FloxhubClientError::Other("network error".to_string()));
-        assert!(matches!(
-            dedup_outcome(result),
-            DedupOutcome::CheckFailed(_)
-        ));
+    fn display_source_names_the_bare_branch() {
+        for (ref_, expected) in [
+            (
+                Some("refs/heads/main"),
+                "https://github.com/org/repo (ref main)",
+            ),
+            (Some("main"), "https://github.com/org/repo (ref main)"),
+            (None, "https://github.com/org/repo (ref unset)"),
+        ] {
+            assert_eq!(
+                display_source("https://github.com/org/repo", ref_),
+                expected
+            );
+        }
     }
 
     #[test]
