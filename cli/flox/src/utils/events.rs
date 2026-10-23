@@ -164,8 +164,10 @@ fn architecture_from_system(system: &str) -> Option<String> {
 /// [`read_metrics_uuid`].
 ///
 /// Returns `None` if
-/// a) metrics are disabled by config, or
-/// b) reading the metrics uuid fails.
+/// a) metrics are disabled by config,
+/// b) telemetry is deferred until the notice is shown
+///    (see [`crate::utils::init::telemetry_deferred`]), or
+/// c) reading the metrics uuid fails.
 ///
 /// `auth_context` is the credential selected for the invocation. The returned
 /// client snapshots its pseudonymous subject and local credential kind at
@@ -185,6 +187,13 @@ pub async fn build_events_client(
 ) -> Option<EventsClient> {
     if config.flox.disable_metrics {
         debug!("v2 events: disable_metrics is true; not installing client");
+        return None;
+    }
+
+    // Checked before reading the uuid, so that this invocation stays deferred
+    // even if a concurrent `flox` creates the uuid.
+    if crate::utils::init::telemetry_deferred() {
+        debug!("v2 events: telemetry is deferred; not installing client");
         return None;
     }
 
