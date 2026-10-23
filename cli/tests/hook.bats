@@ -537,6 +537,69 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
 }
 
 # ---------------------------------------------------------------------------- #
+# Forked subshells: zsh's chpwd functions and tcsh's cwdcmd alias also run when
+# a fork of the shell changes directory, and `$$` there is still the parent's
+# PID. The hook must do nothing in the fork, or it detaches the parent shell
+# from an activation it is still using (DEV-415)
+# ---------------------------------------------------------------------------- #
+
+# Each test auto-activates PROJECT2_DIR by cd'ing into it, leaves it from a
+# `( ... )` subshell and from a command substitution, and then checks that the
+# shell's own PID is still attached before it leaves for real.
+
+# bats test_tags=hook:forked-subshell:zsh
+@test "zsh: cd in a forked subshell does not detach the parent's activation" {
+  project_setup
+  project2_setup
+  # Auto-activation is opt-in; allow the target before entering it.
+  "$FLOX_BIN" activate allow -d "$PROJECT2_DIR"
+  STATE_JSON="$("$FLOX_BIN" activation-state -d "$PROJECT2_DIR")/state.json"
+
+  run --separate-stderr zsh -c "
+    export FLOX_SHELL=\$(which zsh)
+    eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
+    cd $PROJECT2_DIR
+    ( cd $BATS_TEST_TMPDIR )
+    : \$(cd $BATS_TEST_TMPDIR)
+    jq -e --arg pid \$\$ '.attached_pids | has(\$pid)' $STATE_JSON > /dev/null && echo attached
+    echo \"during:\$TEST_VAR2\"
+    cd $BATS_TEST_TMPDIR
+    echo \"after:\${TEST_VAR2:-unset}\"
+  "
+  assert_success
+  assert_output --partial "attached"
+  assert_output --partial "during:auto2"
+  assert_output --partial "after:unset"
+  refute_regex "$stderr" "is not attached to the activation"
+}
+
+# bats test_tags=hook:forked-subshell:tcsh
+@test "tcsh: cd in a forked subshell does not detach the parent's activation" {
+  project_setup
+  project2_setup
+  # Auto-activation is opt-in; allow the target before entering it.
+  "$FLOX_BIN" activate allow -d "$PROJECT2_DIR"
+  STATE_JSON="$("$FLOX_BIN" activation-state -d "$PROJECT2_DIR")/state.json"
+
+  run --separate-stderr tcsh -c "
+    eval \"\`$FLOX_BIN activate -d $PROJECT_DIR\`\"
+    cd $PROJECT2_DIR
+    ( cd $BATS_TEST_TMPDIR )
+    set unused = \`cd $BATS_TEST_TMPDIR\`
+    jq -e --arg pid \$\$ '.attached_pids | has(\$pid)' $STATE_JSON > /dev/null && echo attached
+    echo \"during:\$TEST_VAR2\"
+    cd $BATS_TEST_TMPDIR
+    if ( \$?TEST_VAR2 ) echo 'after:set'
+    if ( ! \$?TEST_VAR2 ) echo 'after:unset'
+  "
+  assert_success
+  assert_output --partial "attached"
+  assert_output --partial "during:auto2"
+  assert_output --partial "after:unset"
+  refute_regex "$stderr" "is not attached to the activation"
+}
+
+# ---------------------------------------------------------------------------- #
 # Stacked auto-activation: nested projects activate outermost-first and the
 # whole stack unwinds in a single hook run on leaving
 # ---------------------------------------------------------------------------- #

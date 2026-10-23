@@ -410,6 +410,7 @@ mod tests {
             /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
             export _FLOX_PROMPT_HOOK_VERSION=1:true;
             _flox_hook() {
+              if (( ZSH_SUBSHELL )); then return; fi;
               local _flox_vars;
               _flox_vars="$("/flox" hook-env --shell zsh --shell-pid $$ --invocation-types "${_FLOX_INVOCATION_TYPES:-}")";
               trap -- '' SIGINT;
@@ -455,6 +456,7 @@ mod tests {
             /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
             export _FLOX_PROMPT_HOOK_VERSION=1:true;
             _flox_hook() {
+              if (( ZSH_SUBSHELL )); then return; fi;
               local _flox_vars;
               _flox_vars="$("/flox" hook-env --shell zsh --shell-pid $$ --invocation-types "${_FLOX_INVOCATION_TYPES:-}")";
               trap -- '' SIGINT;

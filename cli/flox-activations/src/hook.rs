@@ -20,6 +20,18 @@
 //! map, and that is how `hook-env` knows not to emit a
 //! `flox-activations detach` for layers this shell never attached to.
 //!
+//! That only covers a subshell that is a separate process. A forked subshell
+//! (`( cd .. )`, a command substitution, zsh's own `cd` completion) inherits
+//! the map, and `$$` there still expands to the parent's PID. zsh's chpwd
+//! functions and tcsh's `cwdcmd` alias run in such a fork when it changes
+//! directory, so a hook that acted there would detach the parent shell from
+//! an activation it is still using, or attach it to one it never entered,
+//! while the environment changes die with the fork. Both hooks therefore do
+//! nothing in a fork: zsh checks `ZSH_SUBSHELL`, and tcsh, which has no such
+//! variable, has `hook-env` compare its parent PID with `--shell-pid`. bash
+//! only runs the hook from `PROMPT_COMMAND`, which a fork never evaluates,
+//! and fish has no forked subshells.
+//!
 //! Each hook also exports [`PROMPT_HOOK_VERSION_ENV`] =
 //! `<version>:true` at registration time (top level, so it is set before the
 //! first prompt); subshell activations export `<version>:false` instead (see
@@ -58,12 +70,16 @@ pub fn bash_hook(flox_bin: &str) -> String {
 
 // Unlike bash, zsh restores $? before calling each precmd function
 // independently, so we don't need to save/restore it ourselves.
+//
+// The `ZSH_SUBSHELL` check keeps the hook out of forked subshells (see the
+// module docs).
 pub fn zsh_hook(flox_bin: &str) -> String {
     let marker = prompt_hook_marker_value(true);
     formatdoc!(
         r#"
         export {PROMPT_HOOK_VERSION_ENV}={marker};
         _flox_hook() {{
+          if (( ZSH_SUBSHELL )); then return; fi;
           local _flox_vars;
           _flox_vars="$("{flox_bin}" hook-env --shell zsh --shell-pid $$ --invocation-types "${{{FLOX_INVOCATION_TYPES_VAR}:-}}")";
           trap -- '' SIGINT;
@@ -170,6 +186,12 @@ pub fn fish_hook(flox_bin: &str) -> String {
 // `emit_deactivate_script` in the `flox` crate) and the alias body checks the
 // flag after the eval completes — after the `unsetenv`, so the wire variable
 // dies with the hook run even when the shell exits.
+//
+// tcsh has nothing like `ZSH_SUBSHELL` to keep the hook out of forked
+// subshells (see the module docs), so `hook-env` detects the fork instead:
+// `exec` makes the shell evaluating the alias its parent process, and
+// `--skip-in-forked-subshell` has it print nothing when that parent is not
+// `$$`.
 pub fn tcsh_hook(flox_bin: &str) -> String {
     // A tcsh alias body must be a single line, so assemble the statements here
     // and join them with "; " rather than writing one long string literal.
@@ -177,7 +199,7 @@ pub fn tcsh_hook(flox_bin: &str) -> String {
         format!(r#"if ( ! $?{FLOX_INVOCATION_TYPES_VAR} ) set {FLOX_INVOCATION_TYPES_VAR}="""#),
         format!("setenv {FLOX_INVOCATION_TYPES_WIRE_VAR} ${FLOX_INVOCATION_TYPES_VAR}:q"),
         format!(
-            r#"eval "`{flox_bin} hook-env --shell tcsh --shell-pid $$ --invocation-types-from-env`""#
+            r#"eval "`exec {flox_bin} hook-env --shell tcsh --shell-pid $$ --invocation-types-from-env --skip-in-forked-subshell`""#
         ),
         format!("unsetenv {FLOX_INVOCATION_TYPES_WIRE_VAR}"),
         "if ( $?_flox_exit ) exit".to_string(),
