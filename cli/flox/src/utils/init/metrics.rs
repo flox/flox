@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::Result;
 use flox_core::open_lock_file;
-use indoc::formatdoc;
+use indoc::indoc;
 use tracing::debug;
 
 use crate::commands::is_detached_side_effect_command;
@@ -42,6 +42,26 @@ pub fn telemetry_notice_visible(args: &[OsString], user_messages_visible: bool) 
         .any(|revision| revision.parse::<usize>().is_ok());
     user_messages_visible && !detached_child && !completion
 }
+
+/// The notice that Flox prints when it creates the telemetry device ID.
+///
+/// Keep this text in step with the Summary of
+/// https://flox.dev/docs/concepts/data-collection and with `disable_metrics`
+/// in `flox-config(1)`.
+const TELEMETRY_NOTICE: &str = indoc! {"
+    Flox collects telemetry to improve Flox. It sends usage events and error
+    reports (to Flox and to Sentry) with a random device ID, which Flox links to
+    your FloxHub account when you sign in. FloxHub logs requests the CLI sends it
+    with your IP address. Extensions can collect and send their own telemetry.
+
+    To turn telemetry off, run 'flox config --set disable_metrics true'
+    or add 'export FLOX_DISABLE_METRICS=true' to your shell profile.
+
+    What Flox collects: https://flox.dev/docs/concepts/data-collection
+
+    This is a one-time notice.
+
+"};
 
 /// Initializes the telemetry for the current installation by creating a new metrics uuid
 ///
@@ -94,23 +114,7 @@ pub fn init_telemetry_uuid(
 
     debug!("Created new telemetry UUID: {}", telemetry_uuid);
 
-    let notice = formatdoc! {"
-        Flox collects basic usage metrics in order to improve the user experience.
-
-        Flox includes a record of the subcommand invoked along with a unique token.
-        It does not collect any personal information.
-
-        The collection of metrics can be disabled in the following ways:
-
-          environment: FLOX_DISABLE_METRICS=true
-            user-wide: flox config --set disable_metrics true
-          system-wide: update /etc/flox.toml as described in flox-config(1)
-
-        This is a one-time notice.
-
-        "};
-
-    message::plain(notice);
+    message::plain(TELEMETRY_NOTICE);
 
     fs::write(uuid_path, telemetry_uuid.to_string())?;
     Ok(true)
@@ -220,6 +224,41 @@ mod tests {
                 telemetry_notice_visible(&args, user_messages_visible),
                 expected,
                 "{args:?} with user_messages_visible={user_messages_visible}"
+            );
+        }
+    }
+
+    #[test]
+    fn telemetry_notice_links_docs_and_names_opt_outs() {
+        assert!(TELEMETRY_NOTICE.contains("https://flox.dev/docs/concepts/data-collection"));
+        assert!(TELEMETRY_NOTICE.contains("flox config --set disable_metrics true"));
+        // A bare assignment in a shell profile is not exported to `flox`.
+        assert!(TELEMETRY_NOTICE.contains("'export FLOX_DISABLE_METRICS=true'"));
+    }
+
+    #[test]
+    fn telemetry_notice_names_both_destinations() {
+        assert!(TELEMETRY_NOTICE.contains("to Flox and to Sentry"));
+    }
+
+    #[test]
+    fn telemetry_notice_fits_80_columns() {
+        for line in TELEMETRY_NOTICE.lines() {
+            assert!(
+                line.chars().count() <= 80,
+                "notice line is longer than 80 columns: {line:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn telemetry_notice_avoids_retracted_claims() {
+        let notice = TELEMETRY_NOTICE.to_lowercase();
+        // Only `true` and `false` parse as FLOX_DISABLE_METRICS values.
+        for phrase in ["personal information", "basic", "anonym", "=1"] {
+            assert!(
+                !notice.contains(phrase),
+                "notice contains {phrase:?}: {TELEMETRY_NOTICE}"
             );
         }
     }
