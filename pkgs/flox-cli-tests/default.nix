@@ -6,6 +6,7 @@
   bash,
   fish,
   tcsh,
+  tmux,
   zsh,
   dash,
   bats,
@@ -58,6 +59,7 @@ let
     bash
     fish
     tcsh
+    tmux
     zsh
     dash
     batsWith

@@ -191,7 +191,19 @@ impl ActivateOptions {
 }
 
 impl Activate {
-    pub async fn handle(self, mut config: Config, mut flox: Flox) -> Result<()> {
+    pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
+        self.handle_with_command_name(config, flox, "activate")
+            .await
+    }
+
+    /// Reuse ordinary activation while keeping the caller's lifecycle label.
+    /// Domain/legacy events and pre-exec completion semantics are unchanged.
+    pub(crate) async fn handle_with_command_name(
+        self,
+        mut config: Config,
+        mut flox: Flox,
+        command_name: &'static str,
+    ) -> Result<()> {
         let options = match self.subcommand_or_options {
             ActivateSubcommandOrOptions::AutoActivate { auto_activate } => {
                 return self
@@ -296,13 +308,14 @@ impl Activate {
         };
 
         options
-            .activate(
+            .activate_with_command_name(
                 config,
                 flox,
                 concrete_environment,
                 invocation_type,
                 Vec::new(),
                 Some(&self.environment),
+                command_name,
             )
             .await
     }
@@ -367,12 +380,35 @@ impl ActivateOptions {
     /// `services` activations pass `None` and do neither.
     pub async fn activate(
         self,
+        config: Config,
+        flox: Flox,
+        concrete_environment: ConcreteEnvironment,
+        invocation_type: InvocationType,
+        services_for_ephemeral_activation: Vec<String>,
+        check_upgrades: Option<&EnvironmentSelect>,
+    ) -> Result<()> {
+        self.activate_with_command_name(
+            config,
+            flox,
+            concrete_environment,
+            invocation_type,
+            services_for_ephemeral_activation,
+            check_upgrades,
+            "activate",
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)] // existing activation request plus its lifecycle label
+    async fn activate_with_command_name(
+        self,
         mut config: Config,
         flox: Flox,
         mut concrete_environment: ConcreteEnvironment,
         invocation_type: InvocationType,
         services_for_ephemeral_activation: Vec<String>,
         check_upgrades: Option<&EnvironmentSelect>,
+        command_name: &'static str,
     ) -> Result<()> {
         ensure_prompt_hook_version_compatible_for_activate()?;
 
@@ -797,7 +833,7 @@ impl ActivateOptions {
             // `command.exec()` replaces this process, so the dispatcher's
             // end-of-`cli_worker` `command_completed` emit will never run.
             // Sending is left to a detached child, which survives the exec.
-            super::record_completed_and_spawn_if_due(&config, "activate");
+            super::record_completed_and_spawn_if_due(&config, command_name);
             // exec should never return
             // TODO: did this break in-place metrics?
             Err(command.exec().into())
