@@ -146,6 +146,7 @@ sharing environments, and administration.
 
 # SEE ALSO
 
+[`flox-global(1)`](./flox-global.md),
 [`flox-init(1)`](./flox-init.md),
 [`flox-activate(1)`](./flox-activate.md),
 [`flox-develop(1)`](./flox-develop.md),
