@@ -148,7 +148,7 @@ impl InstallableLocker for Nix {
         descriptor: &PackageDescriptorFlake,
     ) -> Result<LockedInstallable, FlakeInstallableError> {
         let mut command = nix_base_command();
-        command.args(["--option", "extra-plugin-files", &*NIX_PLUGINS]);
+        command.args(["--option", "plugin-files", &*NIX_PLUGINS]);
         command.arg("--refresh");
         command.args(["--option", "pure-eval", "false"]);
         command.arg("eval");

@@ -8,6 +8,8 @@
  * -------------------------------------------------------------------------- */
 
 
+#include <filesystem>
+
 #include <nix/cmd/installable-flake.hh>
 
 #include <nix/cmd/installable-value.hh>
@@ -49,7 +51,7 @@ parseInstallable( const nix::ref<nix::EvalState> & state,
       return nix::parseFlakeRefWithFragmentAndExtendedOutputsSpec(
         state->fetchSettings,
         installableStr,
-        nix::absPath( std::string_view( "." ) ) );
+        std::filesystem::current_path() );
     }
   catch ( const nix::Error & e )
     {
@@ -126,10 +128,10 @@ readLicenseStringOrId( nix::EvalState & state, nix::Value * licenseValue )
     }
   else if ( licenseValue->type() == nix::ValueType::nAttrs )
     {
-      auto licenseIdValue
-        = licenseValue->attrs()->find( state.symbols.create( "spdxId" ) );
+      const nix::Attr * licenseIdValue
+        = licenseValue->attrs()->get( state.symbols.create( "spdxId" ) );
 
-      if ( licenseIdValue != licenseValue->attrs()->end()
+      if ( licenseIdValue != nullptr
            && licenseIdValue->value->type() == nix::ValueType::nString )
         {
           return std::string( licenseIdValue->value->string_view() );
@@ -168,8 +170,8 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
     .commitLockFile        = false,
     .referenceLockFilePath = std::nullopt,
     .outputLockFilePath    = std::nullopt,
-    .inputOverrides = std::map<nix::flake::InputAttrPath, nix::FlakeRef> {},
-    .inputUpdates   = std::set<nix::flake::InputAttrPath> {}
+    .inputOverrides        = {},
+    .inputUpdates          = {},
   };
 
 
@@ -235,7 +237,7 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
   std::string derivation;
   {
     auto derivationCursor
-      = cursor->findAlongAttrPath( nix::parseAttrPath( *state, "drvPath" ) );
+      = cursor->findAlongAttrPath( nix::AttrPath::parse( *state, "drvPath" ) );
     if ( ! derivationCursor )
       {
         throw nix::EvalError( *state,
@@ -251,7 +253,7 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
   std::vector<std::string>           outputNames;
   {
     auto maybe_outputs_cursor
-      = cursor->findAlongAttrPath( nix::parseAttrPath( *state, "outputs" ) );
+      = cursor->findAlongAttrPath( nix::AttrPath::parse( *state, "outputs" ) );
     if ( ! maybe_outputs_cursor )
       {
         throw nix::EvalError( *state,
@@ -264,7 +266,7 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
     for ( auto output : outputNames )
       {
         auto outputCursor = cursor->findAlongAttrPath(
-          nix::parseAttrPath( *state, output + ".outPath" ) );
+          nix::AttrPath::parse( *state, output + ".outPath" ) );
         if ( ! outputCursor )
           {
             throw nix::EvalError( *state,
@@ -282,7 +284,7 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
   {
     std::set<std::string, std::less<>> outputsToInstallFound;
     auto metaOutputsToInstallCursor = cursor->findAlongAttrPath(
-      nix::parseAttrPath( *state, "meta.outputsToInstall" ) );
+      nix::AttrPath::parse( *state, "meta.outputsToInstall" ) );
     if ( metaOutputsToInstallCursor )
       {
         for ( auto output :
@@ -330,7 +332,7 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
   std::string systemAttribute;
   {
     auto systemCursor
-      = cursor->findAlongAttrPath( nix::parseAttrPath( *state, "system" ) );
+      = cursor->findAlongAttrPath( nix::AttrPath::parse( *state, "system" ) );
 
     if ( ! systemCursor )
       {
@@ -346,7 +348,7 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
   std::string name;
   {
     auto nameCursor
-      = cursor->findAlongAttrPath( nix::parseAttrPath( *state, "name" ) );
+      = cursor->findAlongAttrPath( nix::AttrPath::parse( *state, "name" ) );
 
     if ( ! nameCursor )
       {
@@ -362,7 +364,7 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
   std::optional<std::string> pname;
   {
     auto pnameCursor
-      = cursor->findAlongAttrPath( nix::parseAttrPath( *state, "pname" ) );
+      = cursor->findAlongAttrPath( nix::AttrPath::parse( *state, "pname" ) );
 
     if ( pnameCursor ) { pname = ( *pnameCursor )->getString(); }
   }
@@ -371,7 +373,7 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
   std::optional<std::string> version;
   {
     auto versionCursor
-      = cursor->findAlongAttrPath( nix::parseAttrPath( *state, "version" ) );
+      = cursor->findAlongAttrPath( nix::AttrPath::parse( *state, "version" ) );
 
     if ( versionCursor ) { version = ( *versionCursor )->getString(); }
   }
@@ -379,8 +381,8 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
   // Read `meta.description` field
   std::optional<std::string> description;
   {
-    auto descriptionCursor
-      = cursor->findAlongAttrPath( { state->sMeta, state->sDescription } );
+    auto descriptionCursor = cursor->findAlongAttrPath(
+      nix::AttrPath::parse( *state, "meta.description" ) );
 
     if ( descriptionCursor )
       {
@@ -391,7 +393,7 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
   std::optional<std::vector<std::string>> licenses;
   {
     auto licenseCursor = cursor->findAlongAttrPath(
-      nix::parseAttrPath( *state, "meta.license" ) );
+      nix::AttrPath::parse( *state, "meta.license" ) );
 
     if ( licenseCursor )
       {
@@ -421,7 +423,7 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
   std::optional<bool> broken;
   {
     auto brokenCursor = cursor->findAlongAttrPath(
-      nix::parseAttrPath( *state, "meta.broken" ) );
+      nix::AttrPath::parse( *state, "meta.broken" ) );
 
     if ( brokenCursor ) { broken = ( *brokenCursor )->getBool(); }
   }
@@ -429,7 +431,7 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
   std::optional<bool> unfree;
   {
     auto unfreeCursor = cursor->findAlongAttrPath(
-      nix::parseAttrPath( *state, "meta.unfree" ) );
+      nix::AttrPath::parse( *state, "meta.unfree" ) );
 
     if ( unfreeCursor ) { unfree = ( *unfreeCursor )->getBool(); }
   }
@@ -438,7 +440,7 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
   {
 
     auto priorityCursor = cursor->findAlongAttrPath(
-      nix::parseAttrPath( *state, "meta.priority" ) );
+      nix::AttrPath::parse( *state, "meta.priority" ) );
     if ( priorityCursor ) { priority = ( *priorityCursor )->getInt().value; }
   }
 
@@ -567,7 +569,7 @@ static const nix::RegisterPrimOp
                                  .args  = { "flakeInstallable" },
                                  .arity = 0,
                                  .doc   = R"(    )",
-                                 .fun   = prim_lockFlakeInstallable,
+                                 .impl  = prim_lockFlakeInstallable,
                                  .experimentalFeature = nix::Xp::Flakes } );
 
 /* -------------------------------------------------------------------------- */

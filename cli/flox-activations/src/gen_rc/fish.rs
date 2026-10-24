@@ -370,7 +370,7 @@ mod tests {
             set -g  _FLOX_SOURCED_PROFILE_SCRIPTS (if set -q _FLOX_SOURCED_PROFILE_SCRIPTS; echo "$_FLOX_SOURCED_PROFILE_SCRIPTS"; else; echo ""; end);
             /flox_activations profile-scripts --shell fish --already-sourced-env-dirs  "$_FLOX_SOURCED_PROFILE_SCRIPTS" --env-dirs "$FLOX_ENV_DIRS" | source;
             set -gx fish_trace 0;
-            /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
+            /coreutils/bin/rm /path/to/rc/file;
             set -gx _FLOX_PROMPT_HOOK_VERSION 1:true;
             function _flox_hook --on-event fish_prompt;
                 eval ("/flox" hook-env --shell fish --shell-pid $fish_pid --invocation-types "$_FLOX_INVOCATION_TYPES" | string collect);
@@ -428,7 +428,7 @@ mod tests {
             set -g  _FLOX_SOURCED_PROFILE_SCRIPTS (if set -q _FLOX_SOURCED_PROFILE_SCRIPTS; echo "$_FLOX_SOURCED_PROFILE_SCRIPTS"; else; echo ""; end);
             /flox_activations profile-scripts --shell fish --already-sourced-env-dirs  "$_FLOX_SOURCED_PROFILE_SCRIPTS" --env-dirs "$FLOX_ENV_DIRS" | source;
             set -gx fish_trace 0;
-            /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
+            /coreutils/bin/rm /path/to/rc/file;
             set -gx _FLOX_PROMPT_HOOK_VERSION 1:true;
             function _flox_hook --on-event fish_prompt;
                 eval ("/flox" hook-env --shell fish --shell-pid $fish_pid --invocation-types "$_FLOX_INVOCATION_TYPES" | string collect);
