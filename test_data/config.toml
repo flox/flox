@@ -415,6 +415,21 @@ cmd = "flox edit -f manifest.toml"
 pre_cmd = "flox init"
 cmd = "flox install node"
 ignore_cmd_errors = true
+post_cmd = '''
+    # After the failed resolve the CLI searches for suggestions (the curated
+    # term, SUGGESTION_SEARCH_LIMIT results). Recorded with the token, that
+    # search also returns the recording account's own catalogs, which must not
+    # end up in test data. Replace the response with the anonymous one for the
+    # same query: what any logged-out user sees, with nothing private.
+    body="$(curl -sS --fail -A "flox-cli/${FLOX_VERSION}" \
+        "https://api.flox.dev/api/v1/catalog/search?search_term=nodejs&system=${NIX_TARGET_SYSTEM:?}&page=0&pageSize=3")"
+    yq -y --arg body "$body" '
+        if .when.path == "/api/v1/catalog/search" then
+            .then.body = $body | del(.then.header[] | select(.name == "content-length"))
+        else . end
+    ' "$RESPONSE_FILE" > tmp.yaml
+    mv tmp.yaml "$RESPONSE_FILE"
+'''
 
 [resolve.old_hello]
 pre_cmd = "flox init"
@@ -505,6 +520,21 @@ ignore_cmd_errors = true
 pre_cmd = "flox init"
 cmd = "flox install package"
 ignore_cmd_errors = true
+post_cmd = '''
+    # After the failed resolve the CLI searches for suggestions (the curated
+    # term, SUGGESTION_SEARCH_LIMIT results). Recorded with the token, that
+    # search also returns the recording account's own catalogs, which must not
+    # end up in test data. Replace the response with the anonymous one for the
+    # same query: what any logged-out user sees, with nothing private.
+    body="$(curl -sS --fail -A "flox-cli/${FLOX_VERSION}" \
+        "https://api.flox.dev/api/v1/catalog/search?search_term=package&system=${NIX_TARGET_SYSTEM:?}&page=0&pageSize=3")"
+    yq -y --arg body "$body" '
+        if .when.path == "/api/v1/catalog/search" then
+            .then.body = $body | del(.then.header[] | select(.name == "content-length"))
+        else . end
+    ' "$RESPONSE_FILE" > tmp.yaml
+    mv tmp.yaml "$RESPONSE_FILE"
+'''
 
 # This is useful for testing insecure packages
 [resolve.python2]
