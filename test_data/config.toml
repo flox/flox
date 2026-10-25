@@ -353,6 +353,30 @@ cmd = "flox install fish@3.2.2"
 pre_cmd = "flox init"
 cmd = "flox install hello"
 
+# The catalog's 401 for an anonymous CLI at 1.19.0 or later. mk_data always sends
+# the recording token for resolve jobs, so the token and version are overridden
+# inline. The recorded `when.body` is stripped so the mock matches any resolve
+# request; catalog-auth-required.bats replays it for install, activate and run.
+[resolve.unauthorized]
+pre_cmd = "flox init"
+cmd = "FLOX_FLOXHUB_TOKEN= FLOX_VERSION=1.19.0 flox install hello"
+ignore_cmd_errors = true
+post_cmd = '''
+    yq -y 'del(.when.body)' "$RESPONSE_FILE" > tmp.yaml
+    mv tmp.yaml "$RESPONSE_FILE"
+'''
+
+# The catalog's 401 for a token it cannot verify: the test suite's dummy JWT
+# (cli/tests/setup_suite.bash).
+[resolve.rejected]
+pre_cmd = "flox init"
+cmd = "FLOX_FLOXHUB_TOKEN=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjk5OTk5OTk5OTl9.6-nbzFzQEjEX7dfWZFLE-I_qW2N_-9W2HFzzfsquI74 flox install hello"
+ignore_cmd_errors = true
+post_cmd = '''
+    yq -y 'del(.when.body)' "$RESPONSE_FILE" > tmp.yaml
+    mv tmp.yaml "$RESPONSE_FILE"
+'''
+
 [resolve.hello_unfree]
 # This response must have a substitutable output on the test systems. A forced
 # rerecord can move its nixpkgs revision; verify cache availability before

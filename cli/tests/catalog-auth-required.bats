@@ -22,9 +22,9 @@ load test_support.bash
 
 # The first line is the `detail` of the catalog's 401 in the mock.
 AUTH_REQUIRED="Authentication is required to resolve packages."
-UNAUTHORIZED_MOCK="$MANUALLY_GENERATED/resolve/unauthorized.yaml"
+UNAUTHORIZED_MOCK="$GENERATED_DATA/resolve/unauthorized.yaml"
 # A 401 with the catalog's reason for rejecting a token.
-REJECTED_MOCK="$MANUALLY_GENERATED/resolve/rejected.yaml"
+REJECTED_MOCK="$GENERATED_DATA/resolve/rejected.yaml"
 # An empty 200 from the store info endpoint, which is what the real server
 # returns when the user is unauthenticated (the endpoint does not return 401).
 STORE_EMPTY_MOCK="$MANUALLY_GENERATED/store/empty.yaml"

@@ -1,0 +1,19 @@
+when:
+  path: /api/v1/catalog/resolve
+  method: POST
+then:
+  status: 401
+  header:
+    - name: date
+      value: Sun, 25 Oct 2026 11:51:44 GMT
+    - name: content-type
+      value: application/json
+    - name: content-length
+      value: '60'
+    - name: server
+      value: uvicorn
+    - name: www-authenticate
+      value: Bearer
+    - name: apigw-requestid
+      value: FzIErjhaIAMEYQA=
+  body: '{"detail":"Authentication is required to resolve packages."}'
