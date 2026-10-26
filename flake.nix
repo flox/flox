@@ -83,6 +83,26 @@
             '';
           });
 
+          # brotli < 1.2.1 is affected by CVE-2026-111497 (OOB write in the
+          # decoder). Overriding `brotli` itself would rebuild everything that
+          # links curl or uses python3Packages (rustc, cargo, urllib3, ...),
+          # so the fixed brotli is only threaded through the runtime closure:
+          # nix (pkgs/nix) and the git that Flox packages bake in (overlays.flox).
+          # flox-installers' container takes `curl-brotli-fixed` and
+          # `gitMinimal-brotli-fixed` from `pkgsFor`.
+          # TODO: remove once flox/nixpkgs `stable` carries brotli >= 1.2.1.
+          brotli-fixed = prev.brotli.overrideAttrs (_: rec {
+            version = "1.2.1";
+            src = final.fetchFromGitHub {
+              owner = "google";
+              repo = "brotli";
+              tag = "v${version}";
+              hash = "sha256-llY72cYffDv0ugsH0p89xIPEbElV4L8u7U/Fe8hT3gI=";
+            };
+          });
+          curl-brotli-fixed = prev.curl.override { brotli = final.brotli-fixed; };
+          gitMinimal-brotli-fixed = prev.gitMinimal.override { curl = final.curl-brotli-fixed; };
+
         })
         inputs.fenix.overlays.default
       ];
@@ -97,6 +117,8 @@
               inherit inputs; # passing in inputs... beware
               inherit (inputs) self;
               pkgsFor = final;
+              # Flox packages bake git into their runtime closure.
+              gitMinimal = final.gitMinimal-brotli-fixed;
             }
           );
           nixpkgsInputLockedURL =
