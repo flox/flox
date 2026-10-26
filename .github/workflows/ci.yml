@@ -497,7 +497,7 @@ jobs:
     # Same fork restriction as `nix-build`: this job needs the AWS OIDC and
     # Tailscale secrets to reach the builders.
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-    runs-on: "ubuntu-latest"
+    runs-on: "blacksmith-4vcpu-ubuntu-2404"
     timeout-minutes: 120
 
     needs:
