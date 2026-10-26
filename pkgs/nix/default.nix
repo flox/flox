@@ -17,7 +17,10 @@
 # ---------------------------------------------------------------------------- #
 {
   nixVersions,
+  nixDependencies,
   fetchFromGitHub,
+  brotli-fixed,
+  curl-brotli-fixed,
 }:
 let
   nixVersion = "stable";
@@ -36,15 +39,27 @@ in
 # likely on account of <https://github.com/NixOS/nix/issues/14751>.
 (nixVersions.extend (
   final: prev: {
-    nixComponents_2_31 = prev.nixComponents_2_31.override {
-      version = "2.31.6";
-      src = fetchFromGitHub {
-        owner = "NixOS";
-        repo = "nix";
-        tag = "2.31.6";
-        hash = "sha256-yAvNBedw4FB+Z5myhfGsnRT8F1QqeEoXGbm7EmTW/Og=";
-      };
-    };
+    nixComponents_2_31 =
+      let
+        nixComponents = prev.nixComponents_2_31.override {
+          version = "2.31.6";
+          src = fetchFromGitHub {
+            owner = "NixOS";
+            repo = "nix";
+            tag = "2.31.6";
+            hash = "sha256-yAvNBedw4FB+Z5myhfGsnRT8F1QqeEoXGbm7EmTW/Og=";
+          };
+        };
+      in
+      # CVE-2026-111497: see `brotli-fixed` in flake.nix.
+      nixComponents.overrideScope (
+        _: _: {
+          brotli = brotli-fixed;
+          curl = curl-brotli-fixed;
+          # nixDependencies' aws-sdk-cpp is trimmed to the APIs nix uses.
+          aws-sdk-cpp = nixDependencies.aws-sdk-cpp.override { curl = curl-brotli-fixed; };
+        }
+      );
 
   }
 )).
