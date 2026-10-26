@@ -60,16 +60,6 @@
 
           process-compose = final.callPackage ./pkgs/process-compose { inherit (prev) process-compose; };
 
-          # TODO: remove this override once the upstream nixpkgs cacert distrusts these roots.
-          cacert = prev.cacert.override {
-            blacklist = [
-              "Comodo AAA Services root"
-              "emSign ECC Root CA - G3"
-              "emSign Root CA - C1"
-              "emSign ECC Root CA - C3"
-            ];
-          };
-
           # The cacert override above changes fish's build inputs, so fish is
           # built from source instead of substituted. Its
           # test_replace_home_directory_with_tilde test sets the global HOME
@@ -111,12 +101,32 @@
       overlays.flox =
         final: prev:
         let
+          # Scoped to flox's packages instead of overlaid on the package set, so
+          # nixpkgs packages that depend on cacert keep their cache.nixos.org paths.
+          # Only packages built with this overlay's callPackage receive it.
+          # nixpkgs' cacert trusts Comodo AAA Services root only for email, and
+          # listing it removes that too.
+          # TODO: drop the emSign roots once nixpkgs' cacert is NSS >= 3.131.1,
+          # which no longer ships them.
+          cacert = prev.cacert.override {
+            blacklist = [
+              "Comodo AAA Services root"
+              "emSign ECC Root CA - G3"
+              "emSign Root CA - C1"
+              "emSign ECC Root CA - C3"
+            ];
+          };
+          # Installers built from flox.passthru.pkgsFor take its cacert, which must
+          # match the bundle compiled into flox.
+          pkgsFor = final // {
+            inherit cacert;
+          };
           callPackage = final.lib.callPackageWith (
             final
             // {
               inherit inputs; # passing in inputs... beware
               inherit (inputs) self;
-              pkgsFor = final;
+              inherit cacert pkgsFor;
               # Flox packages bake git into their runtime closure.
               gitMinimal = final.gitMinimal-brotli-fixed;
             }
@@ -255,6 +265,9 @@
         nixos-module = import ./modules/nixos/check.nix {
           inherit pkgs nixpkgs;
           module = import ./modules/nixos pkgsContext;
+        };
+        cacert-distrust = pkgs.callPackage ./checks/cacert-distrust.nix {
+          stockCacert = nixpkgs.legacyPackages.${system}.cacert;
         };
       }) pkgsContext;
 
