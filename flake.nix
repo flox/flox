@@ -60,19 +60,6 @@
 
           process-compose = final.callPackage ./pkgs/process-compose { inherit (prev) process-compose; };
 
-          # The cacert override above changes fish's build inputs, so fish is
-          # built from source instead of substituted. Its
-          # test_replace_home_directory_with_tilde test sets the global HOME
-          # without `#[serial]` and races the serial tests that also set it.
-          # TODO: remove once the cacert override is gone or fish ships the fix.
-          fish = prev.fish.overrideAttrs (old: {
-            postPatch = (old.postPatch or "") + ''
-              substituteInPlace src/expand.rs \
-                --replace-fail "fn test_replace_home_directory_with_tilde()" \
-                               "#[serial] fn test_replace_home_directory_with_tilde()"
-            '';
-          });
-
           # brotli < 1.2.1 is affected by CVE-2026-111497 (OOB write in the
           # decoder). Overriding `brotli` itself would rebuild everything that
           # links curl or uses python3Packages (rustc, cargo, urllib3, ...),
