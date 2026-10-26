@@ -2127,7 +2127,9 @@ mod pipeline_tests {
 
         assert_ne!(event.event_id, Uuid::nil());
         assert!(unix_timestamp_millis(event.event_timestamp) >= unix_timestamp_millis(before));
-        assert!(unix_timestamp_millis(event.event_timestamp) <= unix_timestamp_millis(after));
+        // The buffer stores the timestamp rounded to the nearest
+        // millisecond, so it can land up to 1ms past `after` truncated.
+        assert!(unix_timestamp_millis(event.event_timestamp) <= unix_timestamp_millis(after) + 1);
         assert_eq!(event.source, "cli");
         assert_eq!(event.invocation_id, INVOCATION_ID);
         assert_eq!(event.device_id, DEVICE_ID);
