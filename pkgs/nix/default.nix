@@ -16,6 +16,8 @@
 #
 # ---------------------------------------------------------------------------- #
 {
+  lib,
+  stdenv,
   nixVersions,
   nixDependencies,
   fetchFromGitHub,
@@ -57,7 +59,15 @@ in
           brotli = brotli-fixed;
           curl = curl-brotli-fixed;
           # nixDependencies' aws-sdk-cpp is trimmed to the APIs nix uses.
-          aws-sdk-cpp = nixDependencies.aws-sdk-cpp.override { curl = curl-brotli-fixed; };
+          aws-sdk-cpp = (nixDependencies.aws-sdk-cpp.override { curl = curl-brotli-fixed; }).overrideAttrs (
+            old:
+            lib.optionalAttrs (stdenv.hostPlatform.system == "x86_64-darwin") {
+              # STS credential tests repeatedly fail on Intel macOS builds:
+              # https://github.com/NixOS/nixpkgs/issues/340087
+              # They run during compilation, so doCheck does not disable them.
+              cmakeFlags = old.cmakeFlags ++ [ "-DAUTORUN_UNIT_TESTS=OFF" ];
+            }
+          );
         }
       );
 
