@@ -31,9 +31,10 @@ use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
 use flox_rust_sdk::providers::nix;
 use flox_rust_sdk::utils::{CommandExt, FLOX_INTERPRETER};
 use floxhub_client::{BaseCatalogUrl, CatalogClientTrait, FloxhubClientError};
-use indoc::formatdoc;
+use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use nef_lock_catalog::{NixFlakeref, catalog_lockfile_path, lock_project_catalog};
+use serde::Deserialize;
 use thiserror::Error;
 use tracing::{debug, instrument, trace};
 use url::Url;
@@ -550,15 +551,34 @@ impl Build {
             });
         }
 
-        // Get package position using nix eval
+        // Look up the package's source position and read the file inside the
+        // same evaluation. Since Nix 2.35 a flake's source tree is no longer
+        // copied to the store during evaluation, so the store path named by
+        // `meta.position` need not exist on disk; the evaluator can still read
+        // it.
         let mut cmd = nix::nix_base_command();
         cmd.args([
             "eval",
-            "--raw",
-            &format!("{}#{}.meta.position", flake_ref, attr_path),
+            "--json",
+            &format!("{flake_ref}#{attr_path}"),
+            "--apply",
+            indoc! {r#"
+                pkg:
+                let
+                  position = pkg.meta.position;
+                  matched = builtins.match "([^:]*):[0-9]+" position;
+                in
+                if matched == null then
+                  throw "invalid position format: ${position}"
+                else
+                  {
+                    inherit position;
+                    content = builtins.readFile (/. + builtins.head matched);
+                  }
+            "#},
         ]);
 
-        debug!(cmd = %cmd.display(), "running nix eval command to get package position");
+        debug!(cmd = %cmd.display(), "running nix eval command to read package source");
         let output = cmd.output().context("Failed to run nix eval command")?;
 
         if !output.status.success() {
@@ -566,19 +586,17 @@ impl Build {
             bail!("nix eval command failed: {stderr}");
         }
 
-        let position_output =
-            String::from_utf8(output.stdout).context("nix eval command returned invalid UTF-8")?;
+        #[derive(Debug, Clone, Deserialize)]
+        struct PackageSource {
+            position: String,
+            content: String,
+        }
 
-        // Split position by ':' to get file and line
-        let (file, _line) = position_output
-            .split_once(':')
-            .ok_or_else(|| anyhow::anyhow!("Invalid position format: {}", position_output))?;
+        let source: PackageSource = serde_json::from_slice(&output.stdout)
+            .context("nix eval command returned invalid JSON")?;
+        debug!(position = %source.position, "read package source");
 
-        // Read the package definition from the source file
-        let package_content = std::fs::read(file)
-            .with_context(|| format!("Failed to read package source file: {}", file))?;
-
-        std::fs::write(&package_file, package_content).context("Failed to write package file")?;
+        std::fs::write(&package_file, source.content).context("Failed to write package file")?;
 
         message::created(format!(
             "Imported package '{}' to {}",

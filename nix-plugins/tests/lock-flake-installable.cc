@@ -105,7 +105,7 @@ test_locksUrl( const nix::ref<nix::EvalState> & state,
 
   EXPECT(
     nix::parseFlakeRef( state->fetchSettings, lockedInstallable.lockedUrl )
-      .input.isLocked() );
+      .input.isLocked( state->fetchSettings ) );
 
   return true;
 }
