@@ -723,3 +723,34 @@ jobs:
           MATRIX_SYSTEM: ${{ matrix.system }}
           MATRIX_TEST_TAGS: ${{ matrix.test-tags }}
         run: ./.github/scripts/remote-execute-integration-tests.sh
+
+  summary:
+    name: "Summary"
+    # The one check the main ruleset requires, so renaming a job or changing
+    # a matrix (e.g. a runner label) never needs a ruleset change.
+    #
+    # Every needed job must succeed. A skipped job fails this check: GitHub
+    # treats skipped required checks as passing, and `nix-build` / `remote`
+    # are skipped on fork PRs until the community-ci run (CONTRIBUTING.md)
+    # posts this check for the same commit.
+    #
+    # Only PRs and the merge queue are gated; on pushes to main several of
+    # these jobs are skipped by design.
+    if: ${{ always() && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
+    runs-on: "blacksmith-2vcpu-ubuntu-2404"
+    timeout-minutes: 5
+
+    needs:
+      - "nix-plugins-dev"
+      - "nef-dev"
+      - "cli-unit"
+      - "nix-build"
+      - "nix-build-bats-tests"
+
+    steps:
+      - name: "Check required jobs"
+        env:
+          NEEDS: "${{ toJSON(needs) }}"
+        run: |
+          jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<<"$NEEDS"
+          jq -e 'all(.[]; .result == "success")' <<<"$NEEDS" >/dev/null
