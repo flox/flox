@@ -378,9 +378,12 @@ post_cmd = '''
 '''
 
 [resolve.hello_unfree]
-# This response must have a substitutable output on the test systems. A forced
-# rerecord can move its nixpkgs revision; verify cache availability before
-# accepting a changed cassette. The retained 2fcb964d revision meets this.
+# The output of this response must already be in the nix store of the CI test
+# machines (unfree packages are not in the public caches). A forced rerecord
+# moves it to the newest nixpkgs revision, and the install test then builds the
+# package on every machine, which times out the job. Keep the committed cassette
+# (and envs/hello-unfree-lock.yaml, which pins the same revision) unless the new
+# output has been built on those machines first. Retained revision: 151fa4e8.
 pre_cmd = "flox init"
 cmd = "flox install hello-unfree"
 
