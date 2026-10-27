@@ -64,28 +64,25 @@
 
           process-compose = final.callPackage ./pkgs/process-compose { inherit (prev) process-compose; };
 
-          # TODO: remove this override once the upstream nixpkgs cacert distrusts these roots.
-          cacert = prev.cacert.override {
-            blacklist = [
-              "Comodo AAA Services root"
-              "emSign ECC Root CA - G3"
-              "emSign Root CA - C1"
-              "emSign ECC Root CA - C3"
-            ];
-          };
-
-          # The cacert override above changes fish's build inputs, so fish is
-          # built from source instead of substituted. Its
-          # test_replace_home_directory_with_tilde test sets the global HOME
-          # without `#[serial]` and races the serial tests that also set it.
-          # TODO: remove once the cacert override is gone or fish ships the fix.
-          fish = prev.fish.overrideAttrs (old: {
-            postPatch = (old.postPatch or "") + ''
-              substituteInPlace src/expand.rs \
-                --replace-fail "fn test_replace_home_directory_with_tilde()" \
-                               "#[serial] fn test_replace_home_directory_with_tilde()"
-            '';
+          # brotli < 1.2.1 is affected by CVE-2026-111497 (OOB write in the
+          # decoder). Overriding `brotli` itself would rebuild everything that
+          # links curl or uses python3Packages (rustc, cargo, urllib3, ...),
+          # so the fixed brotli is only threaded through the runtime closure:
+          # nix (pkgs/nix) and the git that Flox packages bake in (overlays.flox).
+          # flox-installers' container takes `curl-brotli-fixed` and
+          # `gitMinimal-brotli-fixed` from `pkgsFor`.
+          # TODO: remove once flox/nixpkgs `stable` carries brotli >= 1.2.1.
+          brotli-fixed = prev.brotli.overrideAttrs (_: rec {
+            version = "1.2.1";
+            src = final.fetchFromGitHub {
+              owner = "google";
+              repo = "brotli";
+              tag = "v${version}";
+              hash = "sha256-llY72cYffDv0ugsH0p89xIPEbElV4L8u7U/Fe8hT3gI=";
+            };
           });
+          curl-brotli-fixed = prev.curl.override { brotli = final.brotli-fixed; };
+          gitMinimal-brotli-fixed = prev.gitMinimal.override { curl = final.curl-brotli-fixed; };
 
         })
         inputs.fenix.overlays.default
@@ -95,12 +92,34 @@
       overlays.flox =
         final: prev:
         let
+          # Scoped to flox's packages instead of overlaid on the package set, so
+          # nixpkgs packages that depend on cacert keep their cache.nixos.org paths.
+          # Only packages built with this overlay's callPackage receive it.
+          # nixpkgs' cacert trusts Comodo AAA Services root only for email, and
+          # listing it removes that too.
+          # TODO: drop the emSign roots once nixpkgs' cacert is NSS >= 3.131.1,
+          # which no longer ships them.
+          cacert = prev.cacert.override {
+            blacklist = [
+              "Comodo AAA Services root"
+              "emSign ECC Root CA - G3"
+              "emSign Root CA - C1"
+              "emSign ECC Root CA - C3"
+            ];
+          };
+          # Installers built from flox.passthru.pkgsFor take its cacert, which must
+          # match the bundle compiled into flox.
+          pkgsFor = final // {
+            inherit cacert;
+          };
           callPackage = final.lib.callPackageWith (
             final
             // {
               inherit inputs; # passing in inputs... beware
               inherit (inputs) self;
-              pkgsFor = final;
+              inherit cacert pkgsFor;
+              # Flox packages bake git into their runtime closure.
+              gitMinimal = final.gitMinimal-brotli-fixed;
             }
           );
           nixpkgsInputLockedURL =
@@ -237,6 +256,9 @@
         nixos-module = import ./modules/nixos/check.nix {
           inherit pkgs nixpkgs;
           module = import ./modules/nixos pkgsContext;
+        };
+        cacert-distrust = pkgs.callPackage ./checks/cacert-distrust.nix {
+          stockCacert = nixpkgs.legacyPackages.${system}.cacert;
         };
       }) pkgsContext;
 

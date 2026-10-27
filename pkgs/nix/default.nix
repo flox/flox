@@ -16,8 +16,13 @@
 #
 # ---------------------------------------------------------------------------- #
 {
+  lib,
+  stdenv,
   nixVersions,
+  nixDependencies,
   fetchFromGitHub,
+  brotli-fixed,
+  curl-brotli-fixed,
 }:
 let
   nixVersion = "stable";
@@ -36,15 +41,35 @@ in
 # likely on account of <https://github.com/NixOS/nix/issues/14751>.
 (nixVersions.extend (
   final: prev: {
-    nixComponents_2_31 = prev.nixComponents_2_31.override {
-      version = "2.31.6";
-      src = fetchFromGitHub {
-        owner = "NixOS";
-        repo = "nix";
-        tag = "2.31.6";
-        hash = "sha256-yAvNBedw4FB+Z5myhfGsnRT8F1QqeEoXGbm7EmTW/Og=";
-      };
-    };
+    nixComponents_2_31 =
+      let
+        nixComponents = prev.nixComponents_2_31.override {
+          version = "2.31.6";
+          src = fetchFromGitHub {
+            owner = "NixOS";
+            repo = "nix";
+            tag = "2.31.6";
+            hash = "sha256-yAvNBedw4FB+Z5myhfGsnRT8F1QqeEoXGbm7EmTW/Og=";
+          };
+        };
+      in
+      # CVE-2026-111497: see `brotli-fixed` in flake.nix.
+      nixComponents.overrideScope (
+        _: _: {
+          brotli = brotli-fixed;
+          curl = curl-brotli-fixed;
+          # nixDependencies' aws-sdk-cpp is trimmed to the APIs nix uses.
+          aws-sdk-cpp = (nixDependencies.aws-sdk-cpp.override { curl = curl-brotli-fixed; }).overrideAttrs (
+            old:
+            lib.optionalAttrs (stdenv.hostPlatform.system == "x86_64-darwin") {
+              # STS credential tests repeatedly fail on Intel macOS builds:
+              # https://github.com/NixOS/nixpkgs/issues/340087
+              # They run during compilation, so doCheck does not disable them.
+              cmakeFlags = old.cmakeFlags ++ [ "-DAUTORUN_UNIT_TESTS=OFF" ];
+            }
+          );
+        }
+      );
 
   }
 )).
