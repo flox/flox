@@ -39,7 +39,7 @@
 
 ---
 
-**Flox is a software environment platform for engineering teams** that delivers cryptographically pinned, reproducible environments, identical from a developer's laptop through CI to production. Built on [Nix](https://nixos.org/), with Nix knowledge optional, Flox eliminates environment drift, strengthens software supply chain security, and gives [AI coding agents](https://github.com/flox/flox-agentic) a deterministic foundation to build on.
+**Flox is a software environment platform for engineering teams** that delivers cryptographically pinned, reproducible environments, identical from a developer's laptop through CI to production. Built on [Nix](https://nixos.org/), with Nix knowledge optional, Flox eliminates environment drift, strengthens software supply chain security, and gives [AI coding agents](https://github.com/flox/flox-skills) a deterministic foundation to build on.
 
 It's more than a package manager: where traditional package managers work on a single machine, Flox manages the lifecycle of packages and environments across your entire organization.
 
@@ -142,7 +142,7 @@ That's the core idea: **tools appear when you activate, and disappear when you l
 | **Build & publish** | `flox build` / `flox publish` | Build your own software from source into reproducible packages, and publish them for your team to install. [Blog →](https://flox.dev/blog/introducing-flox-build-and-publish/?utm_source=github&utm_medium=readme&utm_campaign=flox_readme&utm_content=cap_build) |
 | **Services** | `flox services start` | Run databases, queues, and background processes as part of your environment (a lightweight alternative to Docker Compose for local development); they start on activate and stop on exit. [Concepts →](https://flox.dev/docs/concepts/services?utm_source=github&utm_medium=readme&utm_campaign=flox_readme&utm_content=cap_services) |
 | **Configure** | `manifest.toml` | Define environment variables, shell hooks, and activation scripts declaratively alongside your code. [Manifest reference →](https://flox.dev/docs/man/manifest.toml?utm_source=github&utm_medium=readme&utm_campaign=flox_readme&utm_content=cap_configure) |
-| **AI-ready** | Works with Claude Code, Cursor, Copilot, and Codex | Give AI coding agents a deterministic, reproducible environment so generated code builds and runs the same on every run. [flox-agentic →](https://github.com/flox/flox-agentic) |
+| **AI-ready** | Works with Claude Code, Cursor, Copilot, and Codex | Give AI coding agents a deterministic, reproducible environment so generated code builds and runs the same on every run. [flox-skills →](https://github.com/flox/flox-skills) |
 
 > **Origin:** Flox emerged from one of the largest enterprise Nix deployments in the world, at the D.E. Shaw group, where it made Nix accessible at scale across a large engineering organization.
 
