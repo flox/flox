@@ -20,6 +20,7 @@ use thiserror::Error;
 use tracing::{debug, warn};
 
 use super::manifest::{InstalledState, parse_installed_state};
+use crate::utils::FLOX_BIN_FOR_SHELL;
 
 #[derive(Debug, Error)]
 pub enum FindError {
@@ -186,14 +187,16 @@ pub fn try_dispatch_external(data_dir: &Path, disable_metrics: bool) -> Option<E
         .as_ref()
         .map(|p| p.as_os_str().to_owned())
         .unwrap_or_else(|| path.as_os_str().to_owned());
-    let flox_bin = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("flox"));
+    // The same command the shell hook embeds, so an activation an extension
+    // starts follows a Flox upgrade too; a store path would pin the old binary.
+    let flox_bin = FLOX_BIN_FOR_SHELL.as_str();
 
     let mut command = Command::new(&path);
     command
         .args(&rest)
         .env("FLOX_EXTENSION_NAME", &extension_name)
         .env("FLOX_EXTENSION_PATH", &extension_path)
-        .env("FLOX_BIN", &flox_bin);
+        .env("FLOX_BIN", flox_bin);
     flox_core::util::restore_startup_tls_env(&mut command);
     export_telemetry_opt_out(&mut command, disable_metrics);
 
