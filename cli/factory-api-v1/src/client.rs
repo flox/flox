@@ -390,9 +390,11 @@ freshest authoritative source:
 - Dispatched: tasks.status (``"running"``, ``"completed"``,
   ``"failed"``, ``"cancelled"``), with ``"timed_out"``
   reconstructed from the persisted footprint of an execution
-  timeout (status='failed' + error_class='timeout'). A submit-time
-  ``dispatch_timeout`` is a different failure — the build never
-  observably started — and reads as ``"failed"``.
+  timeout (status='failed' + error_class='timeout'). A running
+  task the coordinator has not yet started (no started_at), such
+  as one waiting in its queue, reads as ``"pending"``. A
+  submit-time ``dispatch_timeout`` is a different failure — the
+  build never observably started — and reads as ``"failed"``.
 - On cancel responses: Build Coordinator's returned status, which
   is fresher than the local row (which lags until BC's callback
   lands), put through the same derivation — BC's ``timed_out``
@@ -400,12 +402,10 @@ freshest authoritative source:
   reconstructs once the callback persists the footprint. The field
   never carries a word outside the effective vocabulary.
 
-Staleness: after handoff the field tracks tasks.status, which only
-advances when Build Coordinator's terminal callback lands. When
-callbacks are disabled (no callback base URL configured — a
-supported worker configuration), the post-handoff status stays at
-the last persisted value (typically ``"running"``) indefinitely;
-a cancel response is then the only place a fresher
+Staleness: after handoff the field tracks the task, which advances
+when Build Coordinator's start and terminal callbacks land, or when
+the reconciler reads a status whose callback never came. Between
+the two, a cancel response is the only place a fresher
 coordinator-reported status appears.*/
     ///
     /// <details><summary>JSON schema</summary>
@@ -413,7 +413,7 @@ coordinator-reported status appears.*/
     /// ```json
     ///{
     ///  "title": "BuildResponse",
-    ///  "description": "Build-specific details with optional task sub-object.\n\nThe task field is None for undispatched builds (task_id IS NULL\nin factory_builds).\n\nThe status field is the build's effective current status — the\nEffectiveBuildStatus vocabulary — computed server-side from the\nfreshest authoritative source:\n\n- Pre-dispatch (task_id IS NULL): computed from\n  factory_builds.cancelled_at — ``\"cancelled\"`` when set, else\n  ``\"pending\"``. Neither word is stored; the timestamp is the only\n  persisted pre-dispatch state.\n- Dispatched: tasks.status (``\"running\"``, ``\"completed\"``,\n  ``\"failed\"``, ``\"cancelled\"``), with ``\"timed_out\"``\n  reconstructed from the persisted footprint of an execution\n  timeout (status='failed' + error_class='timeout'). A submit-time\n  ``dispatch_timeout`` is a different failure — the build never\n  observably started — and reads as ``\"failed\"``.\n- On cancel responses: Build Coordinator's returned status, which\n  is fresher than the local row (which lags until BC's callback\n  lands), put through the same derivation — BC's ``timed_out``\n  surfaces as ``\"timed_out\"``, agreeing with what a subsequent GET\n  reconstructs once the callback persists the footprint. The field\n  never carries a word outside the effective vocabulary.\n\nStaleness: after handoff the field tracks tasks.status, which only\nadvances when Build Coordinator's terminal callback lands. When\ncallbacks are disabled (no callback base URL configured — a\nsupported worker configuration), the post-handoff status stays at\nthe last persisted value (typically ``\"running\"``) indefinitely;\na cancel response is then the only place a fresher\ncoordinator-reported status appears.",
+    ///  "description": "Build-specific details with optional task sub-object.\n\nThe task field is None for undispatched builds (task_id IS NULL\nin factory_builds).\n\nThe status field is the build's effective current status — the\nEffectiveBuildStatus vocabulary — computed server-side from the\nfreshest authoritative source:\n\n- Pre-dispatch (task_id IS NULL): computed from\n  factory_builds.cancelled_at — ``\"cancelled\"`` when set, else\n  ``\"pending\"``. Neither word is stored; the timestamp is the only\n  persisted pre-dispatch state.\n- Dispatched: tasks.status (``\"running\"``, ``\"completed\"``,\n  ``\"failed\"``, ``\"cancelled\"``), with ``\"timed_out\"``\n  reconstructed from the persisted footprint of an execution\n  timeout (status='failed' + error_class='timeout'). A running\n  task the coordinator has not yet started (no started_at), such\n  as one waiting in its queue, reads as ``\"pending\"``. A\n  submit-time ``dispatch_timeout`` is a different failure — the\n  build never observably started — and reads as ``\"failed\"``.\n- On cancel responses: Build Coordinator's returned status, which\n  is fresher than the local row (which lags until BC's callback\n  lands), put through the same derivation — BC's ``timed_out``\n  surfaces as ``\"timed_out\"``, agreeing with what a subsequent GET\n  reconstructs once the callback persists the footprint. The field\n  never carries a word outside the effective vocabulary.\n\nStaleness: after handoff the field tracks the task, which advances\nwhen Build Coordinator's start and terminal callbacks land, or when\nthe reconciler reads a status whose callback never came. Between\nthe two, a cancel response is the only place a fresher\ncoordinator-reported status appears.",
     ///  "type": "object",
     ///  "required": [
     ///    "attr_path",
@@ -1222,14 +1222,16 @@ lifecycle words, distinct from the derived effective vocabulary
 on BuildResponse.status. The task sub-object reports the stored
 footprint the top-level status is derived from: a timed-out
 build's task still reads status='failed' + error_class='timeout'
-while the build-level status reads 'timed_out'.*/
+while the build-level status reads 'timed_out', and a build waiting
+in the coordinator's queue has a 'running' task with no
+``started_at`` while the build-level status reads 'pending'.*/
     ///
     /// <details><summary>JSON schema</summary>
     ///
     /// ```json
     ///{
     ///  "title": "TaskResponse",
-    ///  "description": "Generic task lifecycle — same shape for all operation types.\n\nThe status field carries the task vocabulary — the persisted\nlifecycle words, distinct from the derived effective vocabulary\non BuildResponse.status. The task sub-object reports the stored\nfootprint the top-level status is derived from: a timed-out\nbuild's task still reads status='failed' + error_class='timeout'\nwhile the build-level status reads 'timed_out'.",
+    ///  "description": "Generic task lifecycle — same shape for all operation types.\n\nThe status field carries the task vocabulary — the persisted\nlifecycle words, distinct from the derived effective vocabulary\non BuildResponse.status. The task sub-object reports the stored\nfootprint the top-level status is derived from: a timed-out\nbuild's task still reads status='failed' + error_class='timeout'\nwhile the build-level status reads 'timed_out', and a build waiting\nin the coordinator's queue has a 'running' task with no\n``started_at`` while the build-level status reads 'pending'.",
     ///  "type": "object",
     ///  "required": [
     ///    "created_at",
@@ -1329,8 +1331,9 @@ while the build-level status reads 'timed_out'.*/
 Mirrors the CHECK constraint as of migration 1.8.0:
 status IN ('running', 'completed', 'failed', 'cancelled').
 
-The claim CTE inserts tasks directly as 'running' (the claim is
-the dispatch; there is no separate queued phase). The three
+The claim CTE inserts tasks directly as 'running', and the task
+stays 'running' while the coordinator queues the build; its
+``started_at`` records when the build actually started. The three
 terminal values are written by ``process_callback`` and
 ``mark_task_failed``.*/
     ///
@@ -1339,7 +1342,7 @@ terminal values are written by ``process_callback`` and
     /// ```json
     ///{
     ///  "title": "TaskStatus",
-    ///  "description": "Valid status values for tasks.\n\nMirrors the CHECK constraint as of migration 1.8.0:\nstatus IN ('running', 'completed', 'failed', 'cancelled').\n\nThe claim CTE inserts tasks directly as 'running' (the claim is\nthe dispatch; there is no separate queued phase). The three\nterminal values are written by ``process_callback`` and\n``mark_task_failed``.",
+    ///  "description": "Valid status values for tasks.\n\nMirrors the CHECK constraint as of migration 1.8.0:\nstatus IN ('running', 'completed', 'failed', 'cancelled').\n\nThe claim CTE inserts tasks directly as 'running', and the task\nstays 'running' while the coordinator queues the build; its\n``started_at`` records when the build actually started. The three\nterminal values are written by ``process_callback`` and\n``mark_task_failed``.",
     ///  "type": "string",
     ///  "enum": [
     ///    "running",
@@ -1496,8 +1499,9 @@ The ``status`` filter matches builds by an effective status derived
 from the build's lifecycle (never stored), drawn from a six-value
 vocabulary:
 
-- ``pending``: accepted but not yet dispatched to a builder.
-- ``running``: dispatched and building.
+- ``pending``: accepted but not yet building, whether waiting for
+  dispatch or in the build coordinator's queue.
+- ``running``: building.
 - ``completed``: finished successfully.
 - ``failed``: finished unsuccessfully. Excludes timed-out builds,
   which match ``timed_out``.
