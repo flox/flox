@@ -96,6 +96,13 @@ pub fn detect_invocation_sources() -> Vec<String> {
 /// Detected invocation sources for this CLI run, computed once at startup
 pub static INVOCATION_SOURCES: LazyLock<Vec<String>> = LazyLock::new(detect_invocation_sources);
 
+/// Whether an AI agent appears to be running this CLI invocation.
+pub fn invoked_by_agent() -> bool {
+    INVOCATION_SOURCES
+        .iter()
+        .any(|source| source.starts_with("agentic."))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
