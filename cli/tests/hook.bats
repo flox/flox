@@ -323,7 +323,9 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
 
 # Stage a PATH directory whose `flox` is a symlink to the real binary, plus the
 # "upgraded" replacement next to it. The replacement keeps the bare name as
-# argv[0], as an installed wrapper does.
+# argv[0], as an installed wrapper does. The hook embeds the PATH entry: not
+# the bare name, which an environment's own `flox` could shadow, and not the
+# symlink target, which an upgrade does not replace.
 upgradeable_flox_setup() {
   export FLOX_PATH_DIR="${BATS_TEST_TMPDIR?}/path-${BATS_TEST_NUMBER?}"
   export FLOX_UPGRADE_LOG="${BATS_TEST_TMPDIR?}/upgraded-flox-ran"
@@ -348,14 +350,14 @@ EOF
     export PATH=\"$FLOX_PATH_DIR:\$PATH\"
     export FLOX_SHELL=\$(which bash)
     eval \"\$(flox activate -d $PROJECT_DIR)\"
-    declare -f _flox_hook | grep -F 'command \"flox\" hook-env'
+    declare -f _flox_hook | grep -F \"command $FLOX_PATH_DIR/flox hook-env\"
     mv $FLOX_PATH_DIR/flox.upgraded $FLOX_PATH_DIR/flox
     cd $PROJECT2_DIR
     _flox_hook
     echo \"var2:\$TEST_VAR2\"
   "
   assert_success
-  assert_output --partial 'command "flox" hook-env'
+  assert_output --partial "command $FLOX_PATH_DIR/flox hook-env"
   assert_output --partial "var2:auto2"
   # Both the hook's `hook-env` and the activation it emitted ran the new flox.
   run cat "$FLOX_UPGRADE_LOG"
@@ -374,14 +376,14 @@ EOF
     export PATH=\"$FLOX_PATH_DIR:\$PATH\"
     export FLOX_SHELL=\$(which zsh)
     eval \"\$(flox activate -d $PROJECT_DIR)\"
-    which _flox_hook | grep -F 'command \"flox\" hook-env'
+    which _flox_hook | grep -F \"command $FLOX_PATH_DIR/flox hook-env\"
     mv $FLOX_PATH_DIR/flox.upgraded $FLOX_PATH_DIR/flox
     cd $PROJECT2_DIR
     _flox_hook
     echo \"var2:\$TEST_VAR2\"
   "
   assert_success
-  assert_output --partial 'command "flox" hook-env'
+  assert_output --partial "command $FLOX_PATH_DIR/flox hook-env"
   assert_output --partial "var2:auto2"
   run cat "$FLOX_UPGRADE_LOG"
   assert_line "hook-env"

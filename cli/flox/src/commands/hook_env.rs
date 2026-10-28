@@ -1001,10 +1001,9 @@ async fn prompt_for_auto_activation(project_dirs: &[PathBuf]) -> Result<AutoActi
 /// so this reuses the full activation path (hooks, services, attach
 /// semantics) of `eval "$(flox activate)"`.
 ///
-/// It runs flox through [`FLOX_BIN_FOR_SHELL`], the same command the hook used
-/// to start this process, so an upgraded Flox is picked up rather than this
-/// binary's store path. `command` keeps a user function or alias named `flox`
-/// out of the way, as in the hook itself.
+/// It runs flox through [`FLOX_BIN_FOR_SHELL`], the same command the hook
+/// used to start this process. `command` (`exec` in tcsh) keeps a user
+/// function or alias named `flox` out of the way, as in the hook itself.
 fn write_activate_command(shell: Shell, project_dir: &Path, writer: &mut impl Write) -> Result<()> {
     let escaped_bin = shell_escape::escape(Cow::Borrowed(FLOX_BIN_FOR_SHELL.as_str()));
     let dir = project_dir.to_string_lossy().to_string();
@@ -1025,7 +1024,7 @@ fn write_activate_command(shell: Shell, project_dir: &Path, writer: &mut impl Wr
         Shell::Tcsh => {
             writeln!(
                 writer,
-                r#"eval "`{escaped_bin} activate --dir {escaped_dir}`";"#
+                r#"eval "`exec {escaped_bin} activate --dir {escaped_dir}`";"#
             )?;
         },
     }

@@ -32,13 +32,12 @@
 //! only runs the hook from `PROMPT_COMMAND`, which a fork never evaluates,
 //! and fish has no forked subshells.
 //!
-//! `flox_bin` is the command the user invoked (`flox`, or the path they
-//! typed), not the store path of the running binary: the hook outlives Flox
-//! upgrades, and a bare name resolves through PATH on every run, so an open
-//! shell follows the upgrade instead of calling a binary that cannot read the
-//! environments the new one writes. `command` (and `exec` in tcsh, which only
-//! alias-expands the first word) keeps a user function or alias named `flox`
-//! from injecting output into the text the hook evals.
+//! `flox_bin` is the path an upgrade replaces, not the store path of the
+//! running binary (see `FLOX_BIN_FOR_SHELL` in the `flox` crate). It is
+//! user-controlled text, so each hook escapes it for its shell, and `command`
+//! (`exec` in tcsh, which only alias-expands the first word) keeps a user
+//! function or alias named `flox` from injecting output into the text the
+//! hook evals.
 //!
 //! Each hook also exports [`PROMPT_HOOK_VERSION_ENV`] =
 //! `<version>:true` at registration time (top level, so it is set before the
@@ -47,11 +46,14 @@
 //! subprocess such as `flox deactivate` can confirm a compatible hook is set
 //! up before writing an action file the hook would otherwise never consume.
 
+use std::borrow::Cow;
+
 use flox_core::activate::vars::{FLOX_INVOCATION_TYPES_VAR, FLOX_INVOCATION_TYPES_WIRE_VAR};
 use flox_core::hook_actions::{PROMPT_HOOK_VERSION_ENV, prompt_hook_marker_value};
 use indoc::formatdoc;
 
 pub fn bash_hook(flox_bin: &str) -> String {
+    let flox_bin = shell_escape::escape(Cow::Borrowed(flox_bin));
     let marker = prompt_hook_marker_value(true);
     formatdoc!(
         r#"
@@ -59,7 +61,7 @@ pub fn bash_hook(flox_bin: &str) -> String {
         _flox_hook() {{
           local _prev_exit=$?;
           local _flox_vars;
-          _flox_vars="$(command "{flox_bin}" hook-env --shell bash --shell-pid $$ --invocation-types "${{{FLOX_INVOCATION_TYPES_VAR}:-}}")";
+          _flox_vars="$(command {flox_bin} hook-env --shell bash --shell-pid $$ --invocation-types "${{{FLOX_INVOCATION_TYPES_VAR}:-}}")";
           trap -- '' SIGINT;
           eval "$_flox_vars";
           trap - SIGINT;
@@ -82,6 +84,7 @@ pub fn bash_hook(flox_bin: &str) -> String {
 // The `ZSH_SUBSHELL` check keeps the hook out of forked subshells (see the
 // module docs).
 pub fn zsh_hook(flox_bin: &str) -> String {
+    let flox_bin = shell_escape::escape(Cow::Borrowed(flox_bin));
     let marker = prompt_hook_marker_value(true);
     formatdoc!(
         r#"
@@ -89,7 +92,7 @@ pub fn zsh_hook(flox_bin: &str) -> String {
         _flox_hook() {{
           if (( ZSH_SUBSHELL )); then return; fi;
           local _flox_vars;
-          _flox_vars="$(command "{flox_bin}" hook-env --shell zsh --shell-pid $$ --invocation-types "${{{FLOX_INVOCATION_TYPES_VAR}:-}}")";
+          _flox_vars="$(command {flox_bin} hook-env --shell zsh --shell-pid $$ --invocation-types "${{{FLOX_INVOCATION_TYPES_VAR}:-}}")";
           trap -- '' SIGINT;
           eval "$_flox_vars";
           trap - SIGINT;
@@ -134,12 +137,13 @@ pub fn fish_hook(flox_bin: &str) -> String {
     //   - eval_after_arrow: PWD hook sets a flag; evaluation is deferred
     //     until before the next command executes (fish_preexec).
     //   - disable_arrow: no PWD reaction; only prompt-based evaluation.
+    let flox_bin = shell_escape::escape(Cow::Borrowed(flox_bin));
     let marker = prompt_hook_marker_value(true);
     formatdoc!(
         r#"
         set -gx {PROMPT_HOOK_VERSION_ENV} {marker};
         function _flox_hook --on-event fish_prompt;
-            eval (command "{flox_bin}" hook-env --shell fish --shell-pid $fish_pid --invocation-types "${FLOX_INVOCATION_TYPES_VAR}" | string collect);
+            eval (command {flox_bin} hook-env --shell fish --shell-pid $fish_pid --invocation-types "${FLOX_INVOCATION_TYPES_VAR}" | string collect);
             if test "$FLOX_AUTO_ACTIVATE_FISH_MODE" != "disable_arrow";
                 set -g _flox_pwd_hook_active 1;
             end;
@@ -149,14 +153,14 @@ pub fn fish_hook(flox_bin: &str) -> String {
                 if test "$FLOX_AUTO_ACTIVATE_FISH_MODE" = "eval_after_arrow";
                     set -g _flox_env_again 0;
                 else;
-                    eval (command "{flox_bin}" hook-env --shell fish --shell-pid $fish_pid --invocation-types "${FLOX_INVOCATION_TYPES_VAR}" | string collect);
+                    eval (command {flox_bin} hook-env --shell fish --shell-pid $fish_pid --invocation-types "${FLOX_INVOCATION_TYPES_VAR}" | string collect);
                 end;
             end;
         end;
         function _flox_hook_preexec --on-event fish_preexec;
             if set -q _flox_env_again;
                 set -e _flox_env_again;
-                eval (command "{flox_bin}" hook-env --shell fish --shell-pid $fish_pid --invocation-types "${FLOX_INVOCATION_TYPES_VAR}" | string collect);
+                eval (command {flox_bin} hook-env --shell fish --shell-pid $fish_pid --invocation-types "${FLOX_INVOCATION_TYPES_VAR}" | string collect);
             end;
             set -e _flox_pwd_hook_active;
         end;
@@ -200,7 +204,16 @@ pub fn fish_hook(flox_bin: &str) -> String {
 // `exec` makes the shell evaluating the alias its parent process, and
 // `--skip-in-forked-subshell` has it print nothing when that parent is not
 // `$$`.
+//
+// `flox_bin` sits inside backticks inside double quotes inside the
+// single-quoted alias body, and the body is re-lexed on every run, so the
+// usual quoting does not survive: a quoted path breaks the backtick match,
+// and `$`, `"`, `` ` `` and `!` cannot be escaped at all in that position
+// (verified empirically). A backslash before whitespace and backslashes does
+// survive, which covers the realistic case of an install directory with a
+// space in its name.
 pub fn tcsh_hook(flox_bin: &str) -> String {
+    let flox_bin = tcsh_escape_in_alias(flox_bin);
     // A tcsh alias body must be a single line, so assemble the statements here
     // and join them with "; " rather than writing one long string literal.
     let hook = [
@@ -221,4 +234,17 @@ pub fn tcsh_hook(flox_bin: &str) -> String {
         alias cwdcmd '{hook}';
         "#
     )
+}
+
+/// See [`tcsh_hook`]: backslash-escape what tcsh lets us escape inside the
+/// alias body.
+fn tcsh_escape_in_alias(word: &str) -> String {
+    let mut escaped = String::with_capacity(word.len());
+    for c in word.chars() {
+        if matches!(c, ' ' | '\t' | '\\') {
+            escaped.push('\\');
+        }
+        escaped.push(c);
+    }
+    escaped
 }
