@@ -314,6 +314,80 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
   assert_output --partial "$(realpath "$PROJECT2_DIR")"
 }
 
+# ---------------------------------------------------------------------------- #
+# The hook embeds the command the user invoked rather than the store path of
+# the running binary, so a shell that is already open follows an upgrade. Each
+# test activates by the bare name `flox` through a PATH entry, then swaps that
+# entry for a wrapper that logs its runs (standing in for the upgraded binary)
+# and checks that the hook's next run goes through it.
+
+# Stage a PATH directory whose `flox` is a symlink to the real binary, plus the
+# "upgraded" replacement next to it. The replacement keeps the bare name as
+# argv[0], as an installed wrapper does.
+upgradeable_flox_setup() {
+  export FLOX_PATH_DIR="${BATS_TEST_TMPDIR?}/path-${BATS_TEST_NUMBER?}"
+  export FLOX_UPGRADE_LOG="${BATS_TEST_TMPDIR?}/upgraded-flox-ran"
+  mkdir -p "$FLOX_PATH_DIR"
+  ln -s "$FLOX_BIN" "$FLOX_PATH_DIR/flox"
+  cat > "$FLOX_PATH_DIR/flox.upgraded" << EOF
+#!/usr/bin/env bash
+echo "\$1" >> "$FLOX_UPGRADE_LOG"
+exec -a flox "$FLOX_BIN" "\$@"
+EOF
+  chmod +x "$FLOX_PATH_DIR/flox.upgraded"
+}
+
+# bats test_tags=hook:auto-activate:upgrade:bash
+@test "bash: hook follows a flox upgrade when flox was invoked by name" {
+  project_setup
+  project2_setup
+  upgradeable_flox_setup
+  "$FLOX_BIN" activate allow -d "$PROJECT2_DIR"
+
+  run --separate-stderr bash -c "
+    export PATH=\"$FLOX_PATH_DIR:\$PATH\"
+    export FLOX_SHELL=\$(which bash)
+    eval \"\$(flox activate -d $PROJECT_DIR)\"
+    declare -f _flox_hook | grep -F 'command \"flox\" hook-env'
+    mv $FLOX_PATH_DIR/flox.upgraded $FLOX_PATH_DIR/flox
+    cd $PROJECT2_DIR
+    _flox_hook
+    echo \"var2:\$TEST_VAR2\"
+  "
+  assert_success
+  assert_output --partial 'command "flox" hook-env'
+  assert_output --partial "var2:auto2"
+  # Both the hook's `hook-env` and the activation it emitted ran the new flox.
+  run cat "$FLOX_UPGRADE_LOG"
+  assert_line "hook-env"
+  assert_line "activate"
+}
+
+# bats test_tags=hook:auto-activate:upgrade:zsh
+@test "zsh: hook follows a flox upgrade when flox was invoked by name" {
+  project_setup
+  project2_setup
+  upgradeable_flox_setup
+  "$FLOX_BIN" activate allow -d "$PROJECT2_DIR"
+
+  run --separate-stderr zsh -c "
+    export PATH=\"$FLOX_PATH_DIR:\$PATH\"
+    export FLOX_SHELL=\$(which zsh)
+    eval \"\$(flox activate -d $PROJECT_DIR)\"
+    which _flox_hook | grep -F 'command \"flox\" hook-env'
+    mv $FLOX_PATH_DIR/flox.upgraded $FLOX_PATH_DIR/flox
+    cd $PROJECT2_DIR
+    _flox_hook
+    echo \"var2:\$TEST_VAR2\"
+  "
+  assert_success
+  assert_output --partial 'command "flox" hook-env'
+  assert_output --partial "var2:auto2"
+  run cat "$FLOX_UPGRADE_LOG"
+  assert_line "hook-env"
+  assert_line "activate"
+}
+
 # bats test_tags=hook:auto-activate:fish
 @test "fish: hook auto-activates a discovered environment on cd" {
   project_setup

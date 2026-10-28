@@ -37,7 +37,7 @@ use super::deactivate::{deactivation_target, emit_deactivate_script, flox_activa
 use crate::subcommand_metric;
 use crate::utils::active_environments::ActiveEnvironment;
 use crate::utils::dialog::{Confirm, Dialog};
-use crate::utils::message;
+use crate::utils::{FLOX_BIN_FOR_SHELL, message};
 
 #[derive(Debug, Clone, Bpaf)]
 pub struct HookEnv {
@@ -1000,23 +1000,26 @@ async fn prompt_for_auto_activation(project_dirs: &[PathBuf]) -> Result<AutoActi
 /// runs `flox activate` with stdout captured — which selects in-place mode —
 /// so this reuses the full activation path (hooks, services, attach
 /// semantics) of `eval "$(flox activate)"`.
+///
+/// It runs flox through [`FLOX_BIN_FOR_SHELL`], the same command the hook used
+/// to start this process, so an upgraded Flox is picked up rather than this
+/// binary's store path. `command` keeps a user function or alias named `flox`
+/// out of the way, as in the hook itself.
 fn write_activate_command(shell: Shell, project_dir: &Path, writer: &mut impl Write) -> Result<()> {
-    let flox_bin = std::env::current_exe().context("failed to determine flox executable path")?;
-    let flox_bin = flox_bin.to_string_lossy().to_string();
-    let escaped_bin = shell_escape::escape(Cow::Borrowed(&*flox_bin));
+    let escaped_bin = shell_escape::escape(Cow::Borrowed(FLOX_BIN_FOR_SHELL.as_str()));
     let dir = project_dir.to_string_lossy().to_string();
     let escaped_dir = shell_escape::escape(Cow::Borrowed(&*dir));
     match shell {
         Shell::Bash | Shell::Zsh => {
             writeln!(
                 writer,
-                r#"eval "$({escaped_bin} activate --dir {escaped_dir})";"#
+                r#"eval "$(command {escaped_bin} activate --dir {escaped_dir})";"#
             )?;
         },
         Shell::Fish => {
             writeln!(
                 writer,
-                "{escaped_bin} activate --dir {escaped_dir} | source;"
+                "command {escaped_bin} activate --dir {escaped_dir} | source;"
             )?;
         },
         Shell::Tcsh => {
@@ -1853,7 +1856,7 @@ mod tests {
             script.contains("activate --dir '/home/user/my proj'"),
             "{script}"
         );
-        assert!(script.starts_with(r#"eval "$("#), "{script}");
+        assert!(script.starts_with(r#"eval "$(command "#), "{script}");
     }
 
     #[test]
