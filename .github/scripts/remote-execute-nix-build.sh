@@ -56,7 +56,7 @@ function render_remote_cmd() {
           --write-out '%{http_code} %{url_effective}\n' \
       | awk '$1 == 200 { n = split($2, p, "/"); sub(/\.narinfo$/, "", p[n]); print p[n] }' >"$cached" \
       || true
-    echo "Pushing $(grep -cvFf "$cached" "$paths") of $(wc -l <"$paths") build-time paths (rest are on cache.nixos.org)"
+    echo "Pushing $(grep -cvFf "$cached" "$paths") of $(grep -c '' "$paths") build-time paths (rest are on cache.nixos.org)"
 
     { set +x; } 2>/dev/null
     unset AWS_SESSION_TOKEN
