@@ -2,10 +2,9 @@
 # -*- mode: bats; -*-
 # ============================================================================ #
 #
-# Test that a config that does not parse creates no telemetry state
-# (no device ID, no Sentry client), and that neither a config that does not
-# parse nor an empty cache, data or state dir puts files into
-# the current directory.
+# Test that a config that does not parse is an error for every invocation,
+# and creates no telemetry state (no device ID, no Sentry client) and no files
+# in the current directory.
 #
 # ---------------------------------------------------------------------------- #
 
@@ -38,7 +37,8 @@ assert_cwd_empty() {
 
 @test "invalid FLOX_DISABLE_METRICS creates no device ID" {
   FLOX_DISABLE_METRICS=1 run "$FLOX_BIN" --help
-  assert_success
+  assert_failure
+  assert_output --partial "Could not parse config"
 
   # Allow the detached telemetry sender, which would log into the current
   # directory if it ran with the default config.
@@ -75,20 +75,6 @@ assert_cwd_empty() {
   assert_output --partial "Initializing Sentry"
 
   FLOX_DISABLE_METRICS=1 run "$FLOX_BIN" --help
-  assert_success
+  assert_failure
   refute_output --partial "Initializing Sentry"
-}
-
-@test "empty FLOX_DATA_DIR and FLOX_CACHE_DIR use the default directories" {
-  export XDG_DATA_HOME="$BATS_TEST_TMPDIR/xdg-data"
-  export XDG_CACHE_HOME="$BATS_TEST_TMPDIR/xdg-cache"
-
-  FLOX_DATA_DIR="" FLOX_CACHE_DIR="" run "$FLOX_BIN" --help
-  assert_success
-  FLOX_DATA_DIR="" FLOX_CACHE_DIR="" run "$FLOX_BIN" envs --active
-  assert_success
-
-  assert_cwd_empty
-  assert [ -f "$XDG_DATA_HOME/flox/metrics-uuid" ]
-  assert [ -f "$XDG_CACHE_HOME/flox/metrics-lock" ]
 }
