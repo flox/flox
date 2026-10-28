@@ -186,6 +186,10 @@ jobs:
           # store behind for everyone else.
           commit: "${{ github.ref == 'refs/heads/main' }}"
 
+      - name: "Verify Nix store"
+        if: ${{ runner.os == 'Linux' && needs.scope.outputs.heavy != 'false' }}
+        run: ".github/scripts/verify-nix-store.sh"
+
       - name: "Setup upterm session"
         if: ${{ (true == inputs.enableUpterm) && (inputs.breakOnJob == github.job) }}
         uses: owenthereal/action-upterm@f26ebc11e22a09b8365f39d2cdafd06f63b42053 # v1
@@ -254,6 +258,10 @@ jobs:
           # Only main saves snapshots, so a PR run can never leave a broken
           # store behind for everyone else.
           commit: "${{ github.ref == 'refs/heads/main' }}"
+
+      - name: "Verify Nix store"
+        if: ${{ runner.os == 'Linux' }}
+        run: ".github/scripts/verify-nix-store.sh"
 
       - name: "Setup upterm session"
         if: ${{ (true == inputs.enableUpterm) && (inputs.breakOnJob == github.job) }}
@@ -336,6 +344,10 @@ jobs:
           # Only main saves snapshots, so a PR run can never leave a broken
           # store behind for everyone else.
           commit: "${{ github.ref == 'refs/heads/main' }}"
+
+      - name: "Verify Nix store"
+        if: ${{ runner.os == 'Linux' && needs.scope.outputs.heavy != 'false' }}
+        run: ".github/scripts/verify-nix-store.sh"
 
       - name: "Setup upterm session"
         if: ${{ (true == inputs.enableUpterm) && (inputs.breakOnJob == github.job) }}
