@@ -21,6 +21,7 @@ use tracing::debug;
 
 use super::is_detached_side_effect_command;
 use crate::utils::detached::{self, DetachedCommand, LogFile};
+use crate::utils::init::telemetry_deferred;
 use crate::utils::metrics::Hub;
 
 #[derive(Bpaf, Clone, Debug)]
@@ -115,7 +116,8 @@ fn telemetry_flush_due() -> bool {
 /// - neither buffer is due and flushing was not explicitly forced;
 /// - `subcommand` is itself a detached side-effect command (prevents a
 ///   fork-bomb and stops `send-telemetry` from re-spawning itself);
-/// - `_FLOX_TESTING_DISABLE_BG_SIDE_EFFECTS=1` (CI escape hatch).
+/// - `_FLOX_TESTING_DISABLE_BG_SIDE_EFFECTS=1` (CI escape hatch);
+/// - telemetry is deferred until the notice is shown (nothing to send).
 ///
 /// The child logs to a single rolling file; see [`LogFile::Rolling`].
 pub fn spawn_if_due(config: &Config, subcommand: &str) {
@@ -129,6 +131,7 @@ fn spawn_if_due_with(config: &Config, subcommand: &str, self_executable: Option<
     if config.flox.disable_metrics
         || is_detached_side_effect_command(subcommand)
         || detached::bg_side_effects_disabled()
+        || telemetry_deferred()
         || !telemetry_flush_due()
     {
         return false;
