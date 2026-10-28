@@ -353,10 +353,37 @@ cmd = "flox install fish@3.2.2"
 pre_cmd = "flox init"
 cmd = "flox install hello"
 
+# The catalog's 401 for an anonymous CLI at 1.19.0 or later. mk_data always sends
+# the recording token for resolve jobs, so the token and version are overridden
+# inline. The recorded `when.body` is stripped so the mock matches any resolve
+# request; catalog-auth-required.bats replays it for install, activate and run.
+[resolve.unauthorized]
+pre_cmd = "flox init"
+cmd = "FLOX_FLOXHUB_TOKEN= FLOX_VERSION=1.19.0 flox install hello"
+ignore_cmd_errors = true
+post_cmd = '''
+    yq -y 'del(.when.body)' "$RESPONSE_FILE" > tmp.yaml
+    mv tmp.yaml "$RESPONSE_FILE"
+'''
+
+# The catalog's 401 for a token it cannot verify: the test suite's dummy JWT
+# (cli/tests/setup_suite.bash).
+[resolve.rejected]
+pre_cmd = "flox init"
+cmd = "FLOX_FLOXHUB_TOKEN=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjk5OTk5OTk5OTl9.6-nbzFzQEjEX7dfWZFLE-I_qW2N_-9W2HFzzfsquI74 flox install hello"
+ignore_cmd_errors = true
+post_cmd = '''
+    yq -y 'del(.when.body)' "$RESPONSE_FILE" > tmp.yaml
+    mv tmp.yaml "$RESPONSE_FILE"
+'''
+
 [resolve.hello_unfree]
-# This response must have a substitutable output on the test systems. A forced
-# rerecord can move its nixpkgs revision; verify cache availability before
-# accepting a changed cassette. The retained 2fcb964d revision meets this.
+# The output of this response must already be in the nix store of the CI test
+# machines (unfree packages are not in the public caches). A forced rerecord
+# moves it to the newest nixpkgs revision, and the install test then builds the
+# package on every machine, which times out the job. Keep the committed cassette
+# (and envs/hello-unfree-lock.yaml, which pins the same revision) unless the new
+# output has been built on those machines first. Retained revision: 151fa4e8.
 pre_cmd = "flox init"
 cmd = "flox install hello-unfree"
 
@@ -391,6 +418,21 @@ cmd = "flox edit -f manifest.toml"
 pre_cmd = "flox init"
 cmd = "flox install node"
 ignore_cmd_errors = true
+post_cmd = '''
+    # After the failed resolve the CLI searches for suggestions (the curated
+    # term, SUGGESTION_SEARCH_LIMIT results). Recorded with the token, that
+    # search also returns the recording account's own catalogs, which must not
+    # end up in test data. Replace the response with the anonymous one for the
+    # same query: what any logged-out user sees, with nothing private.
+    body="$(curl -sS --fail -A "flox-cli/${FLOX_VERSION}" \
+        "https://api.flox.dev/api/v1/catalog/search?search_term=nodejs&system=${NIX_TARGET_SYSTEM:?}&page=0&pageSize=3")"
+    yq -y --arg body "$body" '
+        if .when.path == "/api/v1/catalog/search" then
+            .then.body = $body | del(.then.header[] | select(.name == "content-length"))
+        else . end
+    ' "$RESPONSE_FILE" > tmp.yaml
+    mv tmp.yaml "$RESPONSE_FILE"
+'''
 
 [resolve.old_hello]
 pre_cmd = "flox init"
@@ -481,6 +523,21 @@ ignore_cmd_errors = true
 pre_cmd = "flox init"
 cmd = "flox install package"
 ignore_cmd_errors = true
+post_cmd = '''
+    # After the failed resolve the CLI searches for suggestions (the curated
+    # term, SUGGESTION_SEARCH_LIMIT results). Recorded with the token, that
+    # search also returns the recording account's own catalogs, which must not
+    # end up in test data. Replace the response with the anonymous one for the
+    # same query: what any logged-out user sees, with nothing private.
+    body="$(curl -sS --fail -A "flox-cli/${FLOX_VERSION}" \
+        "https://api.flox.dev/api/v1/catalog/search?search_term=package&system=${NIX_TARGET_SYSTEM:?}&page=0&pageSize=3")"
+    yq -y --arg body "$body" '
+        if .when.path == "/api/v1/catalog/search" then
+            .then.body = $body | del(.then.header[] | select(.name == "content-length"))
+        else . end
+    ' "$RESPONSE_FILE" > tmp.yaml
+    mv tmp.yaml "$RESPONSE_FILE"
+'''
 
 # This is useful for testing insecure packages
 [resolve.python2]

@@ -21,17 +21,17 @@
     {
       "attr_path": "gcc",
       "broken": false,
-      "derivation": "/nix/store/b9sj5k5147bqv005bgby3xiq090bbll7-gcc-wrapper-16.2.0.drv",
+      "derivation": "/nix/store/acwq93k71y367lgmkxl67mhicfqvfrxa-gcc-wrapper-16.2.0.drv",
       "description": "GNU Compiler Collection, version 16.2.0 (wrapper script)",
       "install_id": "gcc",
       "license": "GPL-3.0-or-later",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=151fa4e8ddfdd8dd25d945ad94ed54a13de9f6e4",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=3ec636362e1816bc2f0888fa0fa2c69f1bc9e504",
       "name": "gcc-wrapper-16.2.0",
       "pname": "gcc",
-      "rev": "151fa4e8ddfdd8dd25d945ad94ed54a13de9f6e4",
-      "rev_count": 1086391,
-      "rev_date": "2026-10-06T04:29:54Z",
-      "scrape_date": "2026-10-07T04:59:38.491786Z",
+      "rev": "3ec636362e1816bc2f0888fa0fa2c69f1bc9e504",
+      "rev_count": 1100280,
+      "rev_date": "2026-10-23T16:35:39Z",
+      "scrape_date": "2026-10-25T05:51:32.517996Z",
       "stabilities": [
         "unstable"
       ],
@@ -42,9 +42,9 @@
         "out"
       ],
       "outputs": {
-        "info": "/nix/store/c6h3s4vv77ifmdsxd43198cjwafby0b2-gcc-wrapper-16.2.0-info",
-        "man": "/nix/store/lx66zprkzw9qc2w2khrim7kx9k2gl33m-gcc-wrapper-16.2.0-man",
-        "out": "/nix/store/sc0yfj74svyg3addnjkqkhk0c9xzb2rr-gcc-wrapper-16.2.0"
+        "info": "/nix/store/mmhqm6siv052qq9a7b7w3azrfqdryfib-gcc-wrapper-16.2.0-info",
+        "man": "/nix/store/6jswiisvaxlrbjdczjhka29fmv7p9d4s-gcc-wrapper-16.2.0-man",
+        "out": "/nix/store/130xlh787q6bipjc3hkbcfcskvzgqzqw-gcc-wrapper-16.2.0"
       },
       "system": "aarch64-darwin",
       "group": "toplevel",
@@ -53,17 +53,17 @@
     {
       "attr_path": "gcc",
       "broken": false,
-      "derivation": "/nix/store/m5z7qjlfzjqrya90krpxvb3v7chz6gpk-gcc-wrapper-16.2.0.drv",
+      "derivation": "/nix/store/m4pjvsi3kqv22y9nny39jf4s9mlaj448-gcc-wrapper-16.2.0.drv",
       "description": "GNU Compiler Collection, version 16.2.0 (wrapper script)",
       "install_id": "gcc",
       "license": "GPL-3.0-or-later",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=151fa4e8ddfdd8dd25d945ad94ed54a13de9f6e4",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=3ec636362e1816bc2f0888fa0fa2c69f1bc9e504",
       "name": "gcc-wrapper-16.2.0",
       "pname": "gcc",
-      "rev": "151fa4e8ddfdd8dd25d945ad94ed54a13de9f6e4",
-      "rev_count": 1086391,
-      "rev_date": "2026-10-06T04:29:54Z",
-      "scrape_date": "2026-10-07T05:31:53.806893Z",
+      "rev": "3ec636362e1816bc2f0888fa0fa2c69f1bc9e504",
+      "rev_count": 1100280,
+      "rev_date": "2026-10-23T16:35:39Z",
+      "scrape_date": "2026-10-25T06:24:58.762827Z",
       "stabilities": [
         "unstable"
       ],
@@ -73,12 +73,13 @@
         "man",
         "out",
         "out",
+        "out",
         "out"
       ],
       "outputs": {
-        "info": "/nix/store/322qdsgm2r9cay8hy5pamf5zb9wnspm9-gcc-wrapper-16.2.0-info",
-        "man": "/nix/store/f6d10df52dpp9scf73gaingmmaz3k09g-gcc-wrapper-16.2.0-man",
-        "out": "/nix/store/99zij8qfs8wzbb2njrj18ys8hpnrcj3p-gcc-wrapper-16.2.0"
+        "info": "/nix/store/k3mycz3pj8f0x463ssxmimimphkpcv5s-gcc-wrapper-16.2.0-info",
+        "man": "/nix/store/bk9imwkja1v548gviyshq4j33987m0cg-gcc-wrapper-16.2.0-man",
+        "out": "/nix/store/6gj4dzcv6gaxh5raqyrq7jmy605qaj3z-gcc-wrapper-16.2.0"
       },
       "system": "aarch64-linux",
       "group": "toplevel",
@@ -87,17 +88,17 @@
     {
       "attr_path": "gcc",
       "broken": false,
-      "derivation": "/nix/store/6h0ljahcs7q79rxz48qsimb1krybmiwh-gcc-wrapper-16.2.0.drv",
+      "derivation": "/nix/store/hjzzl7y4qy90800c8zk92z9w07l37x2a-gcc-wrapper-16.2.0.drv",
       "description": "GNU Compiler Collection, version 16.2.0 (wrapper script)",
       "install_id": "gcc",
       "license": "GPL-3.0-or-later",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=151fa4e8ddfdd8dd25d945ad94ed54a13de9f6e4",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=3ec636362e1816bc2f0888fa0fa2c69f1bc9e504",
       "name": "gcc-wrapper-16.2.0",
       "pname": "gcc",
-      "rev": "151fa4e8ddfdd8dd25d945ad94ed54a13de9f6e4",
-      "rev_count": 1086391,
-      "rev_date": "2026-10-06T04:29:54Z",
-      "scrape_date": "2026-10-07T06:08:38.221716Z",
+      "rev": "3ec636362e1816bc2f0888fa0fa2c69f1bc9e504",
+      "rev_count": 1100280,
+      "rev_date": "2026-10-23T16:35:39Z",
+      "scrape_date": "2026-10-25T07:01:24.200465Z",
       "stabilities": [
         "unstable"
       ],
@@ -107,12 +108,13 @@
         "man",
         "out",
         "out",
+        "out",
         "out"
       ],
       "outputs": {
-        "info": "/nix/store/d9sclwji6aqjdgs56p9mcjrq5p0859wl-gcc-wrapper-16.2.0-info",
-        "man": "/nix/store/2k4gc6qmvqrglbfs5xbgx2b3rdbkcd96-gcc-wrapper-16.2.0-man",
-        "out": "/nix/store/j1938gsbvbhkyz4kbmvjk56r479mkw3s-gcc-wrapper-16.2.0"
+        "info": "/nix/store/q28p8i2c42j09y0sffi6v5fhg0l4nis8-gcc-wrapper-16.2.0-info",
+        "man": "/nix/store/6j71j4f4knh1kl65y1y0gq8378addngh-gcc-wrapper-16.2.0-man",
+        "out": "/nix/store/r5ri78axx1qggkjq3vawywlzglg70b5w-gcc-wrapper-16.2.0"
       },
       "system": "x86_64-linux",
       "group": "toplevel",

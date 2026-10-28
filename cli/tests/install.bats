@@ -357,9 +357,12 @@ Could not find package 'node'.
 Try 'flox install nodejs' instead.
 
 Here are a few other similar options:
-  $ flox install nodejs
 EOF
   )"
+  # The search behind the suggestions ranks public catalogs' packages among
+  # nixpkgs', and the ranking is not stable, so only check that the curated
+  # package is one of the options.
+  assert_output --partial "  $ flox install nodejs"
 }
 
 # bats test_tags=install:single-not-on-all-systems

@@ -1,0 +1,17 @@
+when:
+  path: /api/v1/catalog/resolve
+  method: POST
+then:
+  status: 401
+  header:
+    - name: date
+      value: Sun, 25 Oct 2026 11:50:57 GMT
+    - name: content-type
+      value: application/json
+    - name: content-length
+      value: '35'
+    - name: server
+      value: uvicorn
+    - name: apigw-requestid
+      value: FzH9UgVKoAMEYfw=
+  body: '{"detail":"Unable to verify token"}'

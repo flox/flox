@@ -2643,7 +2643,9 @@ pub mod tests {
             build_repo_meta: RemoteBuildRepoMetadata {
                 url: Url::parse("https://git.example.com/test/repo.git").unwrap(),
                 rev: "dummy".to_string(),
-                ref_: "dummy".to_string(),
+                // The catalog requires a branch ref for publishes that carry
+                // a closure (`direct_inputs`), which the client always sends.
+                ref_: "refs/heads/main".to_string(),
                 rev_count: 0,
                 rev_date: "2025-01-01T12:00:00Z".parse::<DateTime<Utc>>().unwrap(),
                 _private: (),

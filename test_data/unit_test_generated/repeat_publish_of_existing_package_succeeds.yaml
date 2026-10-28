@@ -6,7 +6,7 @@ then:
   status: 201
   header:
   - name: date
-    value: Thu, 08 Oct 2026 22:44:59 GMT
+    value: Sun, 25 Oct 2026 12:16:21 GMT
   - name: server
     value: uvicorn
   - name: content-length
@@ -23,7 +23,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Thu, 08 Oct 2026 22:44:59 GMT
+    value: Sun, 25 Oct 2026 12:16:21 GMT
   - name: server
     value: uvicorn
   - name: content-length
@@ -38,6 +38,7 @@ when:
   json_body_includes:
   - allow_lineage_change: false
     build_type: manifest
+    deep_overrides: []
     derivation:
       broken: false
       description: dummy
@@ -49,6 +50,7 @@ when:
       pname: repeat_publish_of_existing_package_succeeds
       system: x86_64-linux
       version: 1.0.0
+    direct_inputs: []
     dot_flox_dir: ''
     locked_base_catalog_url: https://github.com/flox/nixpkgs?rev=5e0ca22929f3342b19569b21b2f3462f053e497b
     locked_inputs: {}
@@ -60,7 +62,7 @@ when:
         narSize: 120
         references: []
     narinfos_source_url: daemon://
-    ref: dummy
+    ref: refs/heads/main
     rev: dummy
     rev_count: 0
     rev_date: 2025-01-01T12:00:00Z
@@ -69,14 +71,14 @@ then:
   status: 201
   header:
   - name: date
-    value: Thu, 08 Oct 2026 22:44:59 GMT
+    value: Sun, 25 Oct 2026 12:16:21 GMT
   - name: server
     value: uvicorn
   - name: content-length
-    value: '2'
+    value: '15'
   - name: content-type
     value: application/json
-  body: '{}'
+  body: '{"warnings":[]}'
 ---
 when:
   path: /api/v1/catalog/catalogs/publish_tests_read_write/packages/repeat_publish_of_existing_package_succeeds/publish/info
@@ -86,7 +88,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Thu, 08 Oct 2026 22:44:59 GMT
+    value: Sun, 25 Oct 2026 12:16:21 GMT
   - name: server
     value: uvicorn
   - name: content-length
@@ -101,6 +103,7 @@ when:
   json_body_includes:
   - allow_lineage_change: false
     build_type: manifest
+    deep_overrides: []
     derivation:
       broken: false
       description: dummy
@@ -112,6 +115,7 @@ when:
       pname: repeat_publish_of_existing_package_succeeds
       system: x86_64-linux
       version: 1.0.0
+    direct_inputs: []
     dot_flox_dir: ''
     locked_base_catalog_url: https://github.com/flox/nixpkgs?rev=5e0ca22929f3342b19569b21b2f3462f053e497b
     locked_inputs: {}
@@ -123,7 +127,7 @@ when:
         narSize: 120
         references: []
     narinfos_source_url: daemon://
-    ref: dummy
+    ref: refs/heads/main
     rev: dummy
     rev_count: 0
     rev_date: 2025-01-01T12:00:00Z
@@ -132,11 +136,11 @@ then:
   status: 200
   header:
   - name: date
-    value: Thu, 08 Oct 2026 22:44:59 GMT
+    value: Sun, 25 Oct 2026 12:16:21 GMT
   - name: server
     value: uvicorn
   - name: content-length
-    value: '2'
+    value: '15'
   - name: content-type
     value: application/json
-  body: '{}'
+  body: '{"warnings":[]}'

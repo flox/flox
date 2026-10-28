@@ -198,11 +198,23 @@ gen-unit-data-no-publish force="":
         # (via latest_prod_versions.json). Replay mode leaves the committed
         # baseline untouched so that replayed mocks and the committed baseline
         # remain consistent.
+        # Ask the resolve endpoint, not the package listing: the listing shows
+        # the newest scraped page, which can be hours ahead of the page that
+        # resolution returns, and the tests compare against resolution.
         echo "Extracting latest package versions from production catalog..."
-        python_version=$(curl -s 'https://api.flox.dev/api/v1/catalog/packages/python3' | jq -r '.items[0].version')
-        go_version=$(curl -s 'https://api.flox.dev/api/v1/catalog/packages/go' | jq -r '.items[0].version')
-        poetry_version=$(curl -s 'https://api.flox.dev/api/v1/catalog/packages/poetry' | jq -r '.items[0].version')
-        nodejs_20_version=$(curl -s 'https://api.flox.dev/api/v1/catalog/packages/nodejs_20' | jq -r '.items[0].version')
+        resolved_version() {
+            curl -sS --fail \
+                -A "flox-cli/${FLOX_VERSION}" \
+                -H "authorization: Bearer ${_FLOX_MOCK_RECORDING_TOKEN:?set to record mocks}" \
+                -H 'content-type: application/json' \
+                -d "{\"items\":[{\"descriptors\":[{\"attr_path\":\"$1\",\"install_id\":\"pkg\",\"systems\":[\"${NIX_TARGET_SYSTEM}\"]}],\"name\":\"toplevel\"}]}" \
+                'https://api.flox.dev/api/v1/catalog/resolve' \
+                | jq -r '.items[0].page.packages[0].version'
+        }
+        python_version=$(resolved_version python3)
+        go_version=$(resolved_version go)
+        poetry_version=$(resolved_version poetry)
+        nodejs_20_version=$(resolved_version nodejs_20)
 
         versions_file="{{ TEST_DATA }}/unit_test_generated/latest_prod_versions.json"
         jq -n \
