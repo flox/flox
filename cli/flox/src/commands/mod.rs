@@ -46,6 +46,7 @@ use bpaf::{Args, Bpaf, ParseFailure, Parser, ShellComp};
 use flox_config::{Config, EnvironmentTrust, FLOX_DIR_NAME, TokenStorageMode};
 use flox_core::data::environment_ref::{self, DEFAULT_NAME, RemoteEnvironmentRef};
 use flox_core::floxhub::{DEFAULT_FLOXHUB_URL, Floxhub};
+use flox_core::sentry::stop_sentry_reporting;
 use flox_core::vars::FLOX_DISABLE_METRICS_VAR;
 use flox_events::{EventKind, EventsHub};
 use flox_manifest::interfaces::AsLatestSchema;
@@ -274,6 +275,17 @@ pub struct Interrupted;
 impl FloxArgs {
     /// Initialize the command line by creating an initial FloxBuilder
     pub async fn handle(self, config: Config) -> Result<()> {
+        // Sentry was initialized with the device ID that this command deletes,
+        // and a span of the command would be reported under that ID.
+        // Unbind before the handler's span starts; see `is_telemetry_reset_command`.
+        if self
+            .command
+            .as_ref()
+            .is_some_and(|command| is_telemetry_reset_command(command.subcommand_name()))
+        {
+            stop_sentry_reporting();
+        }
+
         // ensure xdg dirs exist
         tokio::fs::create_dir_all(&config.flox.config_dir).await?;
         tokio::fs::create_dir_all(&config.flox.data_dir).await?;
@@ -454,8 +466,10 @@ impl FloxArgs {
             .as_ref()
             .map(Commands::subcommand_name)
             .unwrap_or("help");
-        // Recording is gated by `is_telemetry_flush_command` — see its doc.
+        // Recording is gated by `is_telemetry_flush_command` and
+        // `is_telemetry_reset_command` — see their docs.
         if !is_telemetry_flush_command(v2_subcommand)
+            && !is_telemetry_reset_command(v2_subcommand)
             && let Err(err) = EventsHub::global().record_command_run(v2_subcommand.to_string())
         {
             debug!(error = %err, "Failed to record v2 cli.command_run event");
@@ -1218,6 +1232,20 @@ pub fn is_detached_side_effect_command(name: &str) -> bool {
 /// change, so keeping it preserves that telemetry.
 pub fn is_telemetry_flush_command(name: &str) -> bool {
     name == "send-telemetry"
+}
+
+/// Whether `name` deletes the device ID. Such a command must not report
+/// anything under the ID it deletes, nor recreate the files it deleted.
+///
+/// - `FloxArgs::handle` neither records its `cli.command_run` event nor leaves
+///   Sentry bound, because a span or event would carry the old ID.
+/// - `send_telemetry::spawn_if_due_with` does not spawn the `send-telemetry`
+///   child: the flush check recreates `metrics-lock` and the legacy buffer,
+///   and the spawn recreates the send-telemetry log.
+///
+/// The `reset-metrics` handler removes the events client for everything else.
+pub fn is_telemetry_reset_command(name: &str) -> bool {
+    name == "reset-metrics"
 }
 
 /// Special command to check for the presence of the `--prefix` flag.
@@ -2048,6 +2076,21 @@ mod detached_predicate_tests {
         assert!(is_telemetry_flush_command("send-telemetry"));
         assert!(!is_telemetry_flush_command("check-for-upgrades"));
         assert!(!is_telemetry_flush_command("install"));
+    }
+
+    /// The reset exclusion matches the name that the parsed `reset-metrics`
+    /// command derives, so renaming either one cannot silently drop it.
+    #[test]
+    fn reset_exclusion_covers_only_the_reset_command() {
+        let reset = flox_args()
+            .to_options()
+            .run_inner(&["reset-metrics"])
+            .unwrap_or_else(|err| panic!("failed to parse reset-metrics: {err:?}"))
+            .command
+            .expect("expected the reset-metrics subcommand");
+        assert!(is_telemetry_reset_command(reset.subcommand_name()));
+        assert!(!is_telemetry_reset_command("send-telemetry"));
+        assert!(!is_telemetry_reset_command("install"));
     }
 }
 

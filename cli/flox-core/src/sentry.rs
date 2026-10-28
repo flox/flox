@@ -59,6 +59,16 @@ pub fn init_sentry(release_name: &str, metrics_uuid: Uuid) -> Option<ClientInitG
     Some(sentry)
 }
 
+/// Stop reporting events and transactions to Sentry for the rest of the process.
+///
+/// Call it before the span or event that must not be reported starts,
+/// because a transaction keeps the client it started with.
+/// It affects the calling thread's hub, which on the main thread is the
+/// process hub that [init_sentry] bound the client to.
+pub fn stop_sentry_reporting() {
+    sentry::Hub::current().bind_client(None);
+}
+
 /// Client options for every flox binary that reports to Sentry, minus the DSN.
 fn client_options(release_name: &str, sentry_env: String) -> ClientOptions {
     ClientOptions {
@@ -143,6 +153,30 @@ mod tests {
             }
         }
         (events, transactions)
+    }
+
+    #[test]
+    fn stopped_reporting_sends_neither_events_nor_transactions() {
+        let options = sentry::apply_defaults(client_options("flox-test", "test".to_string()));
+        let sent_item_counts = [false, true].map(|stopped| {
+            sentry::test::with_captured_envelopes_options(
+                || {
+                    if stopped {
+                        stop_sentry_reporting();
+                    }
+                    sentry::capture_message("error", sentry::Level::Error);
+                    sentry::start_transaction(sentry::TransactionContext::new("transaction", "op"))
+                        .finish();
+                },
+                options.clone(),
+            )
+            .iter()
+            .flat_map(|envelope| envelope.items())
+            .count()
+        });
+
+        // The first count is the control: without stopping, both are sent.
+        assert_eq!(sent_item_counts, [2, 0]);
     }
 
     #[test]
