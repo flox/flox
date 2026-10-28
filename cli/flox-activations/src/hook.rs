@@ -32,6 +32,14 @@
 //! only runs the hook from `PROMPT_COMMAND`, which a fork never evaluates,
 //! and fish has no forked subshells.
 //!
+//! `flox_bin` is the command the user invoked (`flox`, or the path they
+//! typed), not the store path of the running binary: the hook outlives Flox
+//! upgrades, and a bare name resolves through PATH on every run, so an open
+//! shell follows the upgrade instead of calling a binary that cannot read the
+//! environments the new one writes. `command` (and `exec` in tcsh, which only
+//! alias-expands the first word) keeps a user function or alias named `flox`
+//! from injecting output into the text the hook evals.
+//!
 //! Each hook also exports [`PROMPT_HOOK_VERSION_ENV`] =
 //! `<version>:true` at registration time (top level, so it is set before the
 //! first prompt); subshell activations export `<version>:false` instead (see
@@ -51,7 +59,7 @@ pub fn bash_hook(flox_bin: &str) -> String {
         _flox_hook() {{
           local _prev_exit=$?;
           local _flox_vars;
-          _flox_vars="$("{flox_bin}" hook-env --shell bash --shell-pid $$ --invocation-types "${{{FLOX_INVOCATION_TYPES_VAR}:-}}")";
+          _flox_vars="$(command "{flox_bin}" hook-env --shell bash --shell-pid $$ --invocation-types "${{{FLOX_INVOCATION_TYPES_VAR}:-}}")";
           trap -- '' SIGINT;
           eval "$_flox_vars";
           trap - SIGINT;
@@ -81,7 +89,7 @@ pub fn zsh_hook(flox_bin: &str) -> String {
         _flox_hook() {{
           if (( ZSH_SUBSHELL )); then return; fi;
           local _flox_vars;
-          _flox_vars="$("{flox_bin}" hook-env --shell zsh --shell-pid $$ --invocation-types "${{{FLOX_INVOCATION_TYPES_VAR}:-}}")";
+          _flox_vars="$(command "{flox_bin}" hook-env --shell zsh --shell-pid $$ --invocation-types "${{{FLOX_INVOCATION_TYPES_VAR}:-}}")";
           trap -- '' SIGINT;
           eval "$_flox_vars";
           trap - SIGINT;
@@ -131,7 +139,7 @@ pub fn fish_hook(flox_bin: &str) -> String {
         r#"
         set -gx {PROMPT_HOOK_VERSION_ENV} {marker};
         function _flox_hook --on-event fish_prompt;
-            eval ("{flox_bin}" hook-env --shell fish --shell-pid $fish_pid --invocation-types "${FLOX_INVOCATION_TYPES_VAR}" | string collect);
+            eval (command "{flox_bin}" hook-env --shell fish --shell-pid $fish_pid --invocation-types "${FLOX_INVOCATION_TYPES_VAR}" | string collect);
             if test "$FLOX_AUTO_ACTIVATE_FISH_MODE" != "disable_arrow";
                 set -g _flox_pwd_hook_active 1;
             end;
@@ -141,14 +149,14 @@ pub fn fish_hook(flox_bin: &str) -> String {
                 if test "$FLOX_AUTO_ACTIVATE_FISH_MODE" = "eval_after_arrow";
                     set -g _flox_env_again 0;
                 else;
-                    eval ("{flox_bin}" hook-env --shell fish --shell-pid $fish_pid --invocation-types "${FLOX_INVOCATION_TYPES_VAR}" | string collect);
+                    eval (command "{flox_bin}" hook-env --shell fish --shell-pid $fish_pid --invocation-types "${FLOX_INVOCATION_TYPES_VAR}" | string collect);
                 end;
             end;
         end;
         function _flox_hook_preexec --on-event fish_preexec;
             if set -q _flox_env_again;
                 set -e _flox_env_again;
-                eval ("{flox_bin}" hook-env --shell fish --shell-pid $fish_pid --invocation-types "${FLOX_INVOCATION_TYPES_VAR}" | string collect);
+                eval (command "{flox_bin}" hook-env --shell fish --shell-pid $fish_pid --invocation-types "${FLOX_INVOCATION_TYPES_VAR}" | string collect);
             end;
             set -e _flox_pwd_hook_active;
         end;

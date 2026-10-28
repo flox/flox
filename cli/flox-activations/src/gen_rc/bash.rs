@@ -420,7 +420,7 @@ mod tests {
             _flox_hook() {
               local _prev_exit=$?;
               local _flox_vars;
-              _flox_vars="$("/flox" hook-env --shell bash --shell-pid $$ --invocation-types "${_FLOX_INVOCATION_TYPES:-}")";
+              _flox_vars="$(command "/flox" hook-env --shell bash --shell-pid $$ --invocation-types "${_FLOX_INVOCATION_TYPES:-}")";
               trap -- '' SIGINT;
               eval "$_flox_vars";
               trap - SIGINT;
@@ -469,7 +469,7 @@ mod tests {
             _flox_hook() {
               local _prev_exit=$?;
               local _flox_vars;
-              _flox_vars="$("/flox" hook-env --shell bash --shell-pid $$ --invocation-types "${_FLOX_INVOCATION_TYPES:-}")";
+              _flox_vars="$(command "/flox" hook-env --shell bash --shell-pid $$ --invocation-types "${_FLOX_INVOCATION_TYPES:-}")";
               trap -- '' SIGINT;
               eval "$_flox_vars";
               trap - SIGINT;

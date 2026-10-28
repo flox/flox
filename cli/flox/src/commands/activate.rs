@@ -69,7 +69,7 @@ use crate::utils::errors::format_diverged_metadata;
 use crate::utils::events::{env_detail_from_concrete, env_detail_from_concrete_without_lineage};
 use crate::utils::markdown::render_markdown_to_stderr;
 use crate::utils::upgrade_output::{count_upgrade_categories, format_upgrade_summary};
-use crate::utils::{FLOX_ACTIVATIONS_BIN, message};
+use crate::utils::{FLOX_ACTIVATIONS_BIN, FLOX_BIN_FOR_SHELL, message};
 use crate::{Exit, environment_subcommand_metric, subcommand_metric, utils};
 
 #[derive(Debug, Clone, Bpaf)]
@@ -746,10 +746,7 @@ impl ActivateOptions {
             remove_after_reading: true,
             metrics_uuid: flox.metrics_device_uuid,
             disable_hook: config.flox.disable_hook.unwrap_or(false),
-            flox_bin: std::env::current_exe()
-                .ok()
-                .and_then(|p| p.to_str().map(String::from))
-                .unwrap_or_else(|| "flox".to_string()),
+            flox_bin: FLOX_BIN_FOR_SHELL.clone(),
             auto_activate_fish_mode: config.flox.auto_activate_fish_mode,
             announce_activation,
         };
