@@ -70,7 +70,8 @@ pub static FLOX_BIN_FOR_SHELL: LazyLock<String> = LazyLock::new(|| {
 });
 
 /// See [`FLOX_BIN_FOR_SHELL`]. A relative `argv0` is anchored to `cwd` and a
-/// bare one is looked up on `path_env`; neither is canonicalized.
+/// bare one is looked up on `path_env` (relative PATH entries anchored the
+/// same way); neither is canonicalized.
 fn flox_bin_for_shell(
     argv0: Option<OsString>,
     cwd: Option<PathBuf>,
@@ -89,16 +90,23 @@ fn flox_bin_for_shell(
     if argv0.components().count() == 1 {
         // Not found on PATH: keep the bare name, which is still what the
         // user's shell resolved a moment ago.
-        return find_on_path(&argv0, path_env.as_deref())
+        return find_on_path(&argv0, path_env.as_deref(), cwd.as_deref())
             .map_or_else(|| lossy(&argv0), |p| lossy(&p));
     }
     cwd.map_or_else(running_binary, |cwd| lossy(&cwd.join(&argv0)))
 }
 
 /// The first executable file named `name` in the directories of `path_env`,
-/// as the shell would find it.
-fn find_on_path(name: &Path, path_env: Option<&OsStr>) -> Option<PathBuf> {
+/// as the shell would find it. A relative entry (`.`, or an empty entry
+/// meaning the current directory) is anchored to `cwd`, since the hook runs
+/// from other directories later; without a `cwd` such entries are skipped.
+fn find_on_path(name: &Path, path_env: Option<&OsStr>, cwd: Option<&Path>) -> Option<PathBuf> {
     env::split_paths(path_env?)
+        .filter_map(|dir| match (dir.is_absolute(), cwd) {
+            (true, _) => Some(dir),
+            (false, Some(cwd)) => Some(cwd.join(dir)),
+            (false, None) => None,
+        })
         .map(|dir| dir.join(name))
         .find(|candidate| is_executable_file(candidate))
 }
@@ -177,6 +185,24 @@ mod tests {
                 exe()
             ),
             expected.to_string_lossy()
+        );
+    }
+
+    #[test]
+    fn relative_path_entry_is_anchored_to_cwd() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (_, target) = path_with_flox(tmp.path());
+        // `.` as a PATH entry, with cwd set to the directory holding `flox`.
+        let dir = target.parent().unwrap();
+        let path_env = env::join_paths([Path::new(".")]).unwrap();
+        assert_eq!(
+            flox_bin_for_shell(
+                Some("flox".into()),
+                Some(dir.to_path_buf()),
+                Some(path_env),
+                exe()
+            ),
+            dir.join(".").join("flox").to_string_lossy()
         );
     }
 
