@@ -154,10 +154,17 @@ fn merge_login_config(discovered: Option<DiscoveredLoginConfig>) -> Result<Login
     })
 }
 
+/// Run the device grant against `client`.
+///
+/// Without a terminal (`can_prompt` false) there is no Enter key to listen
+/// for, so the URL and code are printed and polled for until the code
+/// expires. That is what lets an agent run the login and relay the URL to
+/// its user, who approves it in a browser.
 pub async fn authorize(
     client: ConfiguredClient,
     audience: Option<&str>,
     floxhub_url: &Url,
+    can_prompt: bool,
 ) -> Result<Credential> {
     let http_client = reqwest::ClientBuilder::new()
         .redirect(redirect::Policy::none())
@@ -199,19 +206,19 @@ pub async fn authorize(
     );
     tokio::pin!(token_future);
 
+    let host = floxhub_url.host_str().unwrap_or(floxhub_url.as_str());
+
     let token_result = match opener {
-        Ok(opener) => {
+        Ok(opener) if can_prompt => {
             let message = formatdoc! {"
-            Logging in to {url}
+            Logging in to {host}
             Your one-time activation code is: {code}
 
             Open this URL in any browser:
             {verification_uri}
 
             Or press Enter to open your default browser...
-            ",
-                url = floxhub_url.host_str().unwrap_or(floxhub_url.as_str()),
-            };
+            "};
 
             debug!(
                 "Waiting for user to enter code (timeout: {}s)",
@@ -251,14 +258,24 @@ pub async fn authorize(
                 token_result = &mut token_future => token_result,
             }
         },
-        Err(e) => {
-            debug!("Unable to open browser: {e}");
+        opener => {
+            if let Err(e) = opener {
+                debug!("Unable to open browser: {e}");
+            }
 
+            // Say that the command keeps running: without a terminal the
+            // caller may be an agent, which otherwise can't tell a login
+            // waiting for approval from a hung one.
             message::plain(formatdoc! {"
-            Go to {verification_uri} in your browser
-
+            Logging in to {host}
             Your one-time activation code is: {code}
-            "
+
+            Open this URL in any browser to approve the login:
+            {verification_uri}
+
+            Waiting for approval. The code expires in {expiry}.
+            ",
+                expiry = format_minutes(details.expires_in()),
             });
 
             token_future.await
@@ -283,6 +300,14 @@ pub async fn authorize(
             .expires_in()
             .map(|expires_in| calculate_expiry(expires_in.as_secs() as i64)),
     })
+}
+
+/// `duration` in whole minutes, rounded up, e.g. "15 minutes".
+fn format_minutes(duration: std::time::Duration) -> String {
+    match duration.as_secs().div_ceil(60) {
+        1 => "1 minute".to_string(),
+        minutes => format!("{minutes} minutes"),
+    }
 }
 
 fn calculate_expiry(expires_in: i64) -> String {
@@ -508,12 +533,6 @@ pub async fn login_flox(
     once: bool,
     storage_pref: TokenStorageMode,
 ) -> Result<String> {
-    // Checked before discovery so a non-interactive invocation fails fast
-    // instead of probing the network first.
-    if !Dialog::can_prompt() {
-        bail!("Cannot prompt for user input")
-    }
-
     let floxhub_url = flox.floxhub.base_url();
     let discovered = discover_login_config(floxhub_url)
         .await
@@ -525,6 +544,7 @@ pub async fn login_flox(
         login_config.oauth_client(),
         login_config.audience.as_deref(),
         floxhub_url,
+        Dialog::can_prompt(),
     )
     .await
     .context("Could not authorize via oauth")?;
