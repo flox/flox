@@ -46,6 +46,9 @@ jobs:
           # store behind for everyone else.
           commit: "${{ github.ref == 'refs/heads/main' }}"
 
+      - name: "Verify Nix store"
+        run: ".github/scripts/verify-nix-store.sh"
+
       - name: "Setup Nix"
         uses: "./.github/actions/common-setup"
         with:
