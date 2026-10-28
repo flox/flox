@@ -421,7 +421,7 @@ jobs:
           sudo pkill -9 nix-daemon 2>/dev/null || true
 
   nix-build:
-    name: "Nix build"
+    name: "Nix build (${{ matrix.system }})"
     # Fork PRs can't access the AWS OIDC / Tailscale secrets this job needs, so
     # it can only fail. The required "Nix build (*)" contexts are posted on the
     # same commit by the maintainer-run community-ci draft PR (CONTRIBUTING.md).
@@ -430,7 +430,10 @@ jobs:
     # See `scope`: `!cancelled()` keeps the pre-existing fork condition as the
     # *only* reason this job is ever skipped.
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-    runs-on: "blacksmith-4vcpu-ubuntu-2404"
+    # Linux builds run on the runner itself, with /nix on a sticky disk.
+    # Darwin builds still run on the Tailscale remote builders, driven
+    # from a small Linux runner.
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
 
     needs:
@@ -442,11 +445,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        system:
-          - "x86_64-linux"
-          - "x86_64-darwin"
-          - "aarch64-linux"
-          - "aarch64-darwin"
+        include:
+          - system: "x86_64-linux"
+            runner: "blacksmith-16vcpu-ubuntu-2404"
+            local: true
+          - system: "x86_64-darwin"
+            runner: "blacksmith-4vcpu-ubuntu-2404"
+            local: false
+          - system: "aarch64-linux"
+            runner: "blacksmith-16vcpu-ubuntu-2404-arm"
+            local: true
+          - system: "aarch64-darwin"
+            runner: "blacksmith-4vcpu-ubuntu-2404"
+            local: false
 
     steps:
       - name: "Checkout"
@@ -454,6 +465,30 @@ jobs:
         # needed for git describe to work
         with:
           fetch-depth: 0
+
+      - name: "Create Nix store mount point"
+        if: ${{ matrix.local }}
+        run: |
+          sudo mkdir -p /nix/store
+          sudo chmod -R 777 /nix
+
+      # One disk per job, so the dev-shell jobs and the two build jobs
+      # never overwrite each other's snapshots.
+      - name: "Mount Nix store"
+        if: ${{ matrix.local }}
+        uses: useblacksmith/stickydisk@74f3f01ab1392726dd6ee06904f0452b0ec1e151 # v1
+        with:
+          key: "${{ github.repository }}-nix-${{ github.job }}-${{ runner.arch }}"
+          path: "/nix"
+          # Only main saves snapshots, so a PR run can never leave a broken
+          # store behind for everyone else.
+          # TODO: drop the head_ref exception before merging; it lets this
+          # PR's own runs save, so it can measure warm builds.
+          commit: "${{ github.ref == 'refs/heads/main' || github.head_ref == 'ci/linux-builds-on-blacksmith' }}"
+
+      - name: "Verify Nix store"
+        if: ${{ matrix.local && needs.scope.outputs.heavy != 'false' }}
+        run: ".github/scripts/verify-nix-store.sh"
 
       - name: "Setup upterm session"
         if: ${{ (true == inputs.enableUpterm) && (inputs.breakOnJob == github.job) }}
@@ -473,11 +508,11 @@ jobs:
           AWS_ACCESS_KEY_ID: "${{ secrets.MANAGED_CACHE_PUBLIC_R2_ACCESS_KEY_ID }}"
           AWS_SECRET_ACCESS_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_R2_SECRET_ACCESS_KEY }}"
           SSH_KEY: "${{ secrets.MANAGED_FLOXBOT_SSH_KEY }}"
-          TAILSCALE_URL: "${{ vars.MANAGED_TAILSCALE_URL }}"
-          TAILSCALE_AUTH_KEY: "${{ secrets.MANAGED_TAILSCALE_AUTH_KEY }}"
-          REMOTE_BUILDERS: "${{ vars.MANAGED_REMOTE_BUILDERS }}"
-          SYSTEM: "${{ matrix.system }}"
-          SETUP_NIX: "false"
+          TAILSCALE_URL: "${{ !matrix.local && vars.MANAGED_TAILSCALE_URL || '' }}"
+          TAILSCALE_AUTH_KEY: "${{ !matrix.local && secrets.MANAGED_TAILSCALE_AUTH_KEY || '' }}"
+          REMOTE_BUILDERS: "${{ !matrix.local && vars.MANAGED_REMOTE_BUILDERS || '' }}"
+          SYSTEM: "${{ !matrix.local && matrix.system || '' }}"
+          SETUP_NIX: "${{ matrix.local }}"
 
       - name: "Configure AWS Credentials"
         if: ${{ needs.scope.outputs.heavy != 'false' }}
@@ -498,27 +533,50 @@ jobs:
           # from there to users, flox-installers, and the bats test builders.
           NIX_SUBSTITUTER: "${{ vars.MANAGED_CACHE_PUBLIC_S3_BUCKET }}"
           NIX_SUBSTITUTER_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_SECRET_KEY }}"
+          # The CI cache (R2), where local builds also push their build-time
+          # closure, so the sticky disk is only an optimization.
+          BUILD_CACHE: "${{ vars.MANAGED_CACHE_PUBLIC_R2_BUCKET }}"
+          AWS_R2_ACCESS_KEY_ID: "${{ secrets.MANAGED_CACHE_PUBLIC_R2_ACCESS_KEY_ID }}"
+          AWS_R2_SECRET_ACCESS_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_R2_SECRET_ACCESS_KEY }}"
         run: |
           export AWS_ACCESS_KEY_ID
           export AWS_SECRET_ACCESS_KEY
           export AWS_SESSION_TOKEN
           export NIX_SUBSTITUTER_KEY
+          export AWS_R2_ACCESS_KEY_ID
+          export AWS_R2_SECRET_ACCESS_KEY
 
           for package in 'packages.${{ matrix.system }}.flox-nix-plugins' 'packages.${{ matrix.system }}.flox-cli' 'packages.${{ matrix.system }}.flox' 'packages.${{ matrix.system }}.flox-cli-tests'; do
             echo "::group::Building $package"
-            ./.github/scripts/remote-execute-nix-build.sh "$package" "$NIX_SUBSTITUTER"
+            if [ "${{ matrix.local }}" = true ]; then
+              ./.github/scripts/local-nix-build.sh "$package" "$NIX_SUBSTITUTER" "$BUILD_CACHE"
+            else
+              ./.github/scripts/remote-execute-nix-build.sh "$package" "$NIX_SUBSTITUTER"
+            fi
             echo "::endgroup::"
           done
 
+      # The sticky-disk post step must unmount /nix to commit the
+      # snapshot; the multi-user nix-daemon keeps the mount busy, so
+      # stop it as the job's last act.
+      - name: "Stop nix-daemon for sticky disk commit"
+        if: ${{ always() && matrix.local }}
+        run: |
+          sudo systemctl stop nix-daemon.socket nix-daemon.service 2>/dev/null || true
+          sudo pkill -9 nix-daemon 2>/dev/null || true
+
   nix-build-crate2nix:
-    name: "crate2nix build"
+    name: "crate2nix build (${{ matrix.system }})"
     # Builds the crate2nix packages the same way `nix-build` builds the crane
     # ones, so the two pipelines can be compared on the same builders.
     #
     # Same fork restriction as `nix-build`: this job needs the AWS OIDC and
     # Tailscale secrets to reach the builders.
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-    runs-on: "blacksmith-4vcpu-ubuntu-2404"
+    # Linux builds run on the runner itself, with /nix on a sticky disk.
+    # Darwin builds still run on the Tailscale remote builders, driven
+    # from a small Linux runner.
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
 
     needs:
@@ -530,11 +588,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        system:
-          - "x86_64-linux"
-          - "x86_64-darwin"
-          - "aarch64-linux"
-          - "aarch64-darwin"
+        include:
+          - system: "x86_64-linux"
+            runner: "blacksmith-16vcpu-ubuntu-2404"
+            local: true
+          - system: "x86_64-darwin"
+            runner: "blacksmith-4vcpu-ubuntu-2404"
+            local: false
+          - system: "aarch64-linux"
+            runner: "blacksmith-16vcpu-ubuntu-2404-arm"
+            local: true
+          - system: "aarch64-darwin"
+            runner: "blacksmith-4vcpu-ubuntu-2404"
+            local: false
 
     steps:
       - name: "Checkout"
@@ -542,6 +608,30 @@ jobs:
         # needed for git describe to work
         with:
           fetch-depth: 0
+
+      - name: "Create Nix store mount point"
+        if: ${{ matrix.local }}
+        run: |
+          sudo mkdir -p /nix/store
+          sudo chmod -R 777 /nix
+
+      # One disk per job, so the dev-shell jobs and the two build jobs
+      # never overwrite each other's snapshots.
+      - name: "Mount Nix store"
+        if: ${{ matrix.local }}
+        uses: useblacksmith/stickydisk@74f3f01ab1392726dd6ee06904f0452b0ec1e151 # v1
+        with:
+          key: "${{ github.repository }}-nix-${{ github.job }}-${{ runner.arch }}"
+          path: "/nix"
+          # Only main saves snapshots, so a PR run can never leave a broken
+          # store behind for everyone else.
+          # TODO: drop the head_ref exception before merging; it lets this
+          # PR's own runs save, so it can measure warm builds.
+          commit: "${{ github.ref == 'refs/heads/main' || github.head_ref == 'ci/linux-builds-on-blacksmith' }}"
+
+      - name: "Verify Nix store"
+        if: ${{ matrix.local && needs.scope.outputs.heavy != 'false' }}
+        run: ".github/scripts/verify-nix-store.sh"
 
       - name: "Setup upterm session"
         if: ${{ (true == inputs.enableUpterm) && (inputs.breakOnJob == github.job) }}
@@ -561,11 +651,11 @@ jobs:
           AWS_ACCESS_KEY_ID: "${{ secrets.MANAGED_CACHE_PUBLIC_R2_ACCESS_KEY_ID }}"
           AWS_SECRET_ACCESS_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_R2_SECRET_ACCESS_KEY }}"
           SSH_KEY: "${{ secrets.MANAGED_FLOXBOT_SSH_KEY }}"
-          TAILSCALE_URL: "${{ vars.MANAGED_TAILSCALE_URL }}"
-          TAILSCALE_AUTH_KEY: "${{ secrets.MANAGED_TAILSCALE_AUTH_KEY }}"
-          REMOTE_BUILDERS: "${{ vars.MANAGED_REMOTE_BUILDERS }}"
-          SYSTEM: "${{ matrix.system }}"
-          SETUP_NIX: "false"
+          TAILSCALE_URL: "${{ !matrix.local && vars.MANAGED_TAILSCALE_URL || '' }}"
+          TAILSCALE_AUTH_KEY: "${{ !matrix.local && secrets.MANAGED_TAILSCALE_AUTH_KEY || '' }}"
+          REMOTE_BUILDERS: "${{ !matrix.local && vars.MANAGED_REMOTE_BUILDERS || '' }}"
+          SYSTEM: "${{ !matrix.local && matrix.system || '' }}"
+          SETUP_NIX: "${{ matrix.local }}"
 
       - name: "Configure AWS Credentials"
         if: ${{ needs.scope.outputs.heavy != 'false' }}
@@ -582,17 +672,37 @@ jobs:
         env:
           NIX_SUBSTITUTER: "${{ vars.MANAGED_CACHE_PUBLIC_S3_BUCKET }}"
           NIX_SUBSTITUTER_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_SECRET_KEY }}"
+          # The CI cache (R2), where local builds also push their build-time
+          # closure, so the sticky disk is only an optimization.
+          BUILD_CACHE: "${{ vars.MANAGED_CACHE_PUBLIC_R2_BUCKET }}"
+          AWS_R2_ACCESS_KEY_ID: "${{ secrets.MANAGED_CACHE_PUBLIC_R2_ACCESS_KEY_ID }}"
+          AWS_R2_SECRET_ACCESS_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_R2_SECRET_ACCESS_KEY }}"
         run: |
           export AWS_ACCESS_KEY_ID
           export AWS_SECRET_ACCESS_KEY
           export AWS_SESSION_TOKEN
           export NIX_SUBSTITUTER_KEY
+          export AWS_R2_ACCESS_KEY_ID
+          export AWS_R2_SECRET_ACCESS_KEY
 
           for package in 'packages.${{ matrix.system }}.crate2nix-flox' 'packages.${{ matrix.system }}.crate2nix-flox-activations' 'packages.${{ matrix.system }}.crate2nix-nef-lock-catalog'; do
             echo "::group::Building $package"
-            ./.github/scripts/remote-execute-nix-build.sh "$package" "$NIX_SUBSTITUTER"
+            if [ "${{ matrix.local }}" = true ]; then
+              ./.github/scripts/local-nix-build.sh "$package" "$NIX_SUBSTITUTER" "$BUILD_CACHE"
+            else
+              ./.github/scripts/remote-execute-nix-build.sh "$package" "$NIX_SUBSTITUTER"
+            fi
             echo "::endgroup::"
           done
+
+      # The sticky-disk post step must unmount /nix to commit the
+      # snapshot; the multi-user nix-daemon keeps the mount busy, so
+      # stop it as the job's last act.
+      - name: "Stop nix-daemon for sticky disk commit"
+        if: ${{ always() && matrix.local }}
+        run: |
+          sudo systemctl stop nix-daemon.socket nix-daemon.service 2>/dev/null || true
+          sudo pkill -9 nix-daemon 2>/dev/null || true
 
   trigger-flox-installers-workflow:
     name: "Build installers"
