@@ -118,9 +118,8 @@ pub struct ActivateCtx {
     #[serde(default)]
     pub disable_hook: bool,
 
-    /// The command the generated hook code runs to reach flox: the name or
-    /// path the user invoked, not this process's store path, so that an
-    /// upgrade takes effect in shells that are already open.
+    /// The command the generated hook code runs to reach flox (see
+    /// `FLOX_BIN_FOR_SHELL` in the `flox` crate).
     #[serde(default)]
     pub flox_bin: String,
 
