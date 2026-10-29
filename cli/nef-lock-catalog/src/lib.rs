@@ -31,14 +31,16 @@ pub use lock::build_lock::{
     BuildType,
     LockedInput,
     LockfileError,
+    OverrideInputError,
     PackageClosure,
     ProjectionError,
     StaleLockError,
+    override_input,
     read_lock,
     render_lock,
     write_lock,
 };
-pub use lock::flakeref::NixFlakeref;
+pub use lock::flakeref::{NixFlakeref, PrefetchError};
 pub use lock::lookup::{LockError, lock_references};
 pub use lock::render::render_unresolvable;
 pub use lock::transform::{

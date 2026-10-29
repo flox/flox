@@ -16,6 +16,7 @@ pub(crate) use attr_path::AttrPath;
 pub use attr_path::InvalidAttrPath;
 pub use error::{ImportSite, ScanError};
 use graph::PackageGraph;
+pub(crate) use graph::package_file;
 
 // Must match the pinned base in package-builder/nef/lib/instantiate.nix.
 const BASE_CATALOG_NAME: &str = "nixpkgs";

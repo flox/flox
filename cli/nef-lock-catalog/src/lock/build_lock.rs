@@ -3,13 +3,25 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use flox_core::{Version, WriteError, write_atomically};
-use floxhub_client::{BuildType as ApiBuildType, LockedInputEntry as ApiLockedInputEntry};
+use floxhub_client::{
+    BuildType as ApiBuildType,
+    CatalogClientTrait,
+    LockedInputEntry as ApiLockedInputEntry,
+};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, instrument};
 
-use super::flakeref::{NotAGitSourceError, RawNixFlakerefAttrs};
-use crate::CatalogRef;
+use super::flakeref::{
+    NixFlakeref,
+    NotAGitSourceError,
+    PrefetchError,
+    RawNixFlakerefAttrs,
+    fetch_override,
+};
+use super::lookup::{LockError, lock_references};
 use crate::project::UPDATE_CATALOGS_COMMAND;
+use crate::scan::package_file;
+use crate::{CatalogRef, ScanError, scan_package};
 
 /// Locked source information for a catalog: a package attribute hierarchy with
 /// a locked source per package at its leaves, as returned by the catalog
@@ -146,6 +158,104 @@ impl BuildLock {
     pub fn direct_inputs(&self) -> &BTreeSet<String> {
         &self.direct_inputs
     }
+}
+
+/// Replace the source of the locked input `reference` selects in `lock` with
+/// `flakeref`, the lock's side of `nix build --override-input`.
+///
+/// `reference` selects the most specific locked input covering it, as
+/// projection does. A wildcard reference is refused. The overriding
+/// source is fetched and the selected package in it is scanned. Catalog
+/// references the lock does not cover are resolved through `client` and
+/// added to the lock. Entries already in the lock and the direct inputs
+/// are kept.
+pub async fn override_input(
+    lock: &mut BuildLock,
+    client: &impl CatalogClientTrait,
+    reference: &CatalogRef,
+    flakeref: &NixFlakeref,
+) -> Result<(), OverrideInputError> {
+    if reference.path().is_wildcard() {
+        return Err(OverrideInputError::Wildcard(reference.clone()));
+    }
+
+    let all: BTreeMap<&String, &LockedInput> = lock.locked_inputs.iter().collect();
+    // A plain reference selects at most one entry; none for a base
+    // reference or one the lock does not cover.
+    let key = select_roots(&all, &BTreeSet::from([reference.clone()]))
+        .ok()
+        .and_then(|selected| selected.into_iter().next())
+        .ok_or_else(|| OverrideInputError::NotLocked {
+            reference: reference.clone(),
+            locked: lock
+                .locked_inputs
+                .values()
+                .map(|entry| format!("catalogs.{}.{}", entry.catalog, entry.attr_path.join(".")))
+                .collect(),
+        })?;
+
+    let flakeref_url = flakeref.as_url().to_string();
+    let fetched = fetch_override(flakeref).map_err(|source| OverrideInputError::Fetch {
+        flakeref: flakeref_url.clone(),
+        source,
+    })?;
+
+    let pkgs_dir = fetched.pkgs_dir();
+    let rel_file =
+        package_file(&pkgs_dir, &lock.locked_inputs[&key].attr_path).ok_or_else(|| {
+            OverrideInputError::MissingPackage {
+                flakeref: flakeref_url,
+                key: key.clone(),
+                dir: pkgs_dir.clone(),
+            }
+        })?;
+    let scanned = scan_package(&pkgs_dir, rel_file)?;
+
+    let all: BTreeMap<&String, &LockedInput> = lock.locked_inputs.iter().collect();
+    if let Err(StaleLockError { missing }) = select_roots(&all, &scanned) {
+        let added = lock_references(client, missing.into_iter().collect()).await?;
+        for (added_key, entry) in added.locked_inputs {
+            lock.locked_inputs.entry(added_key).or_insert(entry);
+        }
+    }
+
+    lock.locked_inputs
+        .get_mut(&key)
+        .expect("selected from the lock")
+        .source = fetched.source;
+    Ok(())
+}
+
+/// Why [override_input] could not override an input.
+#[derive(Debug, thiserror::Error)]
+pub enum OverrideInputError {
+    #[error("'{0}' is a wildcard; '--override-input' needs a single package")]
+    Wildcard(CatalogRef),
+    #[error(
+        "The catalog lock does not contain '{reference}'.\nIt contains: {}",
+        .locked.join(", ")
+    )]
+    NotLocked {
+        reference: CatalogRef,
+        /// Every input the lock contains, as `catalogs.<catalog>.<attr-path>`.
+        locked: Vec<String>,
+    },
+    #[error("failed to fetch '{flakeref}'")]
+    Fetch {
+        flakeref: String,
+        #[source]
+        source: PrefetchError,
+    },
+    #[error("'{flakeref}' has no package for '{key}' in '{dir}'")]
+    MissingPackage {
+        flakeref: String,
+        key: String,
+        dir: PathBuf,
+    },
+    #[error(transparent)]
+    Scan(#[from] ScanError),
+    #[error(transparent)]
+    Lock(#[from] LockError),
 }
 
 /// References a lock was asked to cover but does not contain: the lock is
@@ -480,11 +590,12 @@ pub fn write_lock(lock: &BuildLock, path: impl AsRef<Path>) -> Result<(), Lockfi
 mod tests {
     use std::collections::HashMap;
 
-    use floxhub_client::LockedInputEntry;
+    use floxhub_client::client::test_helpers::{client_config, new_noop};
+    use floxhub_client::{FloxhubClient, LockedInputEntry};
 
     use super::*;
     use crate::lock::transform::build_lock_from_locked_inputs;
-    use crate::test_helpers::{nef_entry as entry, references};
+    use crate::test_helpers::{nef_entry as entry, project_with_expressions, references};
 
     /// A lock whose direct inputs are exactly the given canonical keys
     /// (`<catalog>/<attr-path>`, the server's keying — see
@@ -901,6 +1012,179 @@ mod tests {
                 .unwrap()
                 .contains("\"build_type\": \"nef\"")
         );
+    }
+
+    /// A NEF project holding `expressions`, and a flakeref to it.
+    fn override_project(expressions: &[(&str, &str)]) -> (tempfile::TempDir, NixFlakeref) {
+        let (project, _dot_flox, _pkgs_dir) = project_with_expressions(expressions);
+        // Nix refuses a path input with a symlinked component, such as
+        // `/tmp` on macOS.
+        let flakeref = NixFlakeref::from_path(project.path().canonicalize().unwrap()).unwrap();
+        (project, flakeref)
+    }
+
+    /// Assert that `source` points at the NEF project in `project`. Nix adds
+    /// fields that depend on the fetch, such as `lastModified`, which are not
+    /// compared.
+    fn assert_overridden_by(source: &RawNixFlakerefAttrs, project: &tempfile::TempDir) {
+        let source = serde_json::to_value(source).unwrap();
+        assert_eq!(
+            serde_json::json!({
+                "type": source["type"],
+                "path": source["path"],
+                "dir": source["dir"],
+            }),
+            serde_json::json!({
+                "type": "path",
+                "path": project.path().canonicalize().unwrap(),
+                "dir": ".flox",
+            })
+        );
+    }
+
+    const NO_REFERENCES: &str = "{ runCommand }: runCommand \"pkg\" { } \"\"";
+
+    /// The override replaces the selected entry's source, which the derived
+    /// `catalogs` tree then carries. Other entries and the direct inputs are
+    /// unchanged. The no-op client fails any request, so none is made.
+    #[tokio::test]
+    async fn override_input_replaces_the_source_of_the_selected_entry() {
+        let mut lock = lock_with(&["myorg/hello", "myorg/world"]);
+        let untouched = lock.locked_inputs["myorg/world"].clone();
+        let (project, flakeref) = override_project(&[("hello.nix", NO_REFERENCES)]);
+
+        override_input(
+            &mut lock,
+            &new_noop(),
+            &CatalogRef::new_unchecked("catalogs.myorg.hello"),
+            &flakeref,
+        )
+        .await
+        .unwrap();
+
+        assert_overridden_by(&lock.locked_inputs["myorg/hello"].source, &project);
+        assert_eq!(lock.locked_inputs["myorg/world"], untouched);
+        assert_eq!(
+            lock.direct_inputs,
+            BTreeSet::from(["myorg/hello".to_string(), "myorg/world".to_string()])
+        );
+        assert_eq!(
+            crate::build_catalog_trees(&lock).unwrap()["myorg"]["packages"]["entries"]["hello"]["source"],
+            serde_json::to_value(&lock.locked_inputs["myorg/hello"].source).unwrap()
+        );
+    }
+
+    /// A wildcard is refused before the source is fetched, and the lock is
+    /// unchanged.
+    #[tokio::test]
+    async fn override_input_refuses_a_wildcard() {
+        let mut lock = lock_with(&["myorg/hello", "myorg/world"]);
+        let before = serde_json::to_value(&lock).unwrap();
+        let flakeref = NixFlakeref::from_path("/nonexistent/flox-override-source").unwrap();
+
+        let err = override_input(
+            &mut lock,
+            &new_noop(),
+            &CatalogRef::new_unchecked("catalogs.myorg.*"),
+            &flakeref,
+        )
+        .await
+        .expect_err("a wildcard is refused");
+
+        assert!(
+            matches!(err, OverrideInputError::Wildcard(_)),
+            "expected Wildcard, got {err:?}"
+        );
+        assert_eq!(serde_json::to_value(&lock).unwrap(), before);
+    }
+
+    /// References the lock does not contain are refused before the source
+    /// is fetched: the flakeref names a path that does not exist, so a
+    /// fetch would fail differently.
+    #[tokio::test]
+    async fn override_input_refuses_references_the_lock_does_not_contain() {
+        let flakeref = NixFlakeref::from_path("/nonexistent/flox-override-source").unwrap();
+        for reference in ["catalogs.myorg.missing", "catalogs.nixpkgs.hello"] {
+            let mut lock = lock_with(&["myorg/hello", "other/tool"]);
+            let err = override_input(
+                &mut lock,
+                &new_noop(),
+                &CatalogRef::new_unchecked(reference),
+                &flakeref,
+            )
+            .await
+            .expect_err("the lock does not contain the reference");
+
+            let OverrideInputError::NotLocked { locked, .. } = err else {
+                panic!("expected NotLocked, got {err:?}");
+            };
+            assert_eq!(locked, vec![
+                "catalogs.myorg.hello".to_string(),
+                "catalogs.other.tool".to_string()
+            ]);
+        }
+    }
+
+    /// A reference the overriding source adds is resolved and added to the
+    /// lock. The overridden entry stays the only direct input.
+    #[tokio::test]
+    async fn override_input_resolves_references_the_override_adds() {
+        let server = httpmock::MockServer::start_async().await;
+        let mock = server.mock(|when, then| {
+            when.method("POST")
+                .path("/api/v1/catalog/build-inputs/lookup");
+            then.status(200).json_body(
+                serde_json::from_str::<serde_json::Value>(include_str!(
+                    "../../test_data/build_inputs_lookup/success.json"
+                ))
+                .unwrap(),
+            );
+        });
+        let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        let mut lock = lock_with(&["other/tool"]);
+        let (project, flakeref) =
+            override_project(&[("tool.nix", "{ catalogs }: catalogs.myorg.hello")]);
+
+        override_input(
+            &mut lock,
+            &client,
+            &CatalogRef::new_unchecked("catalogs.other.tool"),
+            &flakeref,
+        )
+        .await
+        .unwrap();
+
+        mock.assert();
+        assert_overridden_by(&lock.locked_inputs["other/tool"].source, &project);
+        assert_eq!(
+            lock.locked_inputs["myorg/hello"].locked_inputs_hash,
+            "sha256-success-fixture"
+        );
+        assert_eq!(
+            lock.direct_inputs,
+            BTreeSet::from(["other/tool".to_string()])
+        );
+    }
+
+    /// References the lock already covers are not looked up again, and
+    /// their entries are kept.
+    #[tokio::test]
+    async fn override_input_keeps_entries_the_lock_covers() {
+        let mut lock = lock_with(&["myorg/hello", "other/tool"]);
+        let covered = lock.locked_inputs["myorg/hello"].clone();
+        let (_project, flakeref) =
+            override_project(&[("tool.nix", "{ catalogs }: catalogs.myorg.hello")]);
+
+        override_input(
+            &mut lock,
+            &new_noop(),
+            &CatalogRef::new_unchecked("catalogs.other.tool"),
+            &flakeref,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(lock.locked_inputs["myorg/hello"], covered);
     }
 
     #[test]

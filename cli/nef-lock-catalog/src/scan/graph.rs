@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use flox_core::canonical_path::CanonicalPath;
 use tracing::warn;
@@ -157,15 +157,40 @@ fn package_key(rel_file: &Path) -> String {
     key.to_string_lossy().into_owned()
 }
 
+/// The package file an attr-path names under `dir`, relative to `dir`.
+///
+/// Following the `dirToAttrs` convention, each component of `components` is
+/// resolved against `dir` in turn: a regular `<comp>.nix` is a package file
+/// (and shadows a same-named directory); a `<comp>/default.nix` is a package
+/// directory; a directory with no `default.nix` is an attribute set that is
+/// descended into. Components past the package file are attributes within it
+/// and are ignored.
+///
+/// `None` means the attr-path names nothing on disk.
+pub(crate) fn package_file(dir: &Path, components: &[String]) -> Option<PathBuf> {
+    let mut rel = PathBuf::new();
+    for comp in components {
+        let file = rel.join(format!("{comp}.nix"));
+        if dir.join(&file).is_file() {
+            return Some(file);
+        }
+        rel.push(comp);
+        let default = rel.join("default.nix");
+        if dir.join(&default).is_file() {
+            return Some(default);
+        }
+        if !dir.join(&rel).is_dir() {
+            return None;
+        }
+    }
+    None
+}
+
 /// Resolve a dependency attr-path to the package file it names and analyze it.
 ///
 /// `components` is the dependency's attr-path: the first element is the
-/// dependency argument, the rest are members selected on it. Following the
-/// `dirToAttrs` convention, each component is resolved against `dir` in turn:
-/// a regular `<comp>.nix` is a package file (and shadows a same-named
-/// directory); a `<comp>/default.nix` is a package directory; a directory with
-/// no `default.nix` is an attribute set that is descended into. Components past
-/// the package file are attributes within it and are ignored.
+/// dependency argument, the rest are members selected on it. The file is
+/// found by [package_file].
 ///
 /// `Ok(None)` means the argument names nothing on disk, which is how an
 /// argument NEF satisfies from nixpkgs looks. A file that does resolve but
@@ -175,24 +200,9 @@ fn try_resolve_dependency_argument(
     components: &[String],
     root_attributes: &HashSet<String>,
 ) -> Result<Option<FileInfo>, ScanError> {
-    let mut cur = dir.to_path_buf();
-    for comp in components {
-        let file = cur.join(format!("{comp}.nix"));
-        if file.is_file() {
-            return read_and_analyze(&file, root_attributes).map(Some);
-        }
-        let sub = cur.join(comp);
-        let default = sub.join("default.nix");
-        if default.is_file() {
-            return read_and_analyze(&default, root_attributes).map(Some);
-        }
-        if sub.is_dir() {
-            cur = sub;
-            continue;
-        }
-        return Ok(None);
-    }
-    Ok(None)
+    package_file(dir, components)
+        .map(|file| read_and_analyze(&dir.join(file), root_attributes))
+        .transpose()
 }
 
 /// Read and analyze one resolved package file.
