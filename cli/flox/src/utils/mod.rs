@@ -5,7 +5,9 @@ use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
 
+use flox_activations::hook::tcsh_alias_can_embed;
 use flox_core::util::default_nix_env_vars;
+use shell_gen::ShellWithPath;
 
 pub mod active_environments;
 pub mod catalog_lock;
@@ -88,12 +90,35 @@ fn flox_bin_for_shell(
         return lossy(&argv0);
     }
     if argv0.components().count() == 1 {
-        // Not found on PATH: keep the bare name, which is still what the
-        // user's shell resolved a moment ago.
+        // The shell searched this same PATH, so a miss means the name was
+        // set by a wrapper and would not work from the hook either.
         return find_on_path(&argv0, path_env.as_deref(), cwd.as_deref())
-            .map_or_else(|| lossy(&argv0), |p| lossy(&p));
+            .map_or_else(running_binary, |p| lossy(&p));
     }
     cwd.map_or_else(running_binary, |cwd| lossy(&cwd.join(&argv0)))
+}
+
+/// The command the prompt hook embeds for `shell`: [`FLOX_BIN_FOR_SHELL`],
+/// unless the shell is tcsh and its alias body cannot carry that path (see
+/// [`flox_activations::hook::tcsh_hook`]). The hook then pins this process's binary, as it did before
+/// argv[0] was used, and that shell needs a restart after an upgrade.
+pub fn flox_bin_for_hook(shell: &ShellWithPath) -> String {
+    flox_bin_for_hook_with(
+        matches!(shell, ShellWithPath::Tcsh(_)),
+        &FLOX_BIN_FOR_SHELL,
+        env::current_exe().ok(),
+    )
+}
+
+/// See [`flox_bin_for_hook`].
+fn flox_bin_for_hook_with(is_tcsh: bool, for_shell: &str, exe: Option<PathBuf>) -> String {
+    if !is_tcsh || tcsh_alias_can_embed(for_shell) {
+        return for_shell.to_string();
+    }
+    exe.map_or_else(
+        || for_shell.to_string(),
+        |exe| exe.to_string_lossy().into_owned(),
+    )
 }
 
 /// The first executable file named `name` in the directories of `path_env`,
@@ -207,7 +232,7 @@ mod tests {
     }
 
     #[test]
-    fn bare_name_not_on_path_is_kept() {
+    fn bare_name_not_on_path_falls_back_to_the_running_binary() {
         let tmp = tempfile::tempdir().unwrap();
         let path_env = env::join_paths([tmp.path()]).unwrap();
         assert_eq!(
@@ -217,7 +242,21 @@ mod tests {
                 Some(path_env),
                 exe()
             ),
-            "flox"
+            "/nix/store/abc-flox/bin/.flox-wrapped"
+        );
+    }
+
+    #[test]
+    fn tcsh_falls_back_to_the_running_binary_for_a_path_it_cannot_embed() {
+        let for_shell = "/opt/it's/flox";
+        assert_eq!(
+            flox_bin_for_hook_with(true, for_shell, exe()),
+            "/nix/store/abc-flox/bin/.flox-wrapped"
+        );
+        assert_eq!(flox_bin_for_hook_with(false, for_shell, exe()), for_shell);
+        assert_eq!(
+            flox_bin_for_hook_with(true, "/opt/with space/flox", exe()),
+            "/opt/with space/flox"
         );
     }
 
