@@ -18,6 +18,7 @@ pub use attr_path::InvalidAttrPath;
 pub use deep_overrides::deep_override_attr_paths_in;
 pub use error::{ImportSite, ScanError};
 use graph::PackageGraph;
+pub(crate) use graph::package_file;
 
 // Must match the pinned base in package-builder/nef/lib/instantiate.nix.
 const BASE_CATALOG_NAME: &str = "nixpkgs";
