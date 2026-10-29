@@ -138,19 +138,26 @@ impl RawNixFlakerefAttrs {
     }
 }
 
-/// Keep unknown git attributes out of the derived `catalogs` tree.
-/// The NEF passes this value to `builtins.fetchTree` and
-/// `builtins.flakeRefToString` (`package-builder/nef/lib/instantiate.nix`),
-/// which reject attributes they do not recognize. The lock and API payloads
-/// retain those attributes separately.
-impl From<&crate::lock::build_lock::GitSource> for RawNixFlakerefAttrs {
-    fn from(value: &crate::lock::build_lock::GitSource) -> Self {
-        Self::new_unchecked(json!({
-            "type": value.type_,
-            "url": value.url,
-            "rev": value.rev,
-            "ref": value.ref_,
-            "dir": value.dir,
-        }))
+/// A catalog-resolved source is stored as the catalog returned it.
+impl From<floxhub_client::LockedGitSource> for RawNixFlakerefAttrs {
+    fn from(value: floxhub_client::LockedGitSource) -> Self {
+        Self::new_unchecked(serde_json::to_value(value).expect("serializes to a JSON object"))
+    }
+}
+
+/// A source that is not a locked git source, such as one overridden for a
+/// build, cannot be submitted to the catalog.
+#[derive(Debug, thiserror::Error)]
+#[error("not a locked git source: {0}")]
+pub struct NotAGitSourceError(Value);
+
+impl TryFrom<&RawNixFlakerefAttrs> for floxhub_client::LockedGitSource {
+    type Error = NotAGitSourceError;
+
+    fn try_from(value: &RawNixFlakerefAttrs) -> Result<Self, Self::Error> {
+        if value.0.get("type").and_then(Value::as_str) != Some("git") {
+            return Err(NotAGitSourceError(value.0.clone()));
+        }
+        serde_json::from_value(value.0.clone()).map_err(|_| NotAGitSourceError(value.0.clone()))
     }
 }

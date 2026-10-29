@@ -29,7 +29,6 @@ impl Display for CatalogId {
 pub use lock::build_lock::{
     BuildLock,
     BuildType,
-    GitSource,
     LockedInput,
     LockfileError,
     PackageClosure,

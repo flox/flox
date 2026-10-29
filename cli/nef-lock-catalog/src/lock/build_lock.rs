@@ -3,14 +3,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use flox_core::{Version, WriteError, write_atomically};
-use floxhub_client::{
-    BuildType as ApiBuildType,
-    LockedGitSource as ApiLockedGitSource,
-    LockedInputEntry as ApiLockedInputEntry,
-};
+use floxhub_client::{BuildType as ApiBuildType, LockedInputEntry as ApiLockedInputEntry};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, instrument};
 
+use super::flakeref::{NotAGitSourceError, RawNixFlakerefAttrs};
 use crate::CatalogRef;
 use crate::project::UPDATE_CATALOGS_COMMAND;
 
@@ -25,50 +22,6 @@ pub(crate) enum CatalogLock {
         /// Tree structure of locked packages from FloxHub
         packages: super::tree::PackageTreeNode,
     },
-}
-
-/// A locked git source, as persisted in the on-disk lock.
-///
-/// Separate from the API type so regenerating the client cannot change the
-/// persisted format. The API boundary preserves unknown git attributes
-/// before deserialization would discard them.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct GitSource {
-    pub dir: String,
-    #[serde(rename = "ref")]
-    pub ref_: String,
-    pub rev: String,
-    #[serde(rename = "type")]
-    pub type_: String,
-    pub url: String,
-    #[serde(flatten)]
-    pub extra: BTreeMap<String, serde_json::Value>,
-}
-
-impl From<ApiLockedGitSource> for GitSource {
-    fn from(value: ApiLockedGitSource) -> Self {
-        Self {
-            dir: value.dir,
-            ref_: value.ref_,
-            rev: value.rev,
-            type_: value.type_,
-            url: value.url,
-            extra: value.extra,
-        }
-    }
-}
-
-impl From<&GitSource> for ApiLockedGitSource {
-    fn from(value: &GitSource) -> Self {
-        Self {
-            dir: value.dir.clone(),
-            ref_: value.ref_.clone(),
-            rev: value.rev.clone(),
-            type_: value.type_.clone(),
-            url: value.url.clone(),
-            extra: value.extra.clone(),
-        }
-    }
 }
 
 /// Persist a catalog input independently of the generated API client.
@@ -117,7 +70,7 @@ pub struct LockedInput {
     pub version: Option<String>,
     #[serde(default)]
     pub build: Option<String>,
-    pub source: GitSource,
+    pub source: RawNixFlakerefAttrs,
 }
 
 impl From<ApiLockedInputEntry> for LockedInput {
@@ -136,9 +89,11 @@ impl From<ApiLockedInputEntry> for LockedInput {
     }
 }
 
-impl From<&LockedInput> for ApiLockedInputEntry {
-    fn from(value: &LockedInput) -> Self {
-        Self {
+impl TryFrom<&LockedInput> for ApiLockedInputEntry {
+    type Error = NotAGitSourceError;
+
+    fn try_from(value: &LockedInput) -> Result<Self, Self::Error> {
+        Ok(Self {
             attr_path: value.attr_path.clone(),
             build_type: value.build_type.into(),
             catalog: value.catalog.clone(),
@@ -146,9 +101,9 @@ impl From<&LockedInput> for ApiLockedInputEntry {
             locked_inputs_hash: value.locked_inputs_hash.clone(),
             version: value.version.clone(),
             build: value.build.clone(),
-            source: (&value.source).into(),
+            source: (&value.source).try_into()?,
             deep_overrides: value.deep_overrides.clone(),
-        }
+        })
     }
 }
 
@@ -284,6 +239,14 @@ pub enum ProjectionError {
     /// A dependency cycle reachable from a selected root.
     #[error("dependency cycle: {}", .path.join(" -> "))]
     Cycle { path: Vec<String> },
+    /// A reachable entry's source is not a locked git source, e.g. one
+    /// overridden for a build.
+    #[error("'{key}' cannot be published")]
+    NotAGitSource {
+        key: String,
+        #[source]
+        source: NotAGitSourceError,
+    },
 }
 
 /// The selected roots and reachable inputs for one published package.
@@ -368,7 +331,14 @@ impl BuildLock {
                             .locked_inputs
                             .get(&key)
                             .expect("looked up when the frame was pushed");
-                        closure.insert(key, entry.into());
+                        let entry =
+                            entry
+                                .try_into()
+                                .map_err(|source| ProjectionError::NotAGitSource {
+                                    key: key.clone(),
+                                    source,
+                                })?;
+                        closure.insert(key, entry);
                     },
                 }
             }
@@ -545,7 +515,7 @@ mod tests {
             direct_inputs: vec!["myorg/hello".to_string()],
             locked_inputs: BTreeMap::from([(
                 "myorg/hello".to_string(),
-                LockedInputEntry::from(&lock.locked_inputs["myorg/hello"]),
+                LockedInputEntry::try_from(&lock.locked_inputs["myorg/hello"]).unwrap(),
             )]),
         });
     }
@@ -934,6 +904,18 @@ mod tests {
     }
 
     #[test]
+    fn project_package_refuses_a_source_that_is_not_git() {
+        let mut lock = lock_with(&["myorg/hello"]);
+        lock.locked_inputs.get_mut("myorg/hello").unwrap().source =
+            RawNixFlakerefAttrs::new_unchecked(serde_json::json!({"type": "path", "path": "/src"}));
+
+        let err = lock
+            .project_package(&references(&["catalogs.myorg.hello"]))
+            .expect_err("a path source cannot be projected");
+        assert!(matches!(err, ProjectionError::NotAGitSource { key, .. } if key == "myorg/hello"));
+    }
+
+    #[test]
     fn source_extras_survive_into_the_projected_closure() {
         let mut with_extra = entry("myorg", &["hello"]);
         with_extra
@@ -988,7 +970,7 @@ mod tests {
             closure.locked_inputs,
             lock.locked_inputs
                 .iter()
-                .map(|(key, entry)| (key.clone(), entry.into()))
+                .map(|(key, entry)| (key.clone(), entry.try_into().unwrap()))
                 .collect(),
         );
     }
@@ -1027,7 +1009,7 @@ mod tests {
             let restored = read_lock(&path).unwrap();
             assert_eq!(restored.locked_inputs, lock.locked_inputs);
             assert_eq!(
-                LockedInputEntry::from(&restored.locked_inputs["myorg/hello"]),
+                LockedInputEntry::try_from(&restored.locked_inputs["myorg/hello"]).unwrap(),
                 input,
             );
         }

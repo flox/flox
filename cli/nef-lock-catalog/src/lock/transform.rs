@@ -86,7 +86,7 @@ fn materialize_entries<'a>(
             .add_package_source(
                 entry.attr_path.clone(),
                 entry.build_type.into(),
-                (&entry.source).into(),
+                entry.source.clone(),
                 entry.deep_overrides.clone().unwrap_or_default(),
             )
             .with_context(|| {
@@ -298,44 +298,6 @@ mod tests {
         assert_eq!(
             value["catalogs"]["myorg"]["packages"]["entries"]["hello"]["deep_overrides"],
             json!([["setMakeScope", "makeScopeDependency"]])
-        );
-    }
-
-    #[test]
-    fn source_extras_survive_the_transform() {
-        let mut source = git_source("https://example.com/repo", "abc");
-        source
-            .extra
-            .insert("narHash".to_string(), json!("sha256-abc123"));
-        let locked = HashMap::from([(
-            "myorg/hello".to_string(),
-            entry("myorg", &["hello"], BuildType::Nef, source),
-        )]);
-
-        let lock = build_lock_from_locked_inputs(locked, [&"myorg/hello".to_string()])
-            .expect("transform succeeds");
-
-        assert_eq!(
-            lock.locked_inputs["myorg/hello"].source.extra["narHash"],
-            json!("sha256-abc123")
-        );
-        assert!(
-            build_catalog_trees(&lock).unwrap()["myorg"]["packages"]["entries"]["hello"]["source"]
-                .get("narHash")
-                .is_none()
-        );
-        // PJ-2: compare the entire tree's serialized bytes with the v1 shape.
-        let expected = json!({"myorg": {"type": "floxhub", "packages": {
-            "type": "package_set", "entries": {"hello": {
-                "type": "package", "build_type": "nef", "source": {
-                    "type": "git", "url": "https://example.com/repo",
-                    "rev": "abc", "ref": "refs/heads/main", "dir": "."
-                }
-            }}
-        }}});
-        assert_eq!(
-            serde_json::to_vec(&build_catalog_trees(&lock).unwrap()).unwrap(),
-            serde_json::to_vec(&expected).unwrap()
         );
     }
 
