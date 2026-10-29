@@ -118,6 +118,12 @@ impl BuildLockGuard {
     pub fn is_existing(&self) -> bool {
         self.committed
     }
+
+    /// The lock, to change before the builder-facing file is written, such
+    /// as by `--override-input`. The committed lock is not changed.
+    pub fn build_lock_mut(&mut self) -> &mut BuildLock {
+        &mut self.lock
+    }
 }
 
 impl Drop for BuildLockGuard {
