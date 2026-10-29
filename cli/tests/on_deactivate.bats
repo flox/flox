@@ -212,8 +212,8 @@ EOF
   assert_failure
   assert_output --partial "Running hook.on-activate failed"
 
-  # The state dir is only removed after any sweep has finished, so the marker
-  # would exist by now had the hook run.
+  # Wait for the renamed cleanup directory too, so any hook would have
+  # finished before checking its side effects.
   wait_for_activations "$PROJECT_DIR"
   assert [ ! -e "$MARKER" ]
 }
