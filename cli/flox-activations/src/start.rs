@@ -27,7 +27,7 @@ use nix::sys::wait::{WaitPidFlag, WaitStatus, waitpid};
 use nix::unistd::{Pid, getpid};
 use signal_hook::consts::{SIGCHLD, SIGUSR1};
 use signal_hook::iterator::Signals;
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 use uuid::Uuid;
 
 use crate::attach_diff::assemble_activate_command;
@@ -104,11 +104,50 @@ pub fn start(
         wait_for_executive(exec_pid, signals)?;
     }
 
+    // A start whose hook.on-activate failed never reaches ready, so there is
+    // no hook.on-deactivate bookend to close: remove the start here rather
+    // than leaving it to the executive's sweep. If removal fails, the start
+    // is recovered as abandoned once this process exits.
+    if let Err(err) = run_activate_script(
+        context,
+        subsystem_verbosity,
+        vars_from_env,
+        &start_state_dir,
+    ) {
+        if let Err(cleanup_err) = discard_failed_start(
+            &start_id,
+            &context.activation_state_dir,
+            activations_json_path,
+        ) {
+            warn!(%cleanup_err, ?start_id, "failed to remove start after hook.on-activate failed");
+        }
+        return Err(err);
+    }
+
+    // Re-acquire lock to mark ready
+    let (activations_opt, lock) = read_activations_json(activations_json_path)?;
+    let mut activations = activations_opt.expect("state.json should exist");
+    activations.set_ready(&start_id);
+    write_activations_json(&activations, activations_json_path, lock)?;
+
+    Ok(StartOrAttachResult::Start { start_id })
+}
+
+/// Run the activate script for a new start, which runs hook.on-activate.
+///
+/// Fails if the script exits nonzero or stops before writing its completion
+/// marker.
+fn run_activate_script(
+    context: &ActivateCtx,
+    subsystem_verbosity: u32,
+    vars_from_env: &VarsFromEnvironment,
+    start_state_dir: &Path,
+) -> Result<()> {
     let mut start_command = assemble_activate_command(
         context,
         subsystem_verbosity,
         vars_from_env.clone(),
-        &start_state_dir,
+        start_state_dir,
     );
     debug!("spawning activate script: {:?}", start_command);
     let status = start_command.spawn()?.wait()?;
@@ -126,13 +165,31 @@ pub fn start(
             - 'exec' commands, which should be run in a subshell: '(exec command)'"});
     }
 
-    // Re-acquire lock to mark ready
-    let (activations_opt, lock) = read_activations_json(activations_json_path)?;
-    let mut activations = activations_opt.expect("state.json should exist");
-    activations.set_ready(&start_id);
-    write_activations_json(&activations, activations_json_path, lock)?;
+    Ok(())
+}
 
-    Ok(StartOrAttachResult::Start { start_id })
+/// Remove a start whose hook.on-activate failed from state.json, along with
+/// its state directory.
+///
+/// The state directory is removed under the lock and before state.json is
+/// written, so a failure leaves the start listed for abandoned-start
+/// recovery rather than leaking the directory.
+fn discard_failed_start(
+    start_id: &StartIdentifier,
+    activation_state_dir: &Path,
+    activations_json_path: &Path,
+) -> Result<()> {
+    let (activations_opt, lock) = read_activations_json(activations_json_path)?;
+
+    // Nothing to clean up if the activation state was removed from under us.
+    let Some(mut activations) = activations_opt else {
+        return Ok(());
+    };
+
+    start_id.remove_start_state_dir(activation_state_dir)?;
+    activations.remove_failed_start(start_id);
+    write_activations_json(&activations, activations_json_path, lock)?;
+    Ok(())
 }
 
 /// Start services with a new process-compose instance.

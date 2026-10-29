@@ -31,8 +31,10 @@ const HOOK_ON_DEACTIVATE: &str = "activate.d/hook-on-deactivate";
 /// `hook.on-deactivate` first.
 ///
 /// The `orphaned` list must come from
-/// `ActivationState::remove_orphaned_starts`, called under the state.json
-/// lock and persisted so a start is only ever handed to this sweep once. The
+/// `ActivationState::remove_orphaned_starts` (or `drain_starts` at terminal
+/// teardown), called under the state.json lock and persisted so a start is
+/// only ever handed to this sweep once. Both return only starts that reached
+/// ready, so every start here completed hook.on-activate. The
 /// lock must be dropped before calling this: the hook has no timeout and must
 /// not block new activations.
 pub fn sweep_orphaned_starts(
@@ -100,11 +102,11 @@ fn run_hook_script(
     let start_state_dir = start_id.start_state_dir(activation_state_dir)?;
 
     // Replay the activation's environment so the hook sees variables
-    // exported by hook.on-activate. A start without a usable trace never got
-    // through activation, so its bookend never opened; skip.
+    // exported by hook.on-activate. Only starts that reached ready are swept,
+    // so the trace is expected to exist.
     let vars_from_env = VarsFromEnvironment::get()?;
-    let env_trace = EnvTrace::from_state_dir(&start_state_dir)
-        .context("start has no usable env trace; hook.on-activate never completed")?;
+    let env_trace =
+        EnvTrace::from_state_dir(&start_state_dir).context("start has no usable env trace")?;
     let attach_diff = AttachDiff::new(
         attach_ctx,
         Some(project),

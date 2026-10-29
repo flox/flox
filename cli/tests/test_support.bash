@@ -269,6 +269,26 @@ common_file_teardown() {
 
 teardown_file() { common_file_teardown; }
 
+# Check the original path before expanding the cleanup glob so a concurrent
+# rename cannot make both checks miss the state directory.
+activation_cleanup_pending() {
+  local state_dir="${1?}"
+  if [ -d "$state_dir" ]; then
+    return 0
+  fi
+
+  # Match rename_state_for_removal's Path::with_extension, including projects
+  # whose names contain dots.
+  local state_name="${state_dir##*/}"
+  local cleanup_dir
+  for cleanup_dir in "${state_dir%/*}/${state_name%.*}.cleanup."*; do
+    if [ -d "$cleanup_dir" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 # Wait for all activations started by the current test to be cleaned up by the
 # executive. Detects activations from the per-test `FLOX_CACHE_DIR`
 # that is created by `setup_isolated_flox`. This is safe to call before the
@@ -292,18 +312,11 @@ wait_for_activations() {
 
   activation_state_dir="$("$FLOX_BIN" activation-state -d "$project_dir")"
 
-  # This could cause false-positives if there are no activations at
-  # all but we have some tests in suites that use `wait_for_activations` and
-  # don't perform activations.
-  if [ ! -d "$activation_state_dir" ]; then
-    echo "wait_for_activations: activation state dir $activation_state_dir is not a directory" >&2
-    return 0
-  fi
-
-  # Wait for all state.json files to be empty
+  # Cleanup renames the state directory before running on-deactivate hooks.
+  # Wait for both the original and renamed directories to disappear.
   local tries=0
   while true; do
-    if [ ! -d "$activation_state_dir" ]; then
+    if ! activation_cleanup_pending "$activation_state_dir"; then
       echo "wait_for_activations: all activations cleaned up, exiting" >&2
       break
     fi
@@ -316,7 +329,7 @@ wait_for_activations() {
 
       # Cleanup finishing between the check above and here means the wait was
       # only just too short, which is worth knowing before reading any further.
-      if [ ! -d "$activation_state_dir" ]; then
+      if ! activation_cleanup_pending "$activation_state_dir"; then
         echo "(cleaned up while this output was being collected)" >&3
       fi
 

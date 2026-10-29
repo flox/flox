@@ -195,3 +195,25 @@ EOF
   # wait_for_activations fails the test if it doesn't.
   wait_for_activations "$PROJECT_DIR"
 }
+
+# bats test_tags=on-deactivate:on-activate-failure
+@test "hook.on-deactivate does not run when hook.on-activate fails" {
+  project_setup
+  cat <<EOF | "$FLOX_BIN" edit -f -
+schema-version = "1.15.0"
+
+[options]
+
+[hook]
+on-activate = "exit 1"
+on-deactivate = 'echo "ran" >> "$MARKER"'
+EOF
+  run "$FLOX_BIN" activate -- true
+  assert_failure
+  assert_output --partial "Running hook.on-activate failed"
+
+  # Wait for the renamed cleanup directory too, so any hook would have
+  # finished before checking its side effects.
+  wait_for_activations "$PROJECT_DIR"
+  assert [ ! -e "$MARKER" ]
+}
