@@ -211,7 +211,8 @@ pub fn fish_hook(flox_bin: &str) -> String {
 // and `$`, `"`, `` ` `` and `!` cannot be escaped at all in that position
 // (verified empirically). A backslash before whitespace and backslashes does
 // survive, which covers the realistic case of an install directory with a
-// space in its name.
+// space in its name. For a path `tcsh_alias_can_embed` rejects, the caller
+// passes the running binary's store path instead, which is always safe.
 pub fn tcsh_hook(flox_bin: &str) -> String {
     let flox_bin = tcsh_escape_in_alias(flox_bin);
     // A tcsh alias body must be a single line, so assemble the statements here
@@ -247,4 +248,9 @@ fn tcsh_escape_in_alias(word: &str) -> String {
         escaped.push(c);
     }
     escaped
+}
+
+/// Whether [`tcsh_hook`] can embed `word` at all; see the comment above it.
+pub fn tcsh_alias_can_embed(word: &str) -> bool {
+    !word.contains(['\'', '"', '$', '`', '!'])
 }
