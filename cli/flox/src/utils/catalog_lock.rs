@@ -118,6 +118,12 @@ impl BuildLockGuard {
     pub fn is_existing(&self) -> bool {
         self.committed
     }
+
+    /// The lock, to change before the builder-facing file is written, such
+    /// as by `--override-input`. The committed lock is not changed.
+    pub fn build_lock_mut(&mut self) -> &mut BuildLock {
+        &mut self.lock
+    }
 }
 
 impl Drop for BuildLockGuard {
@@ -157,7 +163,14 @@ pub mod test_helpers {
 #[cfg(test)]
 mod tests {
     use floxhub_client::client::test_helpers::new_noop;
-    use nef_lock_catalog::{UPDATE_CATALOGS_COMMAND, scan_package};
+    use nef_lock_catalog::{
+        CatalogRef,
+        NixFlakeref,
+        UPDATE_CATALOGS_COMMAND,
+        override_input,
+        scan_package,
+    };
+    use serde_json::json;
     use tempfile::tempdir;
 
     use super::*;
@@ -258,6 +271,49 @@ mod tests {
         let references = scan_package(&pkgs_dir, "hello.nix").unwrap();
         let closure = lock.build_lock().project_package(&references).unwrap();
         assert_eq!(closure.direct_inputs, vec!["myorg/hello".to_string()]);
+    }
+
+    /// An override reaches the builder file and leaves the committed lock
+    /// byte-identical.
+    #[tokio::test]
+    async fn override_reaches_the_builder_file_not_the_committed_lock() {
+        let (_project, dot_flox, _pkgs_dir) =
+            project_with_expression("{ catalogs }: catalogs.myorg.hello");
+        std::fs::write(catalog_lockfile_path(&dot_flox), COMMITTED_LOCK).unwrap();
+        let (override_project, _override_dot_flox, _override_pkgs_dir) =
+            project_with_expression("{ runCommand }: runCommand \"hello\" { } \"\"");
+        // Nix refuses a path input with a symlinked component, such as
+        // `/tmp` on macOS.
+        let override_path = override_project.path().canonicalize().unwrap();
+        let flakeref = NixFlakeref::from_path(&override_path).unwrap();
+
+        let mut lock =
+            BuildLockGuard::new_existing_or_ephemeral(&new_noop(), &dot_flox, ["hello.nix"], false)
+                .await
+                .unwrap();
+        override_input(
+            lock.build_lock_mut(),
+            &new_noop(),
+            &"catalogs.myorg.hello".parse::<CatalogRef>().unwrap(),
+            &flakeref,
+        )
+        .await
+        .unwrap();
+        let builder_lock: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(lock.write_builder_file().unwrap()).unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(catalog_lockfile_path(&dot_flox)).unwrap(),
+            COMMITTED_LOCK
+        );
+        // Nix adds fields that depend on the fetch, such as `lastModified`.
+        let source = &builder_lock["catalogs"]["myorg"]["packages"]["entries"]["hello"]["source"];
+        assert_eq!(
+            json!({ "type": source["type"], "path": source["path"], "dir": source["dir"] }),
+            json!({ "type": "path", "path": override_path, "dir": ".flox" })
+        );
     }
 
     #[tokio::test]

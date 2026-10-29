@@ -27,11 +27,14 @@ use tracing::debug;
 
 use super::build::{
     BaseCatalogUrlSelect,
+    OverrideInput,
     TargetChoice,
+    apply_override_inputs,
     base_catalog_url_select,
     base_nixpkgs_url_from_url_select,
     check_git_tracking_for_expression_builds,
     describe_nixpkgs,
+    override_input,
     packages_to_build,
     prefetch_expression_build_flake_ref,
     prefetch_flake_ref,
@@ -85,6 +88,9 @@ pub struct Develop {
     )]
     shell_command: Option<String>,
 
+    #[bpaf(external(override_input), many)]
+    override_inputs: Vec<OverrideInput>,
+
     /// The package to develop, as defined by its expression file in '.flox/pkgs/'.
     /// If omitted, the project's sole such package is used.
     /// With more than one, prompts for one when running interactively,
@@ -108,6 +114,7 @@ impl Develop {
             environment,
             base_catalog_url_select,
             shell_command,
+            override_inputs,
             package,
         } = opts;
 
@@ -160,6 +167,12 @@ impl Develop {
             env.dot_flox_path(),
             [&rel_file_path],
             flox.retain_diagnostic_tempfiles,
+        )
+        .await?;
+        apply_override_inputs(
+            &flox.floxhub_client,
+            catalog_lock.build_lock_mut(),
+            &override_inputs,
         )
         .await?;
 
