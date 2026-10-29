@@ -9,10 +9,10 @@
   # cache.flox.dev advertises no priority and would otherwise rank above
   # cache.nixos.org (priority 40) for every path both caches carry.
   # priority=50 restricts it to the paths only it serves: flox closures.
-  # The r2.dev cache holds what CI builds and is tried last.
+  # cache.floxsdlc.com holds what CI builds and is tried last.
   nixConfig.extra-substituters = [
     "https://cache.flox.dev?priority=50"
-    "https://pub-f1da612c46404bae9d9c52ca18359583.r2.dev?priority=60"
+    "https://cache.floxsdlc.com?priority=60"
   ];
   nixConfig.extra-trusted-public-keys = [
     "flox-cache-public-1:7F4OyH7ZCnFhcze3fJdfyXYLQw/aV7GEed86nQ7IsOs="
