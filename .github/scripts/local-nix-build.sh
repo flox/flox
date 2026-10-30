@@ -13,12 +13,26 @@ function main() {
   shift
   local -r build_cache=${1:-}
 
+  # MEASUREMENT (ci/linux-builds-measure only): this leg races a builder
+  # leg on the same commit, so neither may download what the other built.
+  # Skip the flake's substituters (cache.flox.dev, where the builder leg
+  # publishes) and push nothing.
+  local -a measure_args=()
+  if [ -n "${MEASURE_ONLY:-}" ]; then
+    measure_args=(--option accept-flake-config false)
+  fi
+
   local drv
   drv="$(nix build \
+    "${measure_args[@]}" \
     --no-link \
     --print-build-logs \
     --json \
     ".#$attr_path" | jq -r '.[0].drvPath')"
+
+  if [ -n "${MEASURE_ONLY:-}" ]; then
+    return
+  fi
 
   # Same signing key that common-setup wrote for the CI cache.
   nix copy \

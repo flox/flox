@@ -24,6 +24,11 @@ on:
         required: false
         type: string
         default: "bryanhonof,tomberek,garbas"
+      stickyDiskSuffix:
+        description: "MEASUREMENT: suffix for the build jobs' sticky disk key (a new suffix = a cold disk)"
+        required: false
+        type: string
+        default: ""
   push:
     branches:
       - "main"
@@ -151,7 +156,7 @@ jobs:
     # already passed them in the merge queue before landing on main), so a
     # job-level skip here is safe. Nothing here needs to warm a cache the way
     # `cli-unit`'s Cargo cache does, so the whole job is skipped outright.
-    if: ${{ !cancelled() && !(github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+    if: ${{ !cancelled() && !(github.event_name == 'push' && github.ref == 'refs/heads/main') && github.ref != 'refs/heads/ci/linux-builds-measure' }}
 
     strategy:
       fail-fast: false
@@ -232,7 +237,7 @@ jobs:
     # skip (see `nix-plugins-dev`): `push` isn't subject to required status
     # checks, so this doesn't hit the branch-protection issue `scope` guards
     # against.
-    if: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+    if: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/main') && github.ref != 'refs/heads/ci/linux-builds-measure' }}
     runs-on: "blacksmith-8vcpu-ubuntu-2204"
     timeout-minutes: 15 # eval only tests should be plenty fast
 
@@ -313,7 +318,7 @@ jobs:
     # via `restore-keys`. Only the "CLI Unit Tests" and "Check schemas" steps
     # (the actually-redundant parts, already covered by the merge queue) are
     # skipped on push to main below.
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && github.ref != 'refs/heads/ci/linux-builds-measure' }}
 
     permissions:
       id-token: write # Needed for CodeCov
@@ -421,7 +426,7 @@ jobs:
           sudo pkill -9 nix-daemon 2>/dev/null || true
 
   nix-build:
-    name: "Nix build (${{ matrix.system }})"
+    name: "Nix build (${{ matrix.system }}, ${{ matrix.local && 'runner' || 'builder' }})"
     # Fork PRs can't access the AWS OIDC / Tailscale secrets this job needs, so
     # it can only fail. The required "Nix build (*)" contexts are posted on the
     # same commit by the maintainer-run community-ci draft PR (CONTRIBUTING.md).
@@ -449,7 +454,13 @@ jobs:
           - system: "x86_64-linux"
             runner: "blacksmith-16vcpu-ubuntu-2404"
             local: true
+          - system: "x86_64-linux"
+            runner: "blacksmith-4vcpu-ubuntu-2404"
+            local: false
           - system: "x86_64-darwin"
+            runner: "blacksmith-4vcpu-ubuntu-2404"
+            local: false
+          - system: "aarch64-linux"
             runner: "blacksmith-4vcpu-ubuntu-2404"
             local: false
           - system: "aarch64-linux"
@@ -478,13 +489,13 @@ jobs:
         if: ${{ matrix.local }}
         uses: useblacksmith/stickydisk@74f3f01ab1392726dd6ee06904f0452b0ec1e151 # v1
         with:
-          key: "${{ github.repository }}-nix-${{ github.job }}-${{ runner.arch }}"
+          key: "${{ github.repository }}-nix-${{ github.job }}-${{ runner.arch }}${{ inputs.stickyDiskSuffix }}"
           path: "/nix"
           # Only main saves snapshots, so a PR run can never leave a broken
           # store behind for everyone else.
           # TODO: drop the head_ref exception before merging; it lets this
           # PR's own runs save, so it can measure warm builds.
-          commit: "${{ github.ref == 'refs/heads/main' || github.head_ref == 'ci/linux-builds-on-blacksmith' }}"
+          commit: "${{ github.ref == 'refs/heads/main' || github.head_ref == 'ci/linux-builds-on-blacksmith' || github.ref == 'refs/heads/ci/linux-builds-measure' }}"
 
       - name: "Verify Nix store"
         if: ${{ matrix.local && needs.scope.outputs.heavy != 'false' }}
@@ -549,7 +560,7 @@ jobs:
           for package in 'packages.${{ matrix.system }}.flox-nix-plugins' 'packages.${{ matrix.system }}.flox-cli' 'packages.${{ matrix.system }}.flox' 'packages.${{ matrix.system }}.flox-cli-tests'; do
             echo "::group::Building $package"
             if [ "${{ matrix.local }}" = true ]; then
-              ./.github/scripts/local-nix-build.sh "$package" "$NIX_SUBSTITUTER" "$BUILD_CACHE"
+              MEASURE_ONLY=1 ./.github/scripts/local-nix-build.sh "$package" "$NIX_SUBSTITUTER" "$BUILD_CACHE"
             else
               ./.github/scripts/remote-execute-nix-build.sh "$package" "$NIX_SUBSTITUTER"
             fi
@@ -566,7 +577,7 @@ jobs:
           sudo pkill -9 nix-daemon 2>/dev/null || true
 
   nix-build-crate2nix:
-    name: "crate2nix build (${{ matrix.system }})"
+    name: "crate2nix build (${{ matrix.system }}, ${{ matrix.local && 'runner' || 'builder' }})"
     # Builds the crate2nix packages the same way `nix-build` builds the crane
     # ones, so the two pipelines can be compared on the same builders.
     #
@@ -592,7 +603,13 @@ jobs:
           - system: "x86_64-linux"
             runner: "blacksmith-16vcpu-ubuntu-2404"
             local: true
+          - system: "x86_64-linux"
+            runner: "blacksmith-4vcpu-ubuntu-2404"
+            local: false
           - system: "x86_64-darwin"
+            runner: "blacksmith-4vcpu-ubuntu-2404"
+            local: false
+          - system: "aarch64-linux"
             runner: "blacksmith-4vcpu-ubuntu-2404"
             local: false
           - system: "aarch64-linux"
@@ -621,13 +638,13 @@ jobs:
         if: ${{ matrix.local }}
         uses: useblacksmith/stickydisk@74f3f01ab1392726dd6ee06904f0452b0ec1e151 # v1
         with:
-          key: "${{ github.repository }}-nix-${{ github.job }}-${{ runner.arch }}"
+          key: "${{ github.repository }}-nix-${{ github.job }}-${{ runner.arch }}${{ inputs.stickyDiskSuffix }}"
           path: "/nix"
           # Only main saves snapshots, so a PR run can never leave a broken
           # store behind for everyone else.
           # TODO: drop the head_ref exception before merging; it lets this
           # PR's own runs save, so it can measure warm builds.
-          commit: "${{ github.ref == 'refs/heads/main' || github.head_ref == 'ci/linux-builds-on-blacksmith' }}"
+          commit: "${{ github.ref == 'refs/heads/main' || github.head_ref == 'ci/linux-builds-on-blacksmith' || github.ref == 'refs/heads/ci/linux-builds-measure' }}"
 
       - name: "Verify Nix store"
         if: ${{ matrix.local && needs.scope.outputs.heavy != 'false' }}
@@ -688,7 +705,7 @@ jobs:
           for package in 'packages.${{ matrix.system }}.crate2nix-flox' 'packages.${{ matrix.system }}.crate2nix-flox-activations' 'packages.${{ matrix.system }}.crate2nix-nef-lock-catalog'; do
             echo "::group::Building $package"
             if [ "${{ matrix.local }}" = true ]; then
-              ./.github/scripts/local-nix-build.sh "$package" "$NIX_SUBSTITUTER" "$BUILD_CACHE"
+              MEASURE_ONLY=1 ./.github/scripts/local-nix-build.sh "$package" "$NIX_SUBSTITUTER" "$BUILD_CACHE"
             else
               ./.github/scripts/remote-execute-nix-build.sh "$package" "$NIX_SUBSTITUTER"
             fi
@@ -794,7 +811,7 @@ jobs:
     # Also skipped outright on push to main; already run in the merge queue.
     # See `nix-plugins-dev` for why a job-level skip is safe here specifically
     # for the `push` event.
-    if: ${{ !cancelled() && needs.nix-build.result == 'success' && !(github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+    if: ${{ !cancelled() && needs.nix-build.result == 'success' && !(github.event_name == 'push' && github.ref == 'refs/heads/main') && github.ref != 'refs/heads/ci/linux-builds-measure' }}
 
     strategy:
       fail-fast: false
