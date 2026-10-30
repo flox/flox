@@ -155,7 +155,7 @@ impl Develop {
                 unreachable!("manifest builds are refused before the eval")
             },
         };
-        let catalog_lock = BuildLockGuard::new_existing_or_ephemeral(
+        let mut catalog_lock = BuildLockGuard::new_existing_or_ephemeral(
             &flox.floxhub_client,
             env.dot_flox_path(),
             [&rel_file_path],
@@ -185,7 +185,7 @@ impl Develop {
         .eval(
             &base_nixpkgs_url,
             std::slice::from_ref(&target),
-            catalog_lock.path(),
+            catalog_lock.write_builder_file()?,
             None,
         )?;
         // eval has finished reading CATALOG_LOCKFILE through make and Nix.

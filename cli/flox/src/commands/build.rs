@@ -371,7 +371,7 @@ impl Build {
             None => None,
         };
 
-        let catalog_lock = BuildLockGuard::for_expression_builds(
+        let mut catalog_lock = BuildLockGuard::for_expression_builds(
             &flox.floxhub_client,
             env.dot_flox_path(),
             &expression_lock_rel_paths,
@@ -392,7 +392,10 @@ impl Build {
             expression_nixpkgs_flakeref.as_ref(),
             &FLOX_INTERPRETER,
             &target_names,
-            catalog_lock.as_ref().map(|lock| lock.path()),
+            catalog_lock
+                .as_mut()
+                .map(BuildLockGuard::write_builder_file)
+                .transpose()?,
             None,
             system_override,
         );
