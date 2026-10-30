@@ -12,12 +12,18 @@ All tools (`just`, `cargo`, `rustc`, `bats`, etc.) are provided by the Nix dev
 shell. They are not available on bare PATH.
 
 ```bash
-nix develop                    # Enter interactive dev shell
+nix develop --accept-flake-config   # Enter interactive dev shell
 ```
+
+**Pass `--accept-flake-config`.** The flake's binary caches are declared in
+`flake.nix` `nixConfig`, which Nix ignores without this flag in non-interactive
+use. It then builds dev tools such as GHC (for `nixfmt`) from source, which can
+take hours instead of seconds.
 
 **For agents and non-interactive use**, commands need access to the dev shell.
 If `IN_NIX_SHELL` is set, you are already inside a dev shell and can run
-commands directly. Otherwise, wrap every command with `nix develop -c`:
+commands directly. Otherwise, wrap every command with
+`nix develop --accept-flake-config -c`:
 
 ```bash
 # Already in dev shell (IN_NIX_SHELL is set) — run directly:
@@ -25,10 +31,10 @@ just build
 cargo clippy --all
 git push origin my-branch
 
-# Not in dev shell — wrap with nix develop -c:
-nix develop -c just build
-nix develop -c cargo clippy --all
-nix develop -c git push origin my-branch
+# Not in dev shell — wrap with nix develop --accept-flake-config -c:
+nix develop --accept-flake-config -c just build
+nix develop --accept-flake-config -c cargo clippy --all
+nix develop --accept-flake-config -c git push origin my-branch
 ```
 
 **This includes git operations** — `git push` and `git commit` trigger
