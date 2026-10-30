@@ -5295,6 +5295,8 @@ rec {
           {
             name = "oauth2";
             packageId = "oauth2";
+            usesDefaultFeatures = false;
+            features = [ "reqwest" ];
           }
           {
             name = "path-dedot";
@@ -7183,13 +7185,6 @@ rec {
             packageId = "cfg-if";
           }
           {
-            name = "js-sys";
-            packageId = "js-sys";
-            optional = true;
-            usesDefaultFeatures = false;
-            target = { target, features }: (("wasm32" == target."arch" or null) && (("unknown" == target."os" or null) || ("none" == target."os" or null)) && (builtins.elem "atomics" targetFeatures));
-          }
-          {
             name = "libc";
             packageId = "libc";
             usesDefaultFeatures = false;
@@ -7244,13 +7239,6 @@ rec {
             target = { target, features }: (("wasm32" == target."arch" or null) && ("wasi" == target."os" or null) && ("p2" == target."env" or null));
           }
           {
-            name = "wasm-bindgen";
-            packageId = "wasm-bindgen";
-            optional = true;
-            usesDefaultFeatures = false;
-            target = { target, features }: (("wasm32" == target."arch" or null) && (("unknown" == target."os" or null) || ("none" == target."os" or null)));
-          }
-          {
             name = "windows-targets";
             packageId = "windows-targets 0.52.6";
             target = { target, features }: ((target."windows" or false) && (!("win7" == target."vendor" or null)));
@@ -7260,7 +7248,7 @@ rec {
           "rustc-dep-of-std" = [ "dep:compiler_builtins" "dep:core" ];
           "wasm_js" = [ "dep:wasm-bindgen" "dep:js-sys" ];
         };
-        resolvedDefaultFeatures = [ "std" "wasm_js" ];
+        resolvedDefaultFeatures = [ "std" ];
       };
       "getrandom 0.4.2" = rec {
         crateName = "getrandom";
@@ -8343,11 +8331,6 @@ rec {
             name = "tower-service";
             packageId = "tower-service";
           }
-          {
-            name = "webpki-roots";
-            packageId = "webpki-roots 0.26.11";
-            optional = true;
-          }
         ];
         devDependencies = [
           {
@@ -8384,7 +8367,7 @@ rec {
           "webpki-roots" = [ "dep:webpki-roots" ];
           "webpki-tokio" = [ "webpki-roots" ];
         };
-        resolvedDefaultFeatures = [ "http1" "http2" "log" "logging" "native-tokio" "ring" "rustls-native-certs" "tls12" "webpki-roots" "webpki-tokio" ];
+        resolvedDefaultFeatures = [ "http1" "http2" "log" "logging" "native-tokio" "ring" "rustls-native-certs" "tls12" ];
       };
       "hyper-tls" = rec {
         crateName = "hyper-tls";
@@ -10291,17 +10274,6 @@ rec {
           "forbid_unsafe" = [ "logos-codegen/forbid_unsafe" ];
         };
       };
-      "lru-slab" = rec {
-        crateName = "lru-slab";
-        version = "0.1.2";
-        edition = "2021";
-        sha256 = "0m2139k466qj3bnpk66bwivgcx3z88qkxvlzk70vd65jq373jaqi";
-        libName = "lru_slab";
-        authors = [
-          "Benjamin Saunders <ben.e.saunders@gmail.com>"
-        ];
-
-      };
       "matchers" = rec {
         crateName = "matchers";
         version = "0.2.0";
@@ -11484,7 +11456,7 @@ rec {
           "rustls-tls" = [ "reqwest/rustls-tls" ];
           "ureq" = [ "dep:ureq" ];
         };
-        resolvedDefaultFeatures = [ "default" "reqwest" "rustls-tls" ];
+        resolvedDefaultFeatures = [ "reqwest" ];
       };
       "objc2-core-foundation" = rec {
         crateName = "objc2-core-foundation";
@@ -13154,253 +13126,6 @@ rec {
         ];
 
       };
-      "quinn" = rec {
-        crateName = "quinn";
-        version = "0.11.9";
-        edition = "2021";
-        sha256 = "086gzj666dr3slmlynkvxlndy28hahgl361d6bf93hk3i6ahmqmr";
-        dependencies = [
-          {
-            name = "bytes";
-            packageId = "bytes";
-          }
-          {
-            name = "pin-project-lite";
-            packageId = "pin-project-lite";
-          }
-          {
-            name = "quinn-proto";
-            packageId = "quinn-proto";
-            rename = "proto";
-            usesDefaultFeatures = false;
-          }
-          {
-            name = "quinn-udp";
-            packageId = "quinn-udp";
-            rename = "udp";
-            usesDefaultFeatures = false;
-            features = [ "tracing" ];
-          }
-          {
-            name = "rustc-hash";
-            packageId = "rustc-hash 2.1.1";
-          }
-          {
-            name = "rustls";
-            packageId = "rustls";
-            optional = true;
-            usesDefaultFeatures = false;
-            features = [ "std" ];
-          }
-          {
-            name = "socket2";
-            packageId = "socket2 0.6.1";
-            target = { target, features }: (!((builtins.elem "wasm" target."family") && ("unknown" == target."os" or null)));
-          }
-          {
-            name = "thiserror";
-            packageId = "thiserror 2.0.18";
-          }
-          {
-            name = "tokio";
-            packageId = "tokio";
-            features = [ "sync" ];
-          }
-          {
-            name = "tracing";
-            packageId = "tracing";
-            usesDefaultFeatures = false;
-            features = [ "std" ];
-          }
-          {
-            name = "web-time";
-            packageId = "web-time";
-            target = { target, features }: ((builtins.elem "wasm" target."family") && ("unknown" == target."os" or null));
-          }
-        ];
-        buildDependencies = [
-          {
-            name = "cfg_aliases";
-            packageId = "cfg_aliases";
-          }
-        ];
-        devDependencies = [
-          {
-            name = "tokio";
-            packageId = "tokio";
-            features = [ "sync" "rt" "rt-multi-thread" "time" "macros" ];
-          }
-        ];
-        features = {
-          "async-io" = [ "dep:async-io" ];
-          "async-std" = [ "dep:async-std" ];
-          "aws-lc-rs" = [ "proto/aws-lc-rs" ];
-          "aws-lc-rs-fips" = [ "proto/aws-lc-rs-fips" ];
-          "bloom" = [ "proto/bloom" ];
-          "default" = [ "log" "platform-verifier" "runtime-tokio" "rustls-ring" "bloom" ];
-          "futures-io" = [ "dep:futures-io" ];
-          "log" = [ "tracing/log" "proto/log" "udp/log" ];
-          "platform-verifier" = [ "proto/platform-verifier" ];
-          "qlog" = [ "proto/qlog" ];
-          "ring" = [ "proto/ring" ];
-          "runtime-async-std" = [ "async-io" "async-std" ];
-          "runtime-smol" = [ "async-io" "smol" ];
-          "runtime-tokio" = [ "tokio/time" "tokio/rt" "tokio/net" ];
-          "rustls" = [ "rustls-ring" ];
-          "rustls-aws-lc-rs" = [ "dep:rustls" "aws-lc-rs" "proto/rustls-aws-lc-rs" "proto/aws-lc-rs" ];
-          "rustls-aws-lc-rs-fips" = [ "dep:rustls" "aws-lc-rs-fips" "proto/rustls-aws-lc-rs-fips" "proto/aws-lc-rs-fips" ];
-          "rustls-log" = [ "rustls?/logging" ];
-          "rustls-ring" = [ "dep:rustls" "ring" "proto/rustls-ring" "proto/ring" ];
-          "smol" = [ "dep:smol" ];
-        };
-        resolvedDefaultFeatures = [ "ring" "runtime-tokio" "rustls" "rustls-ring" ];
-      };
-      "quinn-proto" = rec {
-        crateName = "quinn-proto";
-        version = "0.11.15";
-        edition = "2021";
-        sha256 = "0gknq1m2b9g3fsndka2gn7f2k45vb0zdssrh1qpkql7cbdf97jsg";
-        libName = "quinn_proto";
-        dependencies = [
-          {
-            name = "bytes";
-            packageId = "bytes";
-          }
-          {
-            name = "getrandom";
-            packageId = "getrandom 0.3.1";
-            usesDefaultFeatures = false;
-            target = { target, features }: ((builtins.elem "wasm" target."family") && ("unknown" == target."os" or null));
-            features = [ "wasm_js" ];
-          }
-          {
-            name = "lru-slab";
-            packageId = "lru-slab";
-          }
-          {
-            name = "rand";
-            packageId = "rand 0.9.5";
-          }
-          {
-            name = "ring";
-            packageId = "ring";
-            optional = true;
-          }
-          {
-            name = "ring";
-            packageId = "ring";
-            target = { target, features }: ((builtins.elem "wasm" target."family") && ("unknown" == target."os" or null));
-            features = [ "wasm32_unknown_unknown_js" ];
-          }
-          {
-            name = "rustc-hash";
-            packageId = "rustc-hash 2.1.1";
-          }
-          {
-            name = "rustls";
-            packageId = "rustls";
-            optional = true;
-            usesDefaultFeatures = false;
-            features = [ "std" ];
-          }
-          {
-            name = "rustls-pki-types";
-            packageId = "rustls-pki-types";
-            target = { target, features }: ((builtins.elem "wasm" target."family") && ("unknown" == target."os" or null));
-            features = [ "web" ];
-          }
-          {
-            name = "slab";
-            packageId = "slab";
-          }
-          {
-            name = "thiserror";
-            packageId = "thiserror 2.0.18";
-          }
-          {
-            name = "tinyvec";
-            packageId = "tinyvec";
-            features = [ "alloc" "alloc" ];
-          }
-          {
-            name = "tracing";
-            packageId = "tracing";
-            usesDefaultFeatures = false;
-            features = [ "std" ];
-          }
-          {
-            name = "web-time";
-            packageId = "web-time";
-            target = { target, features }: ((builtins.elem "wasm" target."family") && ("unknown" == target."os" or null));
-          }
-        ];
-        features = {
-          "arbitrary" = [ "dep:arbitrary" ];
-          "aws-lc-rs" = [ "dep:aws-lc-rs" "aws-lc-rs?/aws-lc-sys" "aws-lc-rs?/prebuilt-nasm" ];
-          "aws-lc-rs-fips" = [ "aws-lc-rs" "aws-lc-rs?/fips" ];
-          "bloom" = [ "dep:fastbloom" ];
-          "default" = [ "rustls-ring" "log" "bloom" ];
-          "log" = [ "tracing/log" ];
-          "platform-verifier" = [ "dep:rustls-platform-verifier" ];
-          "qlog" = [ "dep:qlog" ];
-          "ring" = [ "dep:ring" ];
-          "rustls" = [ "rustls-ring" ];
-          "rustls-aws-lc-rs" = [ "dep:rustls" "rustls?/aws-lc-rs" "aws-lc-rs" ];
-          "rustls-aws-lc-rs-fips" = [ "rustls-aws-lc-rs" "aws-lc-rs-fips" ];
-          "rustls-log" = [ "rustls?/logging" ];
-          "rustls-ring" = [ "dep:rustls" "rustls?/ring" "ring" ];
-        };
-        resolvedDefaultFeatures = [ "ring" "rustls-ring" ];
-      };
-      "quinn-udp" = rec {
-        crateName = "quinn-udp";
-        version = "0.5.14";
-        edition = "2021";
-        sha256 = "1gacawr17a2zkyri0r3m0lc9spzmxbq1by3ilyb8v2mdvjhcdpmd";
-        libName = "quinn_udp";
-        dependencies = [
-          {
-            name = "libc";
-            packageId = "libc";
-          }
-          {
-            name = "once_cell";
-            packageId = "once_cell";
-            target = { target, features }: (target."windows" or false);
-          }
-          {
-            name = "socket2";
-            packageId = "socket2 0.6.1";
-            target = { target, features }: (!((builtins.elem "wasm" target."family") && ("unknown" == target."os" or null)));
-          }
-          {
-            name = "tracing";
-            packageId = "tracing";
-            optional = true;
-            usesDefaultFeatures = false;
-            features = [ "std" ];
-          }
-          {
-            name = "windows-sys";
-            packageId = "windows-sys 0.60.2";
-            target = { target, features }: (target."windows" or false);
-            features = [ "Win32_Foundation" "Win32_System_IO" "Win32_Networking_WinSock" ];
-          }
-        ];
-        buildDependencies = [
-          {
-            name = "cfg_aliases";
-            packageId = "cfg_aliases";
-          }
-        ];
-        features = {
-          "default" = [ "tracing" "log" ];
-          "direct-log" = [ "dep:log" ];
-          "log" = [ "tracing/log" ];
-          "tracing" = [ "dep:tracing" ];
-        };
-        resolvedDefaultFeatures = [ "tracing" ];
-      };
       "quote" = rec {
         crateName = "quote";
         version = "1.0.40";
@@ -14082,22 +13807,6 @@ rec {
             target = { target, features }: (!("wasm32" == target."arch" or null));
           }
           {
-            name = "quinn";
-            packageId = "quinn";
-            optional = true;
-            usesDefaultFeatures = false;
-            target = { target, features }: (!("wasm32" == target."arch" or null));
-            features = [ "rustls" "runtime-tokio" ];
-          }
-          {
-            name = "rustls";
-            packageId = "rustls";
-            optional = true;
-            usesDefaultFeatures = false;
-            target = { target, features }: (!("wasm32" == target."arch" or null));
-            features = [ "std" "tls12" ];
-          }
-          {
             name = "rustls-pki-types";
             packageId = "rustls-pki-types";
             optional = true;
@@ -14139,14 +13848,6 @@ rec {
             packageId = "tokio-native-tls";
             optional = true;
             target = { target, features }: (!("wasm32" == target."arch" or null));
-          }
-          {
-            name = "tokio-rustls";
-            packageId = "tokio-rustls";
-            optional = true;
-            usesDefaultFeatures = false;
-            target = { target, features }: (!("wasm32" == target."arch" or null));
-            features = [ "tls12" ];
           }
           {
             name = "tokio-util";
@@ -14200,12 +13901,6 @@ rec {
             packageId = "web-sys";
             target = { target, features }: ("wasm32" == target."arch" or null);
             features = [ "AbortController" "AbortSignal" "Headers" "Request" "RequestInit" "RequestMode" "Response" "Window" "FormData" "Blob" "BlobPropertyBag" "ServiceWorkerGlobalScope" "RequestCredentials" "File" "ReadableStream" "RequestCache" ];
-          }
-          {
-            name = "webpki-roots";
-            packageId = "webpki-roots 1.0.3";
-            optional = true;
-            target = { target, features }: (!("wasm32" == target."arch" or null));
           }
         ];
         devDependencies = [
@@ -14289,7 +13984,7 @@ rec {
           "system-proxy" = [ "hyper-util/client-proxy-system" ];
           "zstd" = [ "tower-http/decompression-zstd" ];
         };
-        resolvedDefaultFeatures = [ "__rustls" "__rustls-ring" "__tls" "blocking" "charset" "default" "default-tls" "h2" "http2" "json" "rustls-tls" "rustls-tls-webpki-roots" "rustls-tls-webpki-roots-no-provider" "stream" "system-proxy" ];
+        resolvedDefaultFeatures = [ "__tls" "blocking" "charset" "default" "default-tls" "h2" "http2" "json" "stream" "system-proxy" ];
       };
       "reqwest 0.13.4" = rec {
         crateName = "reqwest";
@@ -14635,7 +14330,7 @@ rec {
           "std" = [ "alloc" ];
           "wasm32_unknown_unknown_js" = [ "getrandom/js" ];
         };
-        resolvedDefaultFeatures = [ "alloc" "default" "dev_urandom_fallback" "wasm32_unknown_unknown_js" ];
+        resolvedDefaultFeatures = [ "alloc" "default" "dev_urandom_fallback" ];
       };
       "rnix" = rec {
         crateName = "rnix";
@@ -15204,12 +14899,6 @@ rec {
         libName = "rustls_pki_types";
         dependencies = [
           {
-            name = "web-time";
-            packageId = "web-time";
-            optional = true;
-            target = { target, features }: ((builtins.elem "wasm" target."family") && ("unknown" == target."os" or null));
-          }
-          {
             name = "zeroize";
             packageId = "zeroize";
             optional = true;
@@ -15222,7 +14911,7 @@ rec {
           "web" = [ "web-time" ];
           "web-time" = [ "dep:web-time" ];
         };
-        resolvedDefaultFeatures = [ "alloc" "default" "std" "web" "web-time" ];
+        resolvedDefaultFeatures = [ "alloc" "default" "std" ];
       };
       "rustls-webpki" = rec {
         crateName = "rustls-webpki";
@@ -18460,7 +18149,7 @@ rec {
           "std" = [ "alloc" ];
           "tinyvec_macros" = [ "dep:tinyvec_macros" ];
         };
-        resolvedDefaultFeatures = [ "alloc" "default" "grab_spare_slice" "std" "tinyvec_macros" ];
+        resolvedDefaultFeatures = [ "alloc" "grab_spare_slice" "std" "tinyvec_macros" ];
       };
       "tinyvec_macros" = rec {
         crateName = "tinyvec_macros";
@@ -18678,7 +18367,7 @@ rec {
           "ring" = [ "rustls/ring" ];
           "tls12" = [ "rustls/tls12" ];
         };
-        resolvedDefaultFeatures = [ "logging" "ring" "tls12" ];
+        resolvedDefaultFeatures = [ "logging" "tls12" ];
       };
       "tokio-util" = rec {
         crateName = "tokio-util";
@@ -21236,37 +20925,6 @@ rec {
         ];
 
       };
-      "webpki-roots 0.26.11" = rec {
-        crateName = "webpki-roots";
-        version = "0.26.11";
-        edition = "2021";
-        sha256 = "1agpayg5zzf7m1a01q30jahlgmn5nwggbabdhq0in008pf5c66sj";
-        libName = "webpki_roots";
-        dependencies = [
-          {
-            name = "webpki-roots";
-            packageId = "webpki-roots 1.0.3";
-            rename = "parent";
-          }
-        ];
-
-      };
-      "webpki-roots 1.0.3" = rec {
-        crateName = "webpki-roots";
-        version = "1.0.3";
-        edition = "2021";
-        sha256 = "1f49w0s7f3fgczvjri179wh2a9g8jpkmdi5bi5l8p7ylsb031c9j";
-        libName = "webpki_roots";
-        dependencies = [
-          {
-            name = "rustls-pki-types";
-            packageId = "rustls-pki-types";
-            rename = "pki-types";
-            usesDefaultFeatures = false;
-          }
-        ];
-
-      };
       "winapi" = rec {
         crateName = "winapi";
         version = "0.3.9";
@@ -21315,7 +20973,7 @@ rec {
         dependencies = [
           {
             name = "windows-sys";
-            packageId = "windows-sys 0.59.0";
+            packageId = "windows-sys 0.48.0";
             target = { target, features }: (target."windows" or false);
             features = [ "Win32_Foundation" "Win32_Storage_FileSystem" "Win32_System_Console" "Win32_System_SystemInformation" ];
           }
@@ -23266,7 +22924,7 @@ rec {
           "Win32_Web" = [ "Win32" ];
           "Win32_Web_InternetExplorer" = [ "Win32_Web" ];
         };
-        resolvedDefaultFeatures = [ "Win32" "Win32_Foundation" "Win32_Networking" "Win32_Networking_WinSock" "Win32_Security" "Win32_Storage" "Win32_Storage_FileSystem" "Win32_System" "Win32_System_IO" "Win32_System_Pipes" "Win32_System_WindowsProgramming" "default" ];
+        resolvedDefaultFeatures = [ "Win32" "Win32_Foundation" "Win32_Networking" "Win32_Networking_WinSock" "Win32_Security" "Win32_Storage" "Win32_Storage_FileSystem" "Win32_System" "Win32_System_Console" "Win32_System_IO" "Win32_System_Pipes" "Win32_System_SystemInformation" "Win32_System_WindowsProgramming" "default" ];
       };
       "windows-sys 0.52.0" = rec {
         crateName = "windows-sys";
@@ -23773,7 +23431,7 @@ rec {
           "Win32_Web" = [ "Win32" ];
           "Win32_Web_InternetExplorer" = [ "Win32_Web" ];
         };
-        resolvedDefaultFeatures = [ "Wdk" "Wdk_Foundation" "Wdk_Storage" "Wdk_Storage_FileSystem" "Win32" "Win32_Foundation" "Win32_Networking" "Win32_Networking_WinSock" "Win32_Security" "Win32_Storage" "Win32_Storage_FileSystem" "Win32_System" "Win32_System_Console" "Win32_System_Diagnostics" "Win32_System_Diagnostics_Debug" "Win32_System_IO" "Win32_System_LibraryLoader" "Win32_System_SystemInformation" "Win32_System_Threading" "Win32_System_WindowsProgramming" "default" ];
+        resolvedDefaultFeatures = [ "Wdk" "Wdk_Foundation" "Wdk_Storage" "Wdk_Storage_FileSystem" "Win32" "Win32_Foundation" "Win32_Networking" "Win32_Networking_WinSock" "Win32_Security" "Win32_Storage" "Win32_Storage_FileSystem" "Win32_System" "Win32_System_Console" "Win32_System_Diagnostics" "Win32_System_Diagnostics_Debug" "Win32_System_IO" "Win32_System_LibraryLoader" "Win32_System_Threading" "Win32_System_WindowsProgramming" "default" ];
       };
       "windows-sys 0.60.2" = rec {
         crateName = "windows-sys";

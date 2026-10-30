@@ -8,6 +8,11 @@
 #   depend on it are still substituted.
 # - The bundle doesn't trust the distrusted roots for TLS servers, but does
 #   trust a control root, so the check can't pass by matching nothing.
+# - No crate compiles in its own roots. The system's roots are likely newer
+#   and more trustworthy. A list compiled into the binary, at any version,
+#   also can't pick up the distrust list above or a user's `SSL_CERT_FILE`.
+#   So `Cargo.lock`, which is what dependency scanners read, must not contain
+#   `webpki-roots`.
 {
   lib,
   runCommand,
@@ -41,6 +46,10 @@ let
     crate2nix-flox-core = crate2nix-builds.crateEnvs.flox-core.NIXPKGS_CACERT_BUNDLE_CRT;
     installers = flox.passthru.pkgsFor.cacert.outPath + "/etc/ssl/certs/ca-bundle.crt";
   };
+
+  bundledRoots =
+    lib.filter (package: package.name == "webpki-roots")
+      (lib.importTOML ../Cargo.lock).package;
 in
 assert lib.assertMsg (lib.length (lib.unique (lib.attrValues bundles)) == 1) ''
   flox's packages compile in different CA bundles:
@@ -49,6 +58,14 @@ assert lib.assertMsg (cacert.outPath == stockCacert.outPath) ''
   The package set's cacert is not the stock nixpkgs one, so every package that depends on it is rebuilt:
     package set: ${cacert.outPath}
     nixpkgs:     ${stockCacert.outPath}'';
+assert lib.assertMsg (bundledRoots == [ ]) ''
+  Cargo.lock contains webpki-roots ${
+    lib.concatMapStringsSep ", " (package: package.version) bundledRoots
+  }, which compiles in a fixed snapshot of CA roots.
+  Rust bundled roots aren't allowed, because the system's roots are likely newer and more trustworthy.
+  A list compiled into the binary, at any version, also can't pick up the distrust list or a user's `SSL_CERT_FILE`.
+  Use system roots instead: enable `rustls-tls-native-roots`, or disable the feature that enabled webpki-roots.
+  To find that feature, run 'cargo tree -i webpki-roots --target all -e features'.'';
 runCommand "ca-roots"
   {
     nativeBuildInputs = [ openssl ];
