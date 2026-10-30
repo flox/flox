@@ -142,18 +142,12 @@ pub async fn lock_project_catalog(
 mod tests {
     use floxhub_client::FloxhubClient;
     use floxhub_client::client::test_helpers::{client_config, new_noop};
-    use tempfile::tempdir;
 
     use super::*;
 
     /// A project directory whose single expression is `expression`.
     fn project_with_expression(expression: &str) -> (tempfile::TempDir, PathBuf, PathBuf) {
-        let project = tempdir().unwrap();
-        let dot_flox = project.path().join(".flox");
-        let pkgs_dir = dot_flox.join("pkgs");
-        std::fs::create_dir_all(&pkgs_dir).unwrap();
-        std::fs::write(pkgs_dir.join("hello.nix"), expression).unwrap();
-        (project, dot_flox, pkgs_dir)
+        crate::test_helpers::project_with_expressions(&[("hello.nix", expression)])
     }
 
     #[test]

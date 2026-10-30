@@ -510,31 +510,11 @@ pub fn write_lock(lock: &BuildLock, path: impl AsRef<Path>) -> Result<(), Lockfi
 mod tests {
     use std::collections::HashMap;
 
-    use floxhub_client::{BuildType, LockedGitSource, LockedInputEntry};
+    use floxhub_client::LockedInputEntry;
 
     use super::*;
     use crate::lock::transform::build_lock_from_locked_inputs;
-
-    fn entry(catalog: &str, attr_path: &[&str]) -> LockedInputEntry {
-        LockedInputEntry {
-            attr_path: attr_path.iter().map(|s| s.to_string()).collect(),
-            build_type: BuildType::Nef,
-            catalog: catalog.to_string(),
-            inputs: Some(vec![]),
-            locked_inputs_hash: "sha256-test".to_string(),
-            version: None,
-            build: None,
-            source: LockedGitSource {
-                dir: ".".to_string(),
-                ref_: "refs/heads/main".to_string(),
-                rev: "abc".to_string(),
-                type_: "git".to_string(),
-                url: "https://example.com/repo".to_string(),
-                extra: BTreeMap::new(),
-            },
-            deep_overrides: None,
-        }
-    }
+    use crate::test_helpers::{nef_entry as entry, references};
 
     /// A lock whose direct inputs are exactly the given canonical keys
     /// (`<catalog>/<attr-path>`, the server's keying — see
@@ -551,10 +531,6 @@ mod tests {
             .collect();
         let direct_keys: Vec<String> = keys.iter().map(|key| (*key).to_string()).collect();
         build_lock_from_locked_inputs(locked, direct_keys.iter()).expect("transform succeeds")
-    }
-
-    fn references(refs: &[&str]) -> BTreeSet<CatalogRef> {
-        refs.iter().map(|r| CatalogRef::new_unchecked(r)).collect()
     }
 
     #[test]

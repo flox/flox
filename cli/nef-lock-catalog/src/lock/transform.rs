@@ -116,44 +116,11 @@ pub fn render_builder_lock(lock: &BuildLock) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
-
-    use floxhub_client::{BuildType, LockedGitSource};
+    use floxhub_client::BuildType;
     use serde_json::json;
 
     use super::*;
-
-    /// A locked git source. Locked inputs are only ever tracked as git
-    /// flakerefs, so the typed wire model carries exactly these fields.
-    fn git_source(url: &str, rev: &str) -> LockedGitSource {
-        LockedGitSource {
-            dir: ".".to_string(),
-            ref_: "refs/heads/main".to_string(),
-            rev: rev.to_string(),
-            type_: "git".to_string(),
-            url: url.to_string(),
-            extra: BTreeMap::new(),
-        }
-    }
-
-    fn entry(
-        catalog: &str,
-        attr_path: &[&str],
-        build_type: BuildType,
-        source: LockedGitSource,
-    ) -> LockedInputEntry {
-        LockedInputEntry {
-            attr_path: attr_path.iter().map(|s| s.to_string()).collect(),
-            build_type,
-            catalog: catalog.to_string(),
-            inputs: Some(vec![]),
-            locked_inputs_hash: "sha256-test".to_string(),
-            deep_overrides: None,
-            version: None,
-            build: None,
-            source,
-        }
-    }
+    use crate::test_helpers::{entry, git_source};
 
     #[test]
     fn single_package_single_catalog() {
