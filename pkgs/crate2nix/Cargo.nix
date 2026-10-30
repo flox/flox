@@ -1091,13 +1091,14 @@ rec {
       };
       "anyhow" = rec {
         crateName = "anyhow";
-        version = "1.0.104";
-        edition = "2021";
-        sha256 = "0w34jjcm02p5g9kvsjr1dvpw0zs2fi7igi6nr414fkm5gz85w2ik";
+        version = "1.0.100";
+        edition = "2018";
+        sha256 = "0qbfmw4hhv2ampza1csyvf1jqjs2dgrj29cv3h3sh623c6qvcgm2";
         authors = [
           "David Tolnay <dtolnay@gmail.com>"
         ];
         features = {
+          "backtrace" = [ "dep:backtrace" ];
           "default" = [ "std" ];
         };
         resolvedDefaultFeatures = [ "default" "std" ];
