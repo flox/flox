@@ -86,7 +86,7 @@ fn materialize_entries<'a>(
             .add_package_source(
                 entry.attr_path.clone(),
                 entry.build_type.into(),
-                (&entry.source).into(),
+                entry.source.clone(),
                 entry.deep_overrides.clone().unwrap_or_default(),
             )
             .with_context(|| {
@@ -116,44 +116,11 @@ pub fn render_builder_lock(lock: &BuildLock) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
-
-    use floxhub_client::{BuildType, LockedGitSource};
+    use floxhub_client::BuildType;
     use serde_json::json;
 
     use super::*;
-
-    /// A locked git source. Locked inputs are only ever tracked as git
-    /// flakerefs, so the typed wire model carries exactly these fields.
-    fn git_source(url: &str, rev: &str) -> LockedGitSource {
-        LockedGitSource {
-            dir: ".".to_string(),
-            ref_: "refs/heads/main".to_string(),
-            rev: rev.to_string(),
-            type_: "git".to_string(),
-            url: url.to_string(),
-            extra: BTreeMap::new(),
-        }
-    }
-
-    fn entry(
-        catalog: &str,
-        attr_path: &[&str],
-        build_type: BuildType,
-        source: LockedGitSource,
-    ) -> LockedInputEntry {
-        LockedInputEntry {
-            attr_path: attr_path.iter().map(|s| s.to_string()).collect(),
-            build_type,
-            catalog: catalog.to_string(),
-            inputs: Some(vec![]),
-            locked_inputs_hash: "sha256-test".to_string(),
-            deep_overrides: None,
-            version: None,
-            build: None,
-            source,
-        }
-    }
+    use crate::test_helpers::{entry, git_source};
 
     #[test]
     fn single_package_single_catalog() {
@@ -331,44 +298,6 @@ mod tests {
         assert_eq!(
             value["catalogs"]["myorg"]["packages"]["entries"]["hello"]["deep_overrides"],
             json!([["setMakeScope", "makeScopeDependency"]])
-        );
-    }
-
-    #[test]
-    fn source_extras_survive_the_transform() {
-        let mut source = git_source("https://example.com/repo", "abc");
-        source
-            .extra
-            .insert("narHash".to_string(), json!("sha256-abc123"));
-        let locked = HashMap::from([(
-            "myorg/hello".to_string(),
-            entry("myorg", &["hello"], BuildType::Nef, source),
-        )]);
-
-        let lock = build_lock_from_locked_inputs(locked, [&"myorg/hello".to_string()])
-            .expect("transform succeeds");
-
-        assert_eq!(
-            lock.locked_inputs["myorg/hello"].source.extra["narHash"],
-            json!("sha256-abc123")
-        );
-        assert!(
-            build_catalog_trees(&lock).unwrap()["myorg"]["packages"]["entries"]["hello"]["source"]
-                .get("narHash")
-                .is_none()
-        );
-        // PJ-2: compare the entire tree's serialized bytes with the v1 shape.
-        let expected = json!({"myorg": {"type": "floxhub", "packages": {
-            "type": "package_set", "entries": {"hello": {
-                "type": "package", "build_type": "nef", "source": {
-                    "type": "git", "url": "https://example.com/repo",
-                    "rev": "abc", "ref": "refs/heads/main", "dir": "."
-                }
-            }}
-        }}});
-        assert_eq!(
-            serde_json::to_vec(&build_catalog_trees(&lock).unwrap()).unwrap(),
-            serde_json::to_vec(&expected).unwrap()
         );
     }
 

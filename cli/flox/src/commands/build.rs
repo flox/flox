@@ -33,7 +33,13 @@ use flox_rust_sdk::utils::{CommandExt, FLOX_INTERPRETER};
 use floxhub_client::{BaseCatalogUrl, CatalogClientTrait, FloxhubClientError};
 use indoc::formatdoc;
 use itertools::Itertools;
-use nef_lock_catalog::{NixFlakeref, catalog_lockfile_path, lock_project_catalog};
+use nef_lock_catalog::{
+    BuildLock,
+    CatalogRef,
+    NixFlakeref,
+    catalog_lockfile_path,
+    lock_project_catalog,
+};
 use thiserror::Error;
 use tracing::{debug, instrument, trace};
 use url::Url;
@@ -77,6 +83,47 @@ impl SystemOverride {
     pub fn into_inner(self) -> Option<String> {
         self.system
     }
+}
+
+// `--override-input <input> <flakeref>`, shared by `flox build` and
+// `flox develop`.
+#[derive(Debug, Bpaf, Clone)]
+#[bpaf(adjacent)]
+#[allow(clippy::manual_non_exhaustive)]
+pub struct OverrideInput {
+    /// Build against a different source for a catalog input
+    #[bpaf(long("override-input"))]
+    _option: (),
+
+    /// The catalog input to override, as referenced in Nix expressions
+    /// (e.g. 'catalogs.myorg.hello')
+    #[bpaf(positional("input"))]
+    pub reference: CatalogRef,
+
+    /// The flakeref of the source to use instead (e.g. 'path:../hello')
+    #[bpaf(positional("flakeref"))]
+    pub flakeref: String,
+}
+
+/// Apply `--override-input` flags to the lock a build consumes, before the
+/// lock is written for the builder.
+pub(crate) async fn apply_override_inputs(
+    client: &impl CatalogClientTrait,
+    lock: &mut BuildLock,
+    override_inputs: &[OverrideInput],
+) -> Result<()> {
+    for OverrideInput {
+        reference,
+        flakeref,
+        ..
+    } in override_inputs
+    {
+        let parsed = NixFlakeref::try_from(flakeref.as_str())
+            .with_context(|| format!("Invalid flakeref '{flakeref}' for '--override-input'"))?;
+        nef_lock_catalog::override_input(lock, client, reference, &parsed).await?;
+        message::info(format!("Overriding {reference} with {flakeref}."));
+    }
+    Ok(())
 }
 
 #[derive(Bpaf, Clone)]
@@ -140,6 +187,9 @@ enum SubcommandOrBuildTargets {
         #[bpaf(external(system_override))]
         system_override: SystemOverride,
 
+        #[bpaf(external(override_input), many)]
+        override_inputs: Vec<OverrideInput>,
+
         /// The package to build.
         /// Corresponds to entries in the 'build' table in the environment's manifest.toml.
         /// If not specified, all packages are built.
@@ -198,6 +248,7 @@ impl Build {
                 targets,
                 base_catalog_url_select,
                 system_override,
+                override_inputs,
             } => {
                 let env = self
                     .environment
@@ -210,6 +261,7 @@ impl Build {
                     targets,
                     base_catalog_url_select,
                     system_override.into_inner(),
+                    override_inputs,
                 )
                 .await
             },
@@ -266,6 +318,7 @@ impl Build {
         packages: Vec<String>,
         nixpkgs_url_select: Option<BaseCatalogUrlSelect>,
         system_override: Option<String>,
+        override_inputs: Vec<OverrideInput>,
     ) -> Result<()> {
         match &env {
             ConcreteEnvironment::Path(_) => (),
@@ -371,13 +424,26 @@ impl Build {
             None => None,
         };
 
-        let catalog_lock = BuildLockGuard::for_expression_builds(
+        if !override_inputs.is_empty() && expression_lock_rel_paths.is_empty() {
+            bail!(
+                "'--override-input' only applies to Nix expression builds; none of the selected packages is one"
+            );
+        }
+        let mut catalog_lock = BuildLockGuard::for_expression_builds(
             &flox.floxhub_client,
             env.dot_flox_path(),
             &expression_lock_rel_paths,
             flox.retain_diagnostic_tempfiles,
         )
         .await?;
+        if let Some(lock) = catalog_lock.as_mut() {
+            apply_override_inputs(
+                &flox.floxhub_client,
+                lock.build_lock_mut(),
+                &override_inputs,
+            )
+            .await?;
+        }
 
         let cache_path = env.cache_path()?;
         let builder = FloxBuildMk::new(
@@ -392,7 +458,10 @@ impl Build {
             expression_nixpkgs_flakeref.as_ref(),
             &FLOX_INTERPRETER,
             &target_names,
-            catalog_lock.as_ref().map(|lock| lock.path()),
+            catalog_lock
+                .as_mut()
+                .map(BuildLockGuard::write_builder_file)
+                .transpose()?,
             None,
             system_override,
         );
