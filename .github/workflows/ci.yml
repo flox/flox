@@ -411,15 +411,22 @@ jobs:
           # from there to users, flox-installers, and the bats test builders.
           NIX_SUBSTITUTER: "${{ vars.MANAGED_CACHE_PUBLIC_S3_BUCKET }}"
           NIX_SUBSTITUTER_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_SECRET_KEY }}"
+          # The build-time closure goes to the R2 CI cache, not S3, so
+          # toolchains don't end up in the cache users download from.
+          BUILD_CACHE: "${{ vars.MANAGED_CACHE_PUBLIC_R2_BUCKET }}"
+          AWS_R2_ACCESS_KEY_ID: "${{ secrets.MANAGED_CACHE_PUBLIC_R2_ACCESS_KEY_ID }}"
+          AWS_R2_SECRET_ACCESS_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_R2_SECRET_ACCESS_KEY }}"
         run: |
           export AWS_ACCESS_KEY_ID
           export AWS_SECRET_ACCESS_KEY
           export AWS_SESSION_TOKEN
+          export AWS_R2_ACCESS_KEY_ID
+          export AWS_R2_SECRET_ACCESS_KEY
           export NIX_SUBSTITUTER_KEY
 
           for package in 'checks.${{ matrix.system }}.cacert-distrust' 'packages.${{ matrix.system }}.flox-nix-plugins' 'packages.${{ matrix.system }}.flox-cli' 'packages.${{ matrix.system }}.flox' 'packages.${{ matrix.system }}.flox-cli-tests'; do
             echo "::group::Building $package"
-            ./.github/scripts/remote-execute-nix-build.sh "$package" "$NIX_SUBSTITUTER"
+            ./.github/scripts/remote-execute-nix-build.sh "$package" "$NIX_SUBSTITUTER" "$BUILD_CACHE"
             echo "::endgroup::"
           done
 
@@ -495,15 +502,22 @@ jobs:
         env:
           NIX_SUBSTITUTER: "${{ vars.MANAGED_CACHE_PUBLIC_S3_BUCKET }}"
           NIX_SUBSTITUTER_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_SECRET_KEY }}"
+          # The build-time closure goes to the R2 CI cache, not S3, so
+          # toolchains don't end up in the cache users download from.
+          BUILD_CACHE: "${{ vars.MANAGED_CACHE_PUBLIC_R2_BUCKET }}"
+          AWS_R2_ACCESS_KEY_ID: "${{ secrets.MANAGED_CACHE_PUBLIC_R2_ACCESS_KEY_ID }}"
+          AWS_R2_SECRET_ACCESS_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_R2_SECRET_ACCESS_KEY }}"
         run: |
           export AWS_ACCESS_KEY_ID
           export AWS_SECRET_ACCESS_KEY
           export AWS_SESSION_TOKEN
+          export AWS_R2_ACCESS_KEY_ID
+          export AWS_R2_SECRET_ACCESS_KEY
           export NIX_SUBSTITUTER_KEY
 
           for package in 'packages.${{ matrix.system }}.crate2nix-flox' 'packages.${{ matrix.system }}.crate2nix-flox-activations' 'packages.${{ matrix.system }}.crate2nix-nef-lock-catalog'; do
             echo "::group::Building $package"
-            ./.github/scripts/remote-execute-nix-build.sh "$package" "$NIX_SUBSTITUTER"
+            ./.github/scripts/remote-execute-nix-build.sh "$package" "$NIX_SUBSTITUTER" "$BUILD_CACHE"
             echo "::endgroup::"
           done
 
