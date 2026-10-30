@@ -257,7 +257,7 @@
           inherit pkgs nixpkgs;
           module = import ./modules/nixos pkgsContext;
         };
-        cacert-distrust = pkgs.callPackage ./checks/cacert-distrust.nix {
+        ca-roots = pkgs.callPackage ./checks/ca-roots.nix {
           stockCacert = nixpkgs.legacyPackages.${system}.cacert;
         };
       }) pkgsContext;

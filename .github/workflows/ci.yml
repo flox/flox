@@ -417,7 +417,7 @@ jobs:
           export AWS_SESSION_TOKEN
           export NIX_SUBSTITUTER_KEY
 
-          for package in 'checks.${{ matrix.system }}.cacert-distrust' 'packages.${{ matrix.system }}.flox-nix-plugins' 'packages.${{ matrix.system }}.flox-cli' 'packages.${{ matrix.system }}.flox' 'packages.${{ matrix.system }}.flox-cli-tests'; do
+          for package in 'checks.${{ matrix.system }}.ca-roots' 'packages.${{ matrix.system }}.flox-nix-plugins' 'packages.${{ matrix.system }}.flox-cli' 'packages.${{ matrix.system }}.flox' 'packages.${{ matrix.system }}.flox-cli-tests'; do
             echo "::group::Building $package"
             ./.github/scripts/remote-execute-nix-build.sh "$package" "$NIX_SUBSTITUTER"
             echo "::endgroup::"
