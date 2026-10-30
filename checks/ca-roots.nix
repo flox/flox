@@ -1,4 +1,4 @@
-# Checks the CA bundle that flox's binaries compile in:
+# Checks the CA roots that flox's binaries trust:
 #
 # - Every package that sets `NIXPKGS_CACERT_BUNDLE_CRT`, and the installers'
 #   `pkgsFor.cacert`, use the same bundle, because the CLI compares the bundle
@@ -49,7 +49,7 @@ assert lib.assertMsg (cacert.outPath == stockCacert.outPath) ''
   The package set's cacert is not the stock nixpkgs one, so every package that depends on it is rebuilt:
     package set: ${cacert.outPath}
     nixpkgs:     ${stockCacert.outPath}'';
-runCommand "cacert-distrust"
+runCommand "ca-roots"
   {
     nativeBuildInputs = [ openssl ];
     bundle = bundles.flox-cli;
