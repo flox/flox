@@ -46,7 +46,6 @@ pub enum ResolveAuthError {
     /// The credential's expiry, known locally, has passed.
     #[error(
         "Your FloxHub login has expired.\n\
-         For CI and automation, see https://go.flox.dev/auth\n\
          Log in again with 'flox auth login'."
     )]
     Expired,
@@ -55,7 +54,6 @@ pub enum ResolveAuthError {
     /// explanation follows the colon.
     #[error(
         "Authentication rejected: {detail}\n\
-         For CI and automation, see https://go.flox.dev/auth\n\
          Log in again with 'flox auth login'."
     )]
     Rejected { detail: String },
