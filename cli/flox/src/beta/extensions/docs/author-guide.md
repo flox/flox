@@ -68,7 +68,7 @@ extension's environment:
 |----------|-------|
 | `FLOX_EXTENSION_NAME` | The extension's declared name. |
 | `FLOX_EXTENSION_PATH` | Absolute path to the managed install directory, or to the executable itself when the extension was found on `$PATH` rather than installed. |
-| `FLOX_BIN` | Path to the flox binary that dispatched the extension. |
+| `FLOX_BIN` | The flox command that dispatched the extension, as the user invoked it (a path an upgrade replaces, not the store path). |
 
 Extensions can read these to find their own install directory
 or to shell out to other `flox` subcommands.

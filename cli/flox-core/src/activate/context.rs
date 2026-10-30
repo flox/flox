@@ -118,7 +118,8 @@ pub struct ActivateCtx {
     #[serde(default)]
     pub disable_hook: bool,
 
-    /// Path to the flox binary, used for generating hook code.
+    /// The command the generated hook code runs to reach flox (see
+    /// `FLOX_BIN_FOR_SHELL` in the `flox` crate).
     #[serde(default)]
     pub flox_bin: String,
 
