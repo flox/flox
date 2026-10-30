@@ -8,7 +8,7 @@ stdenv.mkDerivation {
   version = "1.0.0";
   src = builtins.path {
     name = "ld-floxlib-src";
-    path = "${./../../ld-floxlib}";
+    path = ./../../ld-floxlib;
   };
   makeFlags = [ "PREFIX=$(out)" ];
   doCheck = true;
