@@ -6,6 +6,8 @@ mod lock;
 mod nix;
 mod project;
 mod scan;
+#[cfg(test)]
+mod test_helpers;
 
 /// Common identifier for a catalog and its `CatalogLock` in a build lock.
 /// Also exposed to nix expressions in the NEF as the `<catalog>` in

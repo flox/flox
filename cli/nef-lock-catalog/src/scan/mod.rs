@@ -228,10 +228,7 @@ mod tests {
     use std::{assert_matches, fs};
 
     use super::*;
-
-    fn set(items: &[&str]) -> BTreeSet<CatalogRef> {
-        items.iter().map(|s| CatalogRef::new_unchecked(s)).collect()
-    }
+    use crate::test_helpers::references;
 
     #[test]
     fn catalog_ref_rejects_references_that_cannot_resolve() {
@@ -353,7 +350,7 @@ mod tests {
         // turn it into a failure.
         let base_dir = Path::new("test_data/catalog_refs");
         let got = scan_package(base_dir, Path::new("nixpkgs-arg.nix")).unwrap();
-        assert_eq!(got, set(&["catalogs.myorg.toolkit.readVersion"]));
+        assert_eq!(got, references(&["catalogs.myorg.toolkit.readVersion"]));
     }
 
     #[test]
@@ -364,7 +361,7 @@ mod tests {
         let got = scan_package(base_dir, Path::new("pkg-a.nix")).unwrap();
         assert_eq!(
             got,
-            set(&[
+            references(&[
                 "catalogs.myorg.toolkit.readVersion",
                 "catalogs.myorg.python3Packages.alpha-lib",
             ])
@@ -379,7 +376,7 @@ mod tests {
         let got = scan_package_with_roots(base_dir, Path::new("main.nix"), ["inputs"]).unwrap();
         assert_eq!(
             got,
-            set(&[
+            references(&[
                 "inputs.nixpkgs.lib",
                 "inputs.devtools-flake.packages.default",
             ])
@@ -395,7 +392,7 @@ mod tests {
         let got = scan_package(base_dir, Path::new("dep-entry-wrapped.nix")).unwrap();
         assert_eq!(
             got,
-            set(&[
+            references(&[
                 "catalogs.myorg.toolkit.readVersion",
                 "catalogs.myorg.python3Packages.alpha-lib",
             ])
@@ -411,7 +408,7 @@ mod tests {
         let got = scan_package(base_dir, Path::new("dep-entry.nix")).unwrap();
         assert_eq!(
             got,
-            set(&[
+            references(&[
                 "catalogs.myorg.toolkit.readVersion",
                 "catalogs.myorg.python3Packages.alpha-lib",
             ])
@@ -430,7 +427,7 @@ mod tests {
         let got = scan_package(base_dir, Path::new("entry.nix")).unwrap();
         assert_eq!(
             got,
-            set(&["catalogs.myorg.direct", "catalogs.myorg.helper-ref"]),
+            references(&["catalogs.myorg.direct", "catalogs.myorg.helper-ref"]),
         );
     }
 
@@ -446,7 +443,7 @@ mod tests {
     fn scan_package_follows_alias_to_pkgset_member() {
         let base_dir = Path::new("test_data/catalog_refs/pkgset-member-alias");
         let got = scan_package(base_dir, Path::new("isdr-zk-client.nix")).unwrap();
-        assert_eq!(got, set(&["catalogs.myorg.toolkit.readVersion"]));
+        assert_eq!(got, references(&["catalogs.myorg.toolkit.readVersion"]));
     }
 
     /// A nested file as the scan target resolves dependency_args against the root.
@@ -460,7 +457,7 @@ mod tests {
         let got = scan_package(base_dir, Path::new("foo/bar.nix")).unwrap();
         assert_eq!(
             got,
-            set(&["catalogs.myorg.bar-own", "catalogs.myorg.top-src"]),
+            references(&["catalogs.myorg.bar-own", "catalogs.myorg.top-src"]),
         );
     }
 
@@ -476,7 +473,7 @@ mod tests {
         let got = scan_package(base_dir, Path::new("top.nix")).unwrap();
         assert_eq!(
             got,
-            set(&["catalogs.myorg.widget-src", "catalogs.myorg.helper-lib-src"]),
+            references(&["catalogs.myorg.widget-src", "catalogs.myorg.helper-lib-src"]),
         );
     }
 
