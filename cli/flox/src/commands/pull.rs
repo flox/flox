@@ -309,7 +309,9 @@ impl Pull {
     /// This will create a new environment in the given directory.
     /// Uses [ManagedEnvironment::open] which will try to clone the environment.
     ///
-    /// If the directory already exists, this will fail early.
+    /// If the directory already exists, this will fail early unless `force` is set.
+    /// With `force`, an existing environment for the same `env_ref` is updated in place,
+    /// any other existing environment is replaced.
     /// If opening the environment fails, the .flox/ directory will be cleaned up.
     async fn pull_new_environment(
         flox: &Flox,
@@ -319,10 +321,25 @@ impl Pull {
         force: bool,
         generation: Option<GenerationId>,
     ) -> Result<()> {
+        let pointer = ManagedPointer::new(
+            env_ref.owner().clone(),
+            env_ref.name().clone(),
+            &flox.floxhub,
+        );
+
         let dot_flox_path = env_path.join(DOT_FLOX);
         if dot_flox_path.exists() {
             if force {
-                match open_path(flox, &dot_flox_path, None) {
+                match open_path(flox, &env_path, None) {
+                    // Like `git pull --force`, update the existing clone
+                    // rather than discarding it and cloning again.
+                    Ok(ConcreteEnvironment::Managed(env))
+                        if !copy && generation.is_none() && env.pointer() == &pointer =>
+                    {
+                        debug!("environment already exists, pulling updates");
+                        Self::pull_managed_environment_updates(flox, env, force)?;
+                        return Ok(());
+                    },
                     Ok(concrete_env) => match concrete_env {
                         ConcreteEnvironment::Path(env) => {
                             env.delete(flox)
@@ -349,11 +366,6 @@ impl Pull {
         }
 
         // region: write pointer
-        let pointer = ManagedPointer::new(
-            env_ref.owner().clone(),
-            env_ref.name().clone(),
-            &flox.floxhub,
-        );
         let mut pointer_content =
             serde_json::to_string_pretty(&pointer).context("Could not serialize pointer")?;
         pointer_content.push('\n');
@@ -761,6 +773,8 @@ enum PullResultResolutionContext {
 
 #[cfg(test)]
 mod tests {
+    use flox_core::data::CanonicalPath;
+    use flox_core::data::environment_ref::EnvironmentOwner;
     use flox_rust_sdk::flox::test_helpers::{flox_instance, flox_instance_with_optional_floxhub};
     use flox_rust_sdk::models::environment::managed_environment::test_helpers::{
         mock_managed_environment_unlocked,
@@ -793,6 +807,46 @@ mod tests {
                 cycle: "foo → bar → foo".to_string(),
             },
         )))
+    }
+
+    /// `flox pull --force <owner>/<name>` into a directory that already
+    /// contains that environment should update it in place
+    /// rather than deleting and re-cloning it.
+    #[tokio::test]
+    async fn pull_new_force_same_ref_updates_in_place() {
+        let owner: EnvironmentOwner = "owner".parse().unwrap();
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
+
+        let remote_env = mock_managed_environment_unlocked(&flox, "version = 1", owner);
+        let env_ref = remote_env.env_ref();
+
+        // Check out the environment in a project directory,
+        // the same way `flox pull <owner>/<name>` does.
+        let project_path = tempdir_in(&flox.temp_dir).unwrap().keep();
+        let dot_flox_path = project_path.join(DOT_FLOX);
+        fs::create_dir_all(&dot_flox_path).unwrap();
+        fs::write(
+            dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME),
+            serde_json::to_string_pretty(remote_env.pointer()).unwrap(),
+        )
+        .unwrap();
+        ManagedEnvironment::open(
+            &flox,
+            remote_env.pointer().clone(),
+            CanonicalPath::new(&dot_flox_path).unwrap(),
+            None,
+        )
+        .unwrap();
+
+        // Would be removed if the environment were deleted and re-cloned
+        let marker = dot_flox_path.join("marker");
+        fs::write(&marker, "").unwrap();
+
+        Pull::pull_new_environment(&flox, project_path, env_ref, false, true, None)
+            .await
+            .unwrap();
+
+        assert!(marker.exists());
     }
 
     #[test]
