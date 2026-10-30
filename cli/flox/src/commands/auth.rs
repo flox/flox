@@ -32,7 +32,7 @@ use oauth2::{
     TokenUrl,
 };
 use reqwest::redirect;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tracing::{debug, instrument};
 use url::Url;
 
@@ -89,7 +89,7 @@ const FALLBACK_AUDIENCE: &str = "https://hub.flox.dev/api";
 
 /// Where `flox auth login` runs the device grant: endpoints, client id, and
 /// the audience to send (none when the deployment's document omits it).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 struct LoginConfig {
     device_auth_url: DeviceAuthorizationUrl,
     token_url: TokenUrl,
@@ -102,6 +102,51 @@ impl LoginConfig {
         BasicClient::new(self.client_id.clone())
             .set_token_uri(self.token_url.clone())
             .set_device_authorization_url(self.device_auth_url.clone())
+    }
+}
+
+/// File in the cache directory holding a device code that awaits approval.
+const PENDING_LOGIN_FILE: &str = "pending-login.json";
+
+/// A pending login is resumed only while its code has at least this long
+/// left; with less, the user could not approve it in time.
+const MIN_RESUMABLE_LIFETIME: Duration = Duration::seconds(60);
+
+/// A device code the user has not approved yet.
+///
+/// Saved so that an interrupted `flox auth login`, such as an agent's tool
+/// call that timed out, resumes waiting on the code the user already has
+/// instead of handing out a new one.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct PendingLogin {
+    floxhub_url: Url,
+    login_config: LoginConfig,
+    expires_at: DateTime<Utc>,
+    details: StandardDeviceAuthorizationResponse,
+}
+
+impl PendingLogin {
+    /// The login pending at `path`, if it was started against the same
+    /// FloxHub and issuer and its code has time left.
+    fn load(path: &Path, floxhub_url: &Url, login_config: &LoginConfig) -> Option<Self> {
+        let contents = std::fs::read_to_string(path).ok()?;
+        let pending: Self = serde_json::from_str(&contents).ok()?;
+        (pending.floxhub_url == *floxhub_url
+            && pending.login_config == *login_config
+            && pending.expires_at - Utc::now() >= MIN_RESUMABLE_LIFETIME)
+            .then_some(pending)
+    }
+
+    /// Write the login to `path`, readable only by the user: once approved,
+    /// the device code can be exchanged for their token.
+    fn save(&self, path: &Path) -> Result<()> {
+        let dir = path.parent().context("pending login path has no parent")?;
+        std::fs::create_dir_all(dir)?;
+        // Created with mode 0600.
+        let mut file = tempfile::NamedTempFile::new_in(dir)?;
+        serde_json::to_writer(&mut file, self)?;
+        file.persist(path)?;
+        Ok(())
     }
 }
 
@@ -154,33 +199,66 @@ fn merge_login_config(discovered: Option<DiscoveredLoginConfig>) -> Result<Login
     })
 }
 
-pub async fn authorize(
-    client: ConfiguredClient,
-    audience: Option<&str>,
+/// Run the device grant described by `login_config`.
+///
+/// Without a terminal (`can_prompt` false) there is no Enter key to listen
+/// for, so the URL and code are printed and polled for until the code
+/// expires. That is what lets an agent run the login and relay the URL to
+/// its user, who approves it in a browser.
+///
+/// The code is saved at `pending_path` until polling ends, and a later call
+/// resumes it (see [PendingLogin]).
+async fn authorize(
+    login_config: &LoginConfig,
     floxhub_url: &Url,
+    pending_path: &Path,
+    can_prompt: bool,
 ) -> Result<Credential> {
+    let client = login_config.oauth_client();
     let http_client = reqwest::ClientBuilder::new()
         .redirect(redirect::Policy::none())
         .user_agent(format!("flox-cli/{}", &*FLOX_VERSION))
         .build()
         .expect("Failed to build OAuth HTTP client");
 
-    let mut request = client
-        .exchange_device_code()
-        .add_scope(Scope::new("openid".to_string()))
-        .add_scope(Scope::new("profile".to_string()))
-        .add_scope(Scope::new("email".to_string()));
-    // An Auth0 extension parameter; a document without the member — or a
-    // Dex issuer — gets a bare RFC 8628 request.
-    if let Some(audience) = audience {
-        request = request.add_extra_param("audience".to_string(), audience.to_string());
-    }
-    let details: StandardDeviceAuthorizationResponse = request
-        .request_async(&http_client)
-        .await
-        .context("Could not request device code")?;
+    let resumed = PendingLogin::load(pending_path, floxhub_url, login_config);
+    let is_resumed = resumed.is_some();
+    let pending = match resumed {
+        Some(pending) => pending,
+        None => {
+            let mut request = client
+                .exchange_device_code()
+                .add_scope(Scope::new("openid".to_string()))
+                .add_scope(Scope::new("profile".to_string()))
+                .add_scope(Scope::new("email".to_string()));
+            // An Auth0 extension parameter; a document without the member —
+            // or a Dex issuer — gets a bare RFC 8628 request.
+            if let Some(audience) = &login_config.audience {
+                request = request.add_extra_param("audience".to_string(), audience.to_string());
+            }
+            let details: StandardDeviceAuthorizationResponse = request
+                .request_async(&http_client)
+                .await
+                .context("Could not request device code")?;
+            let pending = PendingLogin {
+                floxhub_url: floxhub_url.clone(),
+                login_config: login_config.clone(),
+                expires_at: Utc::now() + Duration::seconds(details.expires_in().as_secs() as i64),
+                details,
+            };
+            // A login that can't be saved still works; it just can't resume.
+            if let Err(err) = pending.save(pending_path) {
+                debug!(%err, "Could not save the pending login");
+            }
+            pending
+        },
+    };
+    let details = &pending.details;
+    let remaining = (pending.expires_at - Utc::now())
+        .to_std()
+        .unwrap_or_default();
 
-    debug!("Device code details: {details:#?}");
+    debug!(is_resumed, "Device code details: {details:#?}");
 
     let opener = Browser::detect();
 
@@ -192,30 +270,35 @@ pub async fn authorize(
     let code = details.user_code().secret();
 
     // Start token polling — shared by both the browser and no-browser paths.
-    let token_future = client.exchange_device_access_token(&details).request_async(
+    let token_future = client.exchange_device_access_token(details).request_async(
         &http_client,
         tokio::time::sleep,
-        Some(details.expires_in()),
+        Some(remaining),
     );
     tokio::pin!(token_future);
 
+    let host = floxhub_url.host_str().unwrap_or(floxhub_url.as_str());
+    let heading = if is_resumed {
+        format!("Resuming the pending login to {host}")
+    } else {
+        format!("Logging in to {host}")
+    };
+
     let token_result = match opener {
-        Ok(opener) => {
+        Ok(opener) if can_prompt => {
             let message = formatdoc! {"
-            Logging in to {url}
+            {heading}
             Your one-time activation code is: {code}
 
             Open this URL in any browser:
             {verification_uri}
 
             Or press Enter to open your default browser...
-            ",
-                url = floxhub_url.host_str().unwrap_or(floxhub_url.as_str()),
-            };
+            "};
 
             debug!(
                 "Waiting for user to enter code (timeout: {}s)",
-                details.expires_in().as_secs()
+                remaining.as_secs()
             );
 
             let enter_future = Dialog {
@@ -233,6 +316,7 @@ pub async fn authorize(
             tokio::select! {
                 enter_result = &mut enter_future => {
                     if enter_result == WaitResult::Interrupted {
+                        let _ = std::fs::remove_file(pending_path);
                         bail!("Authentication canceled.");
                     }
 
@@ -251,28 +335,47 @@ pub async fn authorize(
                 token_result = &mut token_future => token_result,
             }
         },
-        Err(e) => {
-            debug!("Unable to open browser: {e}");
+        opener => {
+            if let Err(e) = opener {
+                debug!("Unable to open browser: {e}");
+            }
 
+            // Say that the command keeps running and how to pick it back up:
+            // without a terminal the caller may be an agent, which otherwise
+            // can't tell a login waiting for approval from a hung one, and
+            // whose tool calls time out long before the code does.
+            let resume_hint = if can_prompt {
+                ""
+            } else {
+                "\nIf this command is interrupted, run 'flox auth login' again to resume."
+            };
             message::plain(formatdoc! {"
-            Go to {verification_uri} in your browser
-
+            {heading}
             Your one-time activation code is: {code}
-            "
+
+            Open this URL in any browser to approve the login:
+            {verification_uri}
+
+            Waiting for approval. The code expires in {expiry}.{resume_hint}
+            ",
+                expiry = format_minutes(remaining),
             });
 
             token_future.await
         },
     };
 
+    // The code is used up, refused, or expired; a later login starts afresh.
+    let _ = std::fs::remove_file(pending_path);
+
     let token = match token_result {
         Err(RequestTokenError::ServerResponse(ref r))
             if r.error() == &DeviceCodeErrorResponseType::ExpiredToken =>
         {
-            bail!(
-                "failed to authenticate before the device code expired. \
-                 Please retry to get a new code."
-            );
+            bail!(indoc! {"
+                The activation code expired before the login was approved.
+                Run 'flox auth login' to get a new code."
+            });
         },
         _ => token_result?,
     };
@@ -283,6 +386,14 @@ pub async fn authorize(
             .expires_in()
             .map(|expires_in| calculate_expiry(expires_in.as_secs() as i64)),
     })
+}
+
+/// `duration` in whole minutes, rounded up, e.g. "15 minutes".
+fn format_minutes(duration: std::time::Duration) -> String {
+    match duration.as_secs().div_ceil(60) {
+        1 => "1 minute".to_string(),
+        minutes => format!("{minutes} minutes"),
+    }
 }
 
 fn calculate_expiry(expires_in: i64) -> String {
@@ -508,12 +619,6 @@ pub async fn login_flox(
     once: bool,
     storage_pref: TokenStorageMode,
 ) -> Result<String> {
-    // Checked before discovery so a non-interactive invocation fails fast
-    // instead of probing the network first.
-    if !Dialog::can_prompt() {
-        bail!("Cannot prompt for user input")
-    }
-
     let floxhub_url = flox.floxhub.base_url();
     let discovered = discover_login_config(floxhub_url)
         .await
@@ -522,9 +627,10 @@ pub async fn login_flox(
     debug!(?login_config, "resolved login configuration");
 
     let cred = authorize(
-        login_config.oauth_client(),
-        login_config.audience.as_deref(),
+        &login_config,
         floxhub_url,
+        &flox.cache_dir.join(PENDING_LOGIN_FILE),
+        Dialog::can_prompt(),
     )
     .await
     .context("Could not authorize via oauth")?;
@@ -928,6 +1034,118 @@ mod tests {
                     audience: None,
                 });
             },
+        );
+    }
+
+    fn issuer_login_config() -> LoginConfig {
+        LoginConfig {
+            device_auth_url: DeviceAuthorizationUrl::new(
+                "https://issuer.example/device".to_string(),
+            )
+            .unwrap(),
+            token_url: TokenUrl::new("https://issuer.example/token".to_string()).unwrap(),
+            client_id: ClientId::new("flox-cli".to_string()),
+            audience: None,
+        }
+    }
+
+    fn pending_login(
+        floxhub_url: &str,
+        login_config: LoginConfig,
+        lifetime: Duration,
+    ) -> PendingLogin {
+        PendingLogin {
+            floxhub_url: floxhub_url.parse().unwrap(),
+            login_config,
+            expires_at: Utc::now() + lifetime,
+            details: serde_json::from_value(serde_json::json!({
+                "device_code": "device-code",
+                "user_code": "USER-CODE",
+                "verification_uri": "https://issuer.example/activate",
+                "expires_in": 900,
+            }))
+            .unwrap(),
+        }
+    }
+
+    /// A saved code resumes only for the FloxHub and issuer it came from,
+    /// and only while the user still has time to approve it.
+    #[test]
+    fn pending_login_resumes_only_a_matching_unexpired_code() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(PENDING_LOGIN_FILE);
+        let floxhub_url: Url = "https://hub.example/".parse().unwrap();
+        let other_issuer = LoginConfig {
+            client_id: ClientId::new("other-client".to_string()),
+            ..issuer_login_config()
+        };
+
+        let cases = [
+            (
+                "matching",
+                pending_login(
+                    "https://hub.example/",
+                    issuer_login_config(),
+                    Duration::minutes(10),
+                ),
+            ),
+            (
+                "other FloxHub",
+                pending_login(
+                    "https://other.example/",
+                    issuer_login_config(),
+                    Duration::minutes(10),
+                ),
+            ),
+            (
+                "other issuer",
+                pending_login("https://hub.example/", other_issuer, Duration::minutes(10)),
+            ),
+            (
+                "nearly expired",
+                pending_login(
+                    "https://hub.example/",
+                    issuer_login_config(),
+                    Duration::seconds(30),
+                ),
+            ),
+        ];
+        let resumed: Vec<_> = cases
+            .into_iter()
+            .map(|(case, pending)| {
+                pending.save(&path).unwrap();
+                let loaded = PendingLogin::load(&path, &floxhub_url, &issuer_login_config());
+                (case, loaded.is_some())
+            })
+            .collect();
+
+        assert_eq!(resumed, vec![
+            ("matching", true),
+            ("other FloxHub", false),
+            ("other issuer", false),
+            ("nearly expired", false),
+        ]);
+    }
+
+    /// The device code can be exchanged for the user's token once approved,
+    /// so other users must not be able to read it.
+    #[test]
+    fn pending_login_is_readable_only_by_the_user() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(PENDING_LOGIN_FILE);
+        pending_login(
+            "https://hub.example/",
+            issuer_login_config(),
+            Duration::minutes(10),
+        )
+        .save(&path)
+        .unwrap();
+
+        assert_eq!(
+            fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o600
         );
     }
 

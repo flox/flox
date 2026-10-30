@@ -57,16 +57,78 @@ setup() {
 }
 
 teardown() {
+  if [ -n "${DEVICE_GRANT_PID:-}" ]; then
+    kill "$DEVICE_GRANT_PID"
+  fi
   project_teardown
   common_test_teardown
 }
 
 # ---------------------------------------------------------------------------- #
 
+# Serve the OAuth device grant from tests/auth/device_grant_server.py and
+# point 'flox auth login' at it, so login tests never reach a real issuer.
+start_device_grant_server() {
+  local port_file="$BATS_TEST_TMPDIR/device-grant-port"
+  python3 "$TESTS_DIR/auth/device_grant_server.py" "$port_file" "$DUMMY_TOKEN" 3>&- &
+  DEVICE_GRANT_PID=$!
+  timeout 10 bash -c "until [ -s '$port_file' ]; do sleep 0.1; done"
+  DEVICE_GRANT_URL="http://127.0.0.1:$(cat "$port_file")"
+  export FLOX_FLOXHUB_URL="$DEVICE_GRANT_URL"
+  export _FLOX_OAUTH_DEVICE_AUTH_URL="$DEVICE_GRANT_URL/device"
+  export _FLOX_OAUTH_TOKEN_URL="$DEVICE_GRANT_URL/token"
+}
+
+# wait_for_output FILE TEXT
+# Wait up to 10 seconds for TEXT to appear in FILE.
+wait_for_output() {
+  timeout 10 bash -c "until grep -qF '$2' '$1' 2> /dev/null; do sleep 0.1; done"
+}
+
 # bats test_tags=auth,auth:login:notty
-@test "auth login fails if not a tty" {
-  run "$FLOX_BIN" auth login
-  assert_failure
+@test "auth login without a tty prints the URL and waits for approval" {
+  start_device_grant_server
+
+  "$FLOX_BIN" auth login < /dev/null > "$PROJECT_DIR/login.out" 2>&1 3>&- &
+  login_pid=$!
+  wait_for_output "$PROJECT_DIR/login.out" "Waiting for approval"
+  curl -fsS "$DEVICE_GRANT_URL/approve"
+  wait "$login_pid"
+
+  run cat "$PROJECT_DIR/login.out"
+  assert_line "Your one-time activation code is: CODE-1"
+  assert_line "$DEVICE_GRANT_URL/activate?user_code=CODE-1"
+  assert_line "Waiting for approval. The code expires in 15 minutes."
+  assert_line "If this command is interrupted, run 'flox auth login' again to resume."
+  assert_output --partial "Logged in as test"
+
+  run "$FLOX_BIN" auth status
+  assert_success
+  assert_output --partial "You are logged in as test"
+}
+
+# An agent's tool call can time out and kill the login before the user
+# approves it; running the login again must keep the code the user has.
+# bats test_tags=auth,auth:login:notty
+@test "auth login resumes an interrupted login with the same code" {
+  start_device_grant_server
+
+  "$FLOX_BIN" auth login < /dev/null > "$PROJECT_DIR/first.out" 2>&1 3>&- &
+  first_pid=$!
+  wait_for_output "$PROJECT_DIR/first.out" "Waiting for approval"
+  kill "$first_pid"
+  wait "$first_pid" || true
+
+  curl -fsS "$DEVICE_GRANT_URL/approve"
+
+  run "$FLOX_BIN" auth login < /dev/null
+  assert_success
+  assert_line "Resuming the pending login to 127.0.0.1"
+  assert_line "Your one-time activation code is: CODE-1"
+  assert_output --partial "Logged in as test"
+
+  run curl -fsS "$DEVICE_GRANT_URL/issued"
+  assert_output "1"
 }
 
 # ---------------------------------------------------------------------------- #

@@ -97,6 +97,24 @@ teardown() {
   assert_auth_required_error
 }
 
+# An agent's shell has no terminal and its tool calls hold back output until
+# the command exits, so the agent is told to run the login in the background.
+@test "resolving while logged out tells an agent how to log in" {
+  unset FLOX_FLOXHUB_TOKEN
+  export FLOX_INVOCATION_SOURCE="agentic.test"
+  "$FLOX_BIN" init
+  export _FLOX_USE_CATALOG_MOCK="$UNAUTHORIZED_MOCK"
+  run "$FLOX_BIN" install hello
+  assert_failure
+  assert_output --partial - << 'EOF'
+✘ ERROR: Authentication is required to resolve packages.
+For CI and automation, see https://go.flox.dev/auth
+Log in with 'flox auth login'.
+To log in from an agent, run 'flox auth login' in the background.
+It prints a URL to share with the user and exits once they approve the login.
+EOF
+}
+
 # The catalog treats an expired token as no token at all; the CLI knows the
 # expiry, so it says why login is needed.
 @test "resolving with an expired token says the login expired" {
