@@ -24,13 +24,12 @@ use tracing::debug;
 
 /// The lock a build consumes, created before the package builder is
 /// invoked and handed to it as `CATALOG_LOCKFILE`. Owns the builder-facing
-/// file: dropping the guard removes it, unless diagnostic retention asked
-/// for it to be kept.
+/// file, written by [Self::write_builder_file]: dropping the guard removes
+/// it, unless diagnostic retention asked for it to be kept.
 #[derive(Debug)]
 pub struct BuildLockGuard {
-    path: PathBuf,
     lock: BuildLock,
-    /// Keeps the builder-facing file alive for the build.
+    /// The builder-facing file, once written.
     ephemeral: Option<tempfile::TempPath>,
     /// Leave the builder-facing file in place on drop, with its path logged.
     retain: bool,
@@ -56,8 +55,8 @@ impl BuildLockGuard {
     }
 
     /// Read the committed lock if present; otherwise resolve the scanned
-    /// references. Always materialize a temporary builder-facing file,
-    /// which outlives the guard when `retain` is set.
+    /// references. The builder-facing file outlives the guard when `retain`
+    /// is set.
     pub async fn new_existing_or_ephemeral(
         client: &impl CatalogClientTrait,
         dot_flox_path: impl AsRef<Path>,
@@ -73,35 +72,41 @@ impl BuildLockGuard {
             let references = scan_references(nix_expression_dir_in(dot_flox_path), rel_file_paths)?;
             resolve_lock(client, references).await?
         };
-        // The system temp dir, not flox's own temp dir: flox's derives from
-        // `$HOME`, which the user may have placed at a path containing
-        // whitespace, and the ephemeral path reaches make's word-splitting
-        // positions. The system temp dir shares the whitespace-free
-        // assumption the makefile's own PROJECT_TMPDIR (`$(TMPDIR)/<hash>`)
-        // already makes. This deliberately sits outside flox's centralized
-        // per-process temp cleanup; the guard's drop removes the file
-        // instead, or keeps it when diagnostic retention is enabled.
-        let temp_path = tempfile::Builder::new()
-            .prefix("flox-catalog.lock.")
-            .tempfile()
-            .context("Could not create a temporary file for the catalog lock.")?
-            .into_temp_path();
-        std::fs::write(&temp_path, render_builder_lock(&lock)?)
-            .context("Could not write the temporary builder catalog lock")?;
-        debug!(path = %temp_path.display(), committed = is_existing, "build consumes a materialized catalog lock");
         Ok(BuildLockGuard {
-            path: temp_path.to_path_buf(),
             lock,
-            ephemeral: Some(temp_path),
+            ephemeral: None,
             retain,
             committed: is_existing,
         })
     }
 
-    /// The path to hand to the package builder as `CATALOG_LOCKFILE`:
-    /// an absolute, whitespace-free temporary path.
-    pub fn path(&self) -> &Path {
-        &self.path
+    /// Materialize the lock into the builder-facing file and return its
+    /// path, to hand to the package builder as `CATALOG_LOCKFILE`: an
+    /// absolute, whitespace-free temporary path. Writing again replaces the
+    /// file's contents.
+    pub fn write_builder_file(&mut self) -> Result<&Path> {
+        let temp_path = match self.ephemeral.take() {
+            Some(temp_path) => temp_path,
+            // The system temp dir, not flox's own temp dir: flox's derives
+            // from `$HOME`, which the user may have placed at a path
+            // containing whitespace, and the ephemeral path reaches make's
+            // word-splitting positions. The system temp dir shares the
+            // whitespace-free assumption the makefile's own PROJECT_TMPDIR
+            // (`$(TMPDIR)/<hash>`) already makes. This deliberately sits
+            // outside flox's centralized per-process temp cleanup; the
+            // guard's drop removes the file instead, or keeps it when
+            // diagnostic retention is enabled.
+            None => tempfile::Builder::new()
+                .prefix("flox-catalog.lock.")
+                .tempfile()
+                .context("Could not create a temporary file for the catalog lock.")?
+                .into_temp_path(),
+        };
+        let temp_path = self.ephemeral.insert(temp_path);
+        std::fs::write(&*temp_path, render_builder_lock(&self.lock)?)
+            .context("Could not write the temporary builder catalog lock")?;
+        debug!(path = %temp_path.display(), committed = self.committed, "build consumes a materialized catalog lock");
+        Ok(temp_path)
     }
 
     /// The lock itself, to project the subset a publish submits out of.
@@ -139,19 +144,10 @@ pub mod test_helpers {
     /// Construct a [BuildLockGuard] from parts, for tests that need to
     /// exercise consumers (e.g. publish's stale-lock messaging) without a
     /// scan or a catalog round-trip.
-    pub fn build_lock_guard_from_parts(
-        path: impl Into<PathBuf>,
-        lock: BuildLock,
-        committed: bool,
-    ) -> BuildLockGuard {
+    pub fn build_lock_guard_from_parts(lock: BuildLock, committed: bool) -> BuildLockGuard {
         BuildLockGuard {
-            path: path.into(),
             lock,
-            ephemeral: Some(
-                tempfile::NamedTempFile::new()
-                    .expect("temp file for test lock")
-                    .into_temp_path(),
-            ),
+            ephemeral: None,
             retain: false,
             committed,
         }
@@ -236,21 +232,12 @@ mod tests {
                 .unwrap();
 
         assert!(!lock.is_existing());
-        assert!(
-            !lock.path().to_string_lossy().contains(char::is_whitespace),
-            "an ephemeral lock path must be whitespace-free: {}",
-            lock.path().display()
-        );
-        assert_eq!(
-            serde_json::from_slice::<serde_json::Value>(&std::fs::read(lock.path()).unwrap())
-                .unwrap(),
-            serde_json::json!({"version":2,"locked_inputs":{},"direct_inputs":[],"catalogs":{}})
-        );
+        assert!(lock.build_lock().locked_inputs().is_empty());
+        assert!(lock.build_lock().direct_inputs().is_empty());
     }
 
-    /// A committed lock needs no catalog request and remains byte-identical;
-    /// its derived builder file carries the catalog tree and the subset
-    /// selects the committed entry by the scanned reference.
+    /// A committed lock needs no catalog request and remains byte-identical,
+    /// and the subset selects the committed entry by the scanned reference.
     #[tokio::test]
     async fn committed_lock_is_consumed_as_found_without_a_catalog_request() {
         let (_project, dot_flox, pkgs_dir) =
@@ -262,14 +249,6 @@ mod tests {
                 .unwrap();
 
         assert!(lock.is_existing());
-        assert_ne!(lock.path(), catalog_lockfile_path(&dot_flox));
-        assert!(!lock.path().to_string_lossy().contains(char::is_whitespace));
-        let builder: serde_json::Value =
-            serde_json::from_slice(&std::fs::read(lock.path()).unwrap()).unwrap();
-        assert_eq!(
-            builder["catalogs"]["myorg"]["packages"]["entries"]["hello"]["type"],
-            "package"
-        );
         assert_eq!(
             std::fs::read_to_string(catalog_lockfile_path(&dot_flox)).unwrap(),
             COMMITTED_LOCK,
@@ -279,12 +258,6 @@ mod tests {
         let references = scan_package(&pkgs_dir, "hello.nix").unwrap();
         let closure = lock.build_lock().project_package(&references).unwrap();
         assert_eq!(closure.direct_inputs, vec!["myorg/hello".to_string()]);
-        let builder_path = lock.path().to_path_buf();
-        drop(lock);
-        assert!(
-            !builder_path.exists(),
-            "builder file lives only for the guard"
-        );
     }
 
     #[tokio::test]
@@ -392,15 +365,17 @@ mod tests {
         assert!(format!("{err:#}").contains(UPDATE_CATALOGS_COMMAND));
     }
 
-    /// With retention the builder file survives the guard with its content
-    /// intact, and the committed lock is untouched; without it the file goes.
+    /// The builder file holds the rendered lock at a whitespace-free path
+    /// apart from the committed lock. With retention it survives the guard
+    /// with its content intact, and the committed lock is untouched; without
+    /// it the file goes.
     #[tokio::test]
-    async fn retention_keeps_the_builder_file_past_the_guard() {
+    async fn builder_file_holds_the_rendered_lock_for_the_guards_life() {
         let (_project, dot_flox, _pkgs_dir) =
             project_with_expression("{ catalogs }: catalogs.myorg.hello");
         std::fs::write(catalog_lockfile_path(&dot_flox), COMMITTED_LOCK).unwrap();
         for retain in [false, true] {
-            let lock = BuildLockGuard::new_existing_or_ephemeral(
+            let mut lock = BuildLockGuard::new_existing_or_ephemeral(
                 &new_noop(),
                 &dot_flox,
                 ["hello.nix"],
@@ -408,13 +383,26 @@ mod tests {
             )
             .await
             .unwrap();
-            let builder_path = lock.path().to_path_buf();
-            let builder_content = std::fs::read(&builder_path).unwrap();
+            let builder_path = lock.write_builder_file().unwrap().to_path_buf();
+            assert_ne!(builder_path, catalog_lockfile_path(&dot_flox));
+            assert!(
+                !builder_path.to_string_lossy().contains(char::is_whitespace),
+                "a builder file path must be whitespace-free: {}",
+                builder_path.display()
+            );
+            let builder_content = std::fs::read_to_string(&builder_path).unwrap();
+            assert_eq!(
+                builder_content,
+                render_builder_lock(lock.build_lock()).unwrap()
+            );
             drop(lock);
 
             assert_eq!(builder_path.exists(), retain);
             if retain {
-                assert_eq!(std::fs::read(&builder_path).unwrap(), builder_content);
+                assert_eq!(
+                    std::fs::read_to_string(&builder_path).unwrap(),
+                    builder_content
+                );
                 std::fs::remove_file(&builder_path).unwrap();
             }
             assert_eq!(
