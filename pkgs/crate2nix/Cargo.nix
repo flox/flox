@@ -244,7 +244,7 @@ rec {
         dependencies = [
           {
             name = "bitflags";
-            packageId = "bitflags 2.13.0";
+            packageId = "bitflags 2.13.2";
           }
           {
             name = "bytes";
@@ -321,7 +321,7 @@ rec {
           }
           {
             name = "bitflags";
-            packageId = "bitflags 2.13.0";
+            packageId = "bitflags 2.13.2";
           }
           {
             name = "bytes";
@@ -2081,7 +2081,7 @@ rec {
         dependencies = [
           {
             name = "bitflags";
-            packageId = "bitflags 2.13.0";
+            packageId = "bitflags 2.13.2";
           }
           {
             name = "cexpr";
@@ -2207,11 +2207,11 @@ rec {
         };
         resolvedDefaultFeatures = [ "default" ];
       };
-      "bitflags 2.13.0" = rec {
+      "bitflags 2.13.2" = rec {
         crateName = "bitflags";
-        version = "2.13.0";
+        version = "2.13.2";
         edition = "2021";
-        sha256 = "1y239gpvl061rfvav7jds8mjs42kmwi39is7yx5d1qw3hvp8nf5l";
+        sha256 = "01hbgjwvid66850fzi76mvn5f2bqycx6sf165ng1kfjqq9bl1v9x";
         authors = [
           "The Rust Project Developers"
         ];
@@ -3438,7 +3438,7 @@ rec {
         dependencies = [
           {
             name = "bitflags";
-            packageId = "bitflags 2.13.0";
+            packageId = "bitflags 2.13.2";
           }
           {
             name = "crossterm_winapi";
@@ -3505,7 +3505,7 @@ rec {
         dependencies = [
           {
             name = "bitflags";
-            packageId = "bitflags 2.13.0";
+            packageId = "bitflags 2.13.2";
           }
           {
             name = "crossterm_winapi";
@@ -9320,7 +9320,7 @@ rec {
         dependencies = [
           {
             name = "bitflags";
-            packageId = "bitflags 2.13.0";
+            packageId = "bitflags 2.13.2";
           }
           {
             name = "inotify-sys";
@@ -9392,7 +9392,7 @@ rec {
         dependencies = [
           {
             name = "bitflags";
-            packageId = "bitflags 2.13.0";
+            packageId = "bitflags 2.13.2";
           }
           {
             name = "crossterm";
@@ -9913,7 +9913,7 @@ rec {
         dependencies = [
           {
             name = "bitflags";
-            packageId = "bitflags 2.13.0";
+            packageId = "bitflags 2.13.2";
           }
           {
             name = "bytes";
@@ -10002,7 +10002,7 @@ rec {
         dependencies = [
           {
             name = "bitflags";
-            packageId = "bitflags 2.13.0";
+            packageId = "bitflags 2.13.2";
           }
           {
             name = "libc";
@@ -10792,7 +10792,7 @@ rec {
         dependencies = [
           {
             name = "bitflags";
-            packageId = "bitflags 2.13.0";
+            packageId = "bitflags 2.13.2";
           }
           {
             name = "cfg-if";
@@ -10894,7 +10894,7 @@ rec {
         dependencies = [
           {
             name = "bitflags";
-            packageId = "bitflags 2.13.0";
+            packageId = "bitflags 2.13.2";
             target = { target, features }: ("macos" == target."os" or null);
           }
           {
@@ -11006,7 +11006,7 @@ rec {
         dependencies = [
           {
             name = "bitflags";
-            packageId = "bitflags 2.13.0";
+            packageId = "bitflags 2.13.2";
           }
         ];
         features = {
@@ -11495,7 +11495,7 @@ rec {
         dependencies = [
           {
             name = "bitflags";
-            packageId = "bitflags 2.13.0";
+            packageId = "bitflags 2.13.2";
             optional = true;
             usesDefaultFeatures = false;
             features = [ "std" ];
@@ -11713,7 +11713,7 @@ rec {
         dependencies = [
           {
             name = "bitflags";
-            packageId = "bitflags 2.13.0";
+            packageId = "bitflags 2.13.2";
           }
           {
             name = "cfg-if";
@@ -12706,7 +12706,7 @@ rec {
         dependencies = [
           {
             name = "bitflags";
-            packageId = "bitflags 2.13.0";
+            packageId = "bitflags 2.13.2";
             usesDefaultFeatures = false;
           }
           {
@@ -12754,7 +12754,7 @@ rec {
         dependencies = [
           {
             name = "bitflags";
-            packageId = "bitflags 2.13.0";
+            packageId = "bitflags 2.13.2";
           }
           {
             name = "chrono";
@@ -12994,7 +12994,7 @@ rec {
           }
           {
             name = "bitflags";
-            packageId = "bitflags 2.13.0";
+            packageId = "bitflags 2.13.2";
           }
           {
             name = "num-traits";
@@ -13098,7 +13098,7 @@ rec {
         dependencies = [
           {
             name = "bitflags";
-            packageId = "bitflags 2.13.0";
+            packageId = "bitflags 2.13.2";
           }
           {
             name = "getopts";
@@ -13700,7 +13700,7 @@ rec {
         dependencies = [
           {
             name = "bitflags";
-            packageId = "bitflags 2.13.0";
+            packageId = "bitflags 2.13.2";
           }
         ];
         features = {
@@ -14890,7 +14890,7 @@ rec {
         dependencies = [
           {
             name = "bitflags";
-            packageId = "bitflags 2.13.0";
+            packageId = "bitflags 2.13.2";
             usesDefaultFeatures = false;
           }
           {
@@ -15001,7 +15001,7 @@ rec {
         dependencies = [
           {
             name = "bitflags";
-            packageId = "bitflags 2.13.0";
+            packageId = "bitflags 2.13.2";
             usesDefaultFeatures = false;
           }
           {
@@ -15348,7 +15348,7 @@ rec {
         dependencies = [
           {
             name = "bitflags";
-            packageId = "bitflags 2.13.0";
+            packageId = "bitflags 2.13.2";
             features = [ "serde" ];
           }
         ];
@@ -15850,7 +15850,7 @@ rec {
         dependencies = [
           {
             name = "bitflags";
-            packageId = "bitflags 2.13.0";
+            packageId = "bitflags 2.13.2";
           }
           {
             name = "core-foundation";
@@ -16311,7 +16311,7 @@ rec {
         dependencies = [
           {
             name = "bitflags";
-            packageId = "bitflags 2.13.0";
+            packageId = "bitflags 2.13.2";
           }
           {
             name = "sentry-backtrace";
@@ -17899,7 +17899,7 @@ rec {
         dependencies = [
           {
             name = "bitflags";
-            packageId = "bitflags 2.13.0";
+            packageId = "bitflags 2.13.2";
           }
           {
             name = "core-foundation";
@@ -19060,7 +19060,7 @@ rec {
         dependencies = [
           {
             name = "bitflags";
-            packageId = "bitflags 2.13.0";
+            packageId = "bitflags 2.13.2";
           }
           {
             name = "bytes";
@@ -20689,7 +20689,7 @@ rec {
         dependencies = [
           {
             name = "bitflags";
-            packageId = "bitflags 2.13.0";
+            packageId = "bitflags 2.13.2";
           }
           {
             name = "hashbrown";
@@ -24832,7 +24832,7 @@ rec {
         dependencies = [
           {
             name = "bitflags";
-            packageId = "bitflags 2.13.0";
+            packageId = "bitflags 2.13.2";
             optional = true;
           }
         ];
@@ -24952,7 +24952,7 @@ rec {
           }
           {
             name = "bitflags";
-            packageId = "bitflags 2.13.0";
+            packageId = "bitflags 2.13.2";
           }
           {
             name = "indexmap";
