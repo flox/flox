@@ -1,0 +1,13 @@
+# Scheduled refresh of the Flox environment for %i.
+#
+# Started by flox-autopull@%i.timer. Unlike the service-start pull, a failure
+# here is reported: there is no service start to protect.
+[Unit]
+Description=Flox environment pull for %i (scheduled)
+Documentation=https://flox.dev/docs
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/flox/flox-pull %i timer
