@@ -94,8 +94,13 @@ let
     assertion: !assertion.assertion && lib.hasInfix "flox" assertion.message
   ) sys.config.assertions;
 
+  # The system trusts the key FloxHub signs published packages with, so
+  # `flox install` of a package from a FloxHub-hosted catalog works.
+  trustsFloxhubKey = lib.elem "floxhub-1:0QOAlcobcEvq1mqEf4qAYCaWnTTOXpyoRv/PmqfSixM=" sys.config.nix.settings.trusted-public-keys;
+
 in
 assert moduleAssertions == [ ];
+assert trustsFloxhubKey;
 assert disabledUnits == [ ];
 assert disabledTmpfiles == [ ];
 assert lib.length disabledAssertions == 1;
