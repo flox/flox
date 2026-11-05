@@ -28,6 +28,11 @@ let
             autoPull.enable = true;
             autoRestart.enable = true;
           };
+          # A production-ring service pinned to a validated generation.
+          activations.sample-pinned = {
+            environment = "flox/sample";
+            generation = 3;
+          };
         };
         systemd.services.sample-override = {
           flox = {
@@ -35,6 +40,11 @@ let
             execStart = "sample --flag";
             autoPull.enable = true;
           };
+        };
+        systemd.services.sample-override-pinned.flox = {
+          environment = "flox/sample";
+          execStart = "sample --flag";
+          generation = 3;
         };
         # Exercises the makeJobScript path, which the execStart sample
         # above leaves unevaluated.
@@ -45,6 +55,22 @@ let
       }
     ];
   };
+
+  # A pin reaches the pull configuration and becomes a restart trigger, so
+  # moving it re-provisions the service on `nixos-rebuild switch`.
+  pullConfigs = sys.config.services.flox.pull.configs;
+  pinnedUnits = map (unit: sys.config.systemd.units.${unit}.text) [
+    "sample-pinned.service"
+    "sample-override-pinned.service"
+  ];
+  pinsReachPull =
+    pullConfigs.sample-pinned.generation == 3
+    && pullConfigs.sample-override-pinned.generation == 3
+    && pullConfigs.sample.generation == null;
+  pinsTriggerRestart =
+    sys.config.systemd.services.sample-pinned.restartTriggers == [ "3" ]
+    && sys.config.systemd.services.sample-override-pinned.restartTriggers == [ "3" ]
+    && lib.all (lib.hasInfix "X-Restart-Triggers=") pinnedUnits;
 
   unitTexts = map (unit: sys.config.systemd.units.${unit}.text) [
     "sample.service"
@@ -99,6 +125,8 @@ assert moduleAssertions == [ ];
 assert disabledUnits == [ ];
 assert disabledTmpfiles == [ ];
 assert lib.length disabledAssertions == 1;
-builtins.deepSeq (unitTexts ++ serviceOptionDocs ++ overridesOptionDocs) (
+assert pinsReachPull;
+assert pinsTriggerRestart;
+builtins.deepSeq (unitTexts ++ pinnedUnits ++ serviceOptionDocs ++ overridesOptionDocs) (
   pkgs.writeText "flox-nixos-module-check" "ok"
 )
