@@ -24,11 +24,14 @@ use flox_rust_sdk::models::environment::{
 use flox_rust_sdk::providers::git::GitRemoteCommandError;
 use flox_rust_sdk::providers::lock_manifest::ResolveError;
 use flox_rust_sdk::providers::services::process_compose::{LoggedError, ServiceError};
+use flox_rust_sdk::utils::invoked_by_agent;
+use floxhub_client::{ResolveAuthError, ResolveError as CatalogResolveError};
 use indent::indent_by;
 use indoc::{formatdoc, indoc};
 use tracing::trace;
 
 use crate::commands::EnvironmentSelectError;
+use crate::utils::dialog::Dialog;
 
 pub fn format_error(err: &EnvironmentError) -> String {
     trace!("formatting environment_error: {err:?}");
@@ -689,6 +692,9 @@ pub fn format_environment_select_error(err: &EnvironmentSelectError) -> String {
 pub fn format_resolve_error(err: &ResolveError) -> String {
     trace!("formatting locked_manifest_error: {err:?}");
     match err {
+        ResolveError::CatalogResolve(CatalogResolveError::Auth(err)) => {
+            format_resolve_auth_error(err)
+        },
         ResolveError::CatalogResolve(err) => display_chain(err),
         ResolveError::UnrecognizedSystem(system) => formatdoc! {"
             Unrecognized system in manifest: {system}
@@ -705,6 +711,22 @@ pub fn format_resolve_error(err: &ResolveError) -> String {
         ResolveError::LockFlakeNixError(_) => display_chain(err),
         ResolveError::InstallIdNotInManifest(_) => display_chain(err),
         ResolveError::Manifest(manifest_err) => format_manifest_error(manifest_err),
+    }
+}
+
+/// The catalog's request to log in, plus how to do that from an agent.
+///
+/// An agent's shell has no terminal, and its tool calls hold back output
+/// until the command exits, so a 'flox auth login' run in the foreground
+/// would keep the URL from the user until the call times out.
+fn format_resolve_auth_error(err: &ResolveAuthError) -> String {
+    if Dialog::can_prompt() || !invoked_by_agent() {
+        return err.to_string();
+    }
+    formatdoc! {"
+        {err}
+        To log in from an agent, run 'flox auth login' in the background.
+        It prints a URL to share with the user and exits once they approve the login."
     }
 }
 
