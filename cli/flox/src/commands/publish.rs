@@ -541,7 +541,7 @@ impl Publish {
                 )
             },
         };
-        let catalog_lock = BuildLockGuard::for_expression_builds(
+        let mut catalog_lock = BuildLockGuard::for_expression_builds(
             &flox.floxhub_client,
             path_env.dot_flox_path(),
             &lock_rel_paths,
@@ -636,7 +636,10 @@ impl Publish {
             system_override_inner,
             &publish_provider.env_metadata,
             &publish_provider.package_metadata.package,
-            catalog_lock.as_ref().map(|lock| lock.path()),
+            catalog_lock
+                .as_mut()
+                .map(BuildLockGuard::write_builder_file)
+                .transpose()?,
         )?;
 
         // CLI args take precedence over config
@@ -770,11 +773,7 @@ mod tests {
         .unwrap();
         let references = scan_package(expressions_dir.path(), "hello.nix").unwrap();
 
-        let lock = build_lock_guard_from_parts(
-            "/project/.flox/catalog.lock",
-            nef_lock_catalog::BuildLock::default(),
-            true,
-        );
+        let lock = build_lock_guard_from_parts(nef_lock_catalog::BuildLock::default(), true);
         let err = project_for_publish(&lock, &references)
             .expect_err("an empty committed lock cannot cover the reference");
         let message = format!("{err:#}");

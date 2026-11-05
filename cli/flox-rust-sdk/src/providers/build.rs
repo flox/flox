@@ -4702,7 +4702,12 @@ mod nef_tests {
 
     use floxhub_client::LockedInputEntry;
     use indoc::{formatdoc, indoc};
-    use nef_lock_catalog::build_lock_from_locked_inputs;
+    use nef_lock_catalog::{
+        CatalogRef,
+        build_lock_from_locked_inputs,
+        override_input,
+        render_builder_lock,
+    };
     use pretty_assertions::assert_eq;
 
     use super::*;
@@ -4717,12 +4722,12 @@ mod nef_tests {
     use crate::providers::git::tests::test_git_options;
     use crate::providers::git::{GitCommandProvider, GitProvider};
 
-    /// Write the builder-facing catalog JSON pinning `catalogs.myorg.hello`
-    /// to `source_dir` at its current revision. The fixture uses the same
-    /// materialization as the CLI, with no catalog request. The entry is keyed in the
-    /// server's canonical `<catalog>/<attr-path>` form, which the expression
-    /// references in dot-rendered form.
-    fn write_builder_catalog_lock(path: &Path, repo: &GitCommandProvider, source_dir: &Path) {
+    /// A catalog lock pinning `catalogs.myorg.hello` to `source_dir` at its
+    /// current revision. The fixture uses the same transform as the CLI,
+    /// with no catalog request. The entry is keyed in the server's canonical
+    /// `<catalog>/<attr-path>` form, which the expression references in
+    /// dot-rendered form.
+    fn hello_catalog_lock(repo: &GitCommandProvider, source_dir: &Path) -> BuildLock {
         let status = repo.status().unwrap();
         let entry: LockedInputEntry = serde_json::from_value(serde_json::json!({
             "attr_path": ["hello"],
@@ -4743,9 +4748,39 @@ mod nef_tests {
         .unwrap();
 
         let key = "myorg/hello".to_string();
-        let lock =
-            build_lock_from_locked_inputs(HashMap::from([(key.clone(), entry)]), [&key]).unwrap();
-        fs::write(path, nef_lock_catalog::render_builder_lock(&lock).unwrap()).unwrap();
+        build_lock_from_locked_inputs(HashMap::from([(key.clone(), entry)]), [&key]).unwrap()
+    }
+
+    /// The expressions `catalog_fixture` builds: `foo` references the
+    /// catalog input `catalogs.myorg.hello`, and `hello` is the package that
+    /// reference resolves to.
+    const CATALOG_FIXTURE: &[(&[&str], &str)] = &[
+        (&["foo"], indoc! {r#"
+            {catalogs, runCommand}: runCommand "foo" {} ''
+                echo -n "Hello, World!" >> $out
+                cat ${catalogs.myorg.hello} >> $out
+            ''
+            "#}),
+        (&["hello"], indoc! {r#"
+            {runCommand}: runCommand "hello" {} ''
+                echo -n "Hello from the catalog" > $out
+            ''
+            "#}),
+    ];
+
+    /// Write [CATALOG_FIXTURE] to a committed git repository in `base`. The
+    /// directory hosting both packages doubles as `hello`'s git-fetchable
+    /// source, so the build resolves the reference for real with no network
+    /// access. Returns the expressions and a lock pinning `hello` to the
+    /// commit.
+    fn catalog_fixture(base: &Path) -> (NixFlakeref, BuildLock) {
+        let (expressions_dir, expressions_ref) =
+            prepare_nix_expressions_dir_in(base, CATALOG_FIXTURE);
+        let repo =
+            GitCommandProvider::init_with(test_git_options(), &expressions_dir, false).unwrap();
+        repo.add(&[&expressions_dir]).unwrap();
+        repo.commit("add nef catalog fixtures").unwrap();
+        (expressions_ref, hello_catalog_lock(&repo, &expressions_dir))
     }
 
     /// The build consumes the catalog lock it is handed: the NEF eval reads
@@ -4764,30 +4799,9 @@ mod nef_tests {
         let mut env = new_path_environment(&flox, &manifest);
         let env_path = env.parent_path().unwrap();
 
-        // `foo` references a catalog input; `hello` is the package that
-        // reference resolves to. The directory hosting both doubles as
-        // `hello`'s git-fetchable source, so the build resolves the
-        // reference for real with no network access.
-        let (expressions_dir, expressions_ref) = prepare_nix_expressions_dir_in(&tempdir, &[
-            (&[pname], indoc! {r#"
-                {catalogs, runCommand}: runCommand "foo" {} ''
-                    echo -n "Hello, World!" >> $out
-                    cat ${catalogs.myorg.hello} >> $out
-                ''
-                "#}),
-            (&["hello"], indoc! {r#"
-                {runCommand}: runCommand "hello" {} ''
-                    echo -n "Hello from the catalog" > $out
-                ''
-                "#}),
-        ]);
-        let repo =
-            GitCommandProvider::init_with(test_git_options(), &expressions_dir, false).unwrap();
-        repo.add(&[&expressions_dir]).unwrap();
-        repo.commit("add nef catalog fixtures").unwrap();
-
+        let (expressions_ref, lock) = catalog_fixture(tempdir.path());
         let lockfile = tempdir.path().join("catalog.lock");
-        write_builder_catalog_lock(&lockfile, &repo, &expressions_dir);
+        fs::write(&lockfile, render_builder_lock(&lock).unwrap()).unwrap();
         let lock_bytes = fs::read(&lockfile).unwrap();
 
         assert_build_status_with_nix_expr(
@@ -4808,6 +4822,54 @@ mod nef_tests {
             lock_bytes,
             "the build must not rewrite the lock it is handed"
         );
+    }
+
+    /// A build against an overridden input uses the overriding source in
+    /// place of the revision the lock pins.
+    #[tokio::test]
+    async fn nef_build_uses_an_overridden_catalog_input() {
+        let pname = "foo";
+
+        let (flox, tempdir) = flox_instance();
+        let mut env = new_path_environment(&flox, "version = 1");
+        let env_path = env.parent_path().unwrap();
+        let (expressions_ref, mut lock) = catalog_fixture(tempdir.path());
+
+        // A NEF project with its own `hello`, which is neither committed nor
+        // known to the catalog. Nix refuses a path input with a symlinked
+        // component, such as `/tmp` on macOS.
+        let override_dir = tempdir.path().join("hello-override");
+        let override_pkgs = override_dir.join(".flox/pkgs");
+        fs::create_dir_all(&override_pkgs).unwrap();
+        fs::write(override_pkgs.join("hello.nix"), indoc! {r#"
+            {runCommand}: runCommand "hello" {} ''
+                echo -n "Hello from the override" > $out
+            ''
+            "#})
+        .unwrap();
+        override_input(
+            &mut lock,
+            &flox.floxhub_client,
+            &CatalogRef::from_str("catalogs.myorg.hello").unwrap(),
+            &NixFlakeref::from_path(override_dir.canonicalize().unwrap()).unwrap(),
+        )
+        .await
+        .unwrap();
+
+        let lockfile = tempdir.path().join("catalog.lock");
+        fs::write(&lockfile, render_builder_lock(&lock).unwrap()).unwrap();
+        assert_build_status_with_nix_expr(
+            &flox,
+            &mut env,
+            &expressions_ref,
+            pname,
+            Some(&lockfile),
+            None,
+            true,
+        );
+
+        let content = fs::read_to_string(env_path.join(format!("result-{pname}"))).unwrap();
+        assert_eq!(content, "Hello, World!Hello from the override");
     }
 
     #[test]

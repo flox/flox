@@ -16,6 +16,7 @@ flox-develop - Enter a development shell for a Nix expression build
 flox [<general-options>] develop
      [-d=<path>]
      [--stability <stability>]
+     [--override-input <input> <flakeref>]...
      [-c=<cmd>]
      [<package>]
 ```
@@ -146,6 +147,12 @@ fails the same way `flox build` does on an empty project.
     given stability, as tracked by the catalog server, exactly as
     `--stability` does for [`flox-build(1)`](./flox-build.md). Pass the
     same value to both so the shell and the build agree on their inputs.
+
+`--override-input <input> <flakeref>`
+:   Use the source at `<flakeref>` for the catalog input `<input>`
+    (e.g. `catalogs.myorg.hello`), exactly as `--override-input` does
+    for [`flox-build(1)`](./flox-build.md). May be given more than once.
+    The committed `.flox/catalog.lock` is not changed.
 
 `-c`, `--command <cmd>`
 :   Run a shell command string in the development shell instead of

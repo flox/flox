@@ -271,7 +271,7 @@ mod tests {
         assert_eq!(closure.direct_inputs, vec!["myorg/hello".to_string()]);
         assert_eq!(
             closure.locked_inputs["myorg/hello"],
-            floxhub_client::LockedInputEntry::from(&lock.locked_inputs["myorg/hello"])
+            floxhub_client::LockedInputEntry::try_from(&lock.locked_inputs["myorg/hello"]).unwrap()
         );
     }
 
@@ -291,7 +291,7 @@ mod tests {
         crate::write_lock(&lock, &path).unwrap();
         let read = crate::read_lock(&path).unwrap();
         assert_eq!(
-            read.locked_inputs["myorg/hello"].source.extra["narHash"],
+            serde_json::to_value(&read.locked_inputs["myorg/hello"].source).unwrap()["narHash"],
             json!("sha256-wire-extra")
         );
         let closure = read

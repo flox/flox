@@ -16,6 +16,7 @@ flox-build - Build packages with Flox
 flox [<general-options>] build
      [-d=<path>]
      [--stability <stability>]
+     [--override-input <input> <flakeref>]...
      [<package>]...
 ```
 
@@ -125,6 +126,24 @@ Catalog references resolve to the latest published versions and are
 independent of `--stability`, which selects only the nixpkgs base
 package set.
 
+### Overriding a catalog input
+
+`--override-input <input> <flakeref>` builds against a different source
+for one catalog input, such as a local checkout of a package that is not
+published yet.
+`<input>` names the package as the expressions reference it, for example
+`catalogs.myorg.hello`, and must be in the catalog lock the build uses.
+`<flakeref>` is a Nix flake reference to the repository that defines the
+package.
+Flox reads the package from `.flox/pkgs/` beneath the flakeref's `dir`,
+or beneath the repository root when the flakeref has no `dir`.
+A local path needs a scheme, as in `path:../hello` or `git+file:../hello`.
+
+Catalog references that the overriding source makes and the lock does not
+contain are resolved from the catalog.
+The override applies to the current invocation only.
+The committed `.flox/catalog.lock` is not changed.
+
 # OPTIONS
 
 `<package>`
@@ -140,6 +159,14 @@ package set.
     When omitted, the default stability is used, except for the Nix expression
     builds a manifest build reaches, which use the environment's revision.
     Cannot be used with manifest builds.
+
+`--override-input <input> <flakeref>`
+:   Build against the source at `<flakeref>` for the catalog input
+    `<input>` (e.g. `catalogs.myorg.hello`), for this invocation only.
+    May be given more than once.
+    Applies only to Nix expression builds.
+    `<input>` must name a single package; wildcards are not accepted.
+    See "Overriding a catalog input" above.
 
 
 ```{.include}
@@ -230,6 +257,16 @@ mv dist $out/
 
 ```bash
 npx serve result-app
+```
+
+## Building against a local checkout of a catalog input
+
+A package references `catalogs.myorg.hello`, and a checkout of the
+repository that publishes `hello` sits next to the project:
+
+```console
+$ flox build --override-input catalogs.myorg.hello path:../hello app
+ℹ Overriding catalogs.myorg.hello with path:../hello.
 ```
 
 # SEE ALSO

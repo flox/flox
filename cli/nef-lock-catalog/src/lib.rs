@@ -6,6 +6,8 @@ mod lock;
 mod nix;
 mod project;
 mod scan;
+#[cfg(test)]
+mod test_helpers;
 
 /// Common identifier for a catalog and its `CatalogLock` in a build lock.
 /// Also exposed to nix expressions in the NEF as the `<catalog>` in
@@ -27,17 +29,18 @@ impl Display for CatalogId {
 pub use lock::build_lock::{
     BuildLock,
     BuildType,
-    GitSource,
     LockedInput,
     LockfileError,
+    OverrideInputError,
     PackageClosure,
     ProjectionError,
     StaleLockError,
+    override_input,
     read_lock,
     render_lock,
     write_lock,
 };
-pub use lock::flakeref::NixFlakeref;
+pub use lock::flakeref::{NixFlakeref, PrefetchError};
 pub use lock::lookup::{LockError, lock_references};
 pub use lock::render::render_unresolvable;
 pub use lock::transform::{
