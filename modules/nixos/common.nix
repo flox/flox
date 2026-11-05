@@ -89,6 +89,27 @@ let
         time the service is restarted.
       '';
     };
+    generation = mkOption {
+      type = types.nullOr types.ints.positive;
+      default = null;
+      example = 12;
+      description = ''
+        Pin the service to this generation of its FloxHub environment
+        instead of following the live generation.
+
+        A pinned service runs a detached copy of exactly that generation
+        (`flox pull --copy --generation`). Changing the value
+        re-provisions the environment and restarts the service on the
+        next `nixos-rebuild switch`. This enables staged rollouts: canary
+        hosts follow the live generation while production hosts pin a
+        generation that has already been validated, and promotion or
+        rollback is a one-line configuration change.
+
+        Scheduled pulls (`autoPull`) do nothing for a pinned service.
+        If pulling the pinned generation fails and an environment is
+        already provisioned, the service starts with the existing one.
+      '';
+    };
   };
 
   floxModuleOpts = {

@@ -102,6 +102,36 @@ a scheduled pull fetches a new generation of the environment;
 without it, a pulled update takes effect the next time the service
 restarts.
 
+### Pinning a generation (staged rollouts)
+
+By default every host follows the live generation of its environment,
+so a push to FloxHub reaches the whole fleet on its next pull.
+Setting `generation` pins a service to one generation instead:
+the host runs a detached copy of exactly that generation
+(`flox pull --copy --generation <n>`) and scheduled pulls leave it alone.
+
+This makes a staged rollout a configuration change:
+canary hosts follow the live generation,
+production hosts pin a generation that has already been validated,
+and promotion or rollback is a one-line change reviewed like any other.
+
+```nix
+  # canary hosts
+  services.flox.activations.myechoip.environment = "flox/echoip";
+
+  # production hosts
+  services.flox.activations.myechoip = {
+    environment = "flox/echoip";
+    generation = 12;
+  };
+```
+
+Changing the pin restarts the service on `nixos-rebuild switch`,
+and the restart provisions the newly pinned generation.
+If that pull fails and an environment is already provisioned,
+the service starts with the existing one.
+Removing the pin re-links the service to the live generation.
+
 ## Authentication
 
 To pull private environments, point `floxHubTokenFile` at a file
@@ -185,6 +215,15 @@ of the Services and Overrides methods described above:
 
     - _Type_: boolean
     - _Default_: `false`
+
+* `generation`
+    Pin the service to this generation of its FloxHub environment
+    instead of following the live generation.
+    See [Pinning a generation](#pinning-a-generation-staged-rollouts).
+
+    - _Type_: null or positive integer
+    - _Default_: `null`
+    - _Example_: `12`
 
 ## Flox Services configuration attributes
 
