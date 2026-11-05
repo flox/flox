@@ -39,7 +39,7 @@ runCommand "flox-manpages"
   {
     src = builtins.path {
       name = "flox-manpage-src";
-      path = "${./../../cli/flox/doc}";
+      path = ./../../cli/flox/doc;
     };
     buildInputs = [
       findutils
