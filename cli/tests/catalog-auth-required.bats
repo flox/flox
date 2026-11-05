@@ -44,7 +44,6 @@ EOF
 assert_login_expired_error() {
   assert_output --partial - << 'EOF'
 ✘ ERROR: Your FloxHub login has expired.
-For CI and automation, see https://go.flox.dev/auth
 Log in again with 'flox auth login'.
 EOF
 }
@@ -52,7 +51,6 @@ EOF
 assert_login_rejected_error() {
   assert_output --partial - << 'EOF'
 ✘ ERROR: Authentication rejected: Unable to verify token
-For CI and automation, see https://go.flox.dev/auth
 Log in again with 'flox auth login'.
 EOF
 }
