@@ -19,7 +19,7 @@ use flox_events::{EventsHub, LifecycleFields};
 use flox_rust_sdk::flox::Flox;
 use tracing::debug;
 
-use super::is_detached_side_effect_command;
+use super::{is_detached_side_effect_command, is_telemetry_reset_command};
 use crate::utils::detached::{self, DetachedCommand, LogFile};
 use crate::utils::metrics::Hub;
 
@@ -115,6 +115,7 @@ fn telemetry_flush_due() -> bool {
 /// - neither buffer is due and flushing was not explicitly forced;
 /// - `subcommand` is itself a detached side-effect command (prevents a
 ///   fork-bomb and stops `send-telemetry` from re-spawning itself);
+/// - `subcommand` reset the device ID (see [`is_telemetry_reset_command`]);
 /// - `_FLOX_TESTING_DISABLE_BG_SIDE_EFFECTS=1` (CI escape hatch).
 ///
 /// The child logs to a single rolling file; see [`LogFile::Rolling`].
@@ -128,13 +129,14 @@ pub fn spawn_if_due(config: &Config, subcommand: &str) {
 fn spawn_if_due_with(config: &Config, subcommand: &str, self_executable: Option<PathBuf>) -> bool {
     if config.flox.disable_metrics
         || is_detached_side_effect_command(subcommand)
+        || is_telemetry_reset_command(subcommand)
         || detached::bg_side_effects_disabled()
         || !telemetry_flush_due()
     {
         return false;
     }
 
-    let log_dir = config.flox.cache_dir.join("log");
+    let log_dir = detached::send_telemetry_log_dir(&config.flox.cache_dir);
     let args = [String::from("send-telemetry"), String::from("-vv")];
     let spawn_result = DetachedCommand {
         args: &args,
