@@ -36,11 +36,10 @@ By default, the environment will be created in the current directory.
 Flox will add a directory `$PWD/.flox` containing all relevant environment
 metadata.
 Flox stores a random identifier in the `env_id` field of `.flox/env.json` to
-group metrics from commands that use the same local environment.
+group telemetry from commands that use the same local environment.
 The field is committed with the rest of `.flox` so the identifier stays with
 the environment when it is cloned.
-Flox always creates the identifier, but submits it only when metrics
-collection is enabled.
+Flox always creates the identifier, but sends it only when telemetry is on.
 Environments created by older Flox versions store the identifier in a
 separate `.flox/telemetry_id` file instead, which is still honored.
 The `--dir` flag can be used to create an environment in another location.

@@ -19,8 +19,10 @@ and nothing is sent — but payload construction at a call site still
 happens, since the payload is built as the `record_event` argument.
 That is why expensive payload-only work must go behind
 `when_client_set` (see Emission mechanics). Telemetry is on by
-default with a first-run notice; see `flox config --help` for the
-user-facing description of what is collected.
+default with a first-run notice; see `disable_metrics` in
+`flox-config(1)` (`cli/flox/doc/flox-config.md`) and
+<https://flox.dev/docs/concepts/data-collection> for the user-facing
+description of what is collected.
 
 ## The two streams
 
