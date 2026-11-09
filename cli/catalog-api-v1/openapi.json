@@ -207,7 +207,7 @@
           "catalog"
         ],
         "summary": "Shows available packages of a specific package",
-        "description": "Returns a list of versions for a given attr_path\n\nRequired Query Parameters:\n- **attr_path**: The attr_path, must be valid.\n\nOptional Query Parameters:\n- **page**: Optional page number for pagination (def = 0)\n- **pageSize**: Optional page size for pagination (def = 10)\n\nReturns:\n- **PackagesResult**: A list of PackageResolutionInfo and the total result count",
+        "description": "Returns a list of versions for a given attr_path\n\nRequired Query Parameters:\n- **attr_path**: The attr_path, must be valid.\n\nOptional Query Parameters:\n- **page**: Optional page number for pagination (def = 0)\n- **pageSize**: Optional page size for pagination (def = 10)\n\nReturns:\n- **PackagesResult**: A list of PackageResolutionInfo and the total result count.\n  Empty, with a total count of 0, when attr_path exists but none of its\n  builds have an accepted stability.",
         "operationId": "packages_api_v1_catalog_packages__attr_path__get",
         "security": [
           {
@@ -252,7 +252,7 @@
         ],
         "responses": {
           "200": {
-            "description": "A list of packages attr_path",
+            "description": "Versions of attr_path. Empty, with a total_count of 0, when attr_path exists but none of its builds have an accepted stability.",
             "content": {
               "application/json": {
                 "schema": {
@@ -262,7 +262,7 @@
             }
           },
           "404": {
-            "description": "attr_path was not found.",
+            "description": "attr_path does not exist, or is in a catalog the caller cannot read.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1891,6 +1891,37 @@
         }
       }
     },
+    "/api/v1/catalog/info/default-stability": {
+      "get": {
+        "tags": [
+          "info"
+        ],
+        "summary": "Get the default stability",
+        "operationId": "getDefaultStability_api_v1_catalog_info_default_stability_get",
+        "responses": {
+          "200": {
+            "description": "The effective default stability a group with no stability resolves against, and whether a deployment setting configured it",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultStabilityInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request could not be processed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/catalog/info/systems": {
       "get": {
         "tags": [
@@ -2967,6 +2998,25 @@
           "pname": "binutils",
           "system": "x86_64-linux"
         }
+      },
+      "DefaultStabilityInfo": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "configured": {
+            "type": "boolean",
+            "title": "Configured"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "configured"
+        ],
+        "title": "DefaultStabilityInfo",
+        "description": "The effective default stability a group with no stability resolves against.\n\n`configured` is True when a deployment setting configured the default, and\nFalse when it is the built-in fallback."
       },
       "DeprecationInfo": {
         "properties": {
