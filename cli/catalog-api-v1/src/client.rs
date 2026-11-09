@@ -1247,6 +1247,45 @@ manifest packages were built via the traditional flox manifest workflow.*/
                 })
         }
     }
+    /**The effective default stability a group with no stability resolves against.
+
+`configured` is True when a deployment setting configured the default, and
+False when it is the built-in fallback.*/
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "DefaultStabilityInfo",
+    ///  "description": "The effective default stability a group with no stability resolves against.\n\n`configured` is True when a deployment setting configured the default, and\nFalse when it is the built-in fallback.",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "configured",
+    ///    "name"
+    ///  ],
+    ///  "properties": {
+    ///    "configured": {
+    ///      "title": "Configured",
+    ///      "type": "boolean"
+    ///    },
+    ///    "name": {
+    ///      "title": "Name",
+    ///      "type": "string"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct DefaultStabilityInfo {
+        pub configured: bool,
+        pub name: ::std::string::String,
+    }
+    impl ::std::convert::From<&DefaultStabilityInfo> for DefaultStabilityInfo {
+        fn from(value: &DefaultStabilityInfo) -> Self {
+            value.clone()
+        }
+    }
     ///Deprecation metadata for a package from nixpkgs aliases.nix
     ///
     /// <details><summary>JSON schema</summary>
@@ -8003,7 +8042,9 @@ Optional Query Parameters:
 - **pageSize**: Optional page size for pagination (def = 10)
 
 Returns:
-- **PackagesResult**: A list of PackageResolutionInfo and the total result count
+- **PackagesResult**: A list of PackageResolutionInfo and the total result count.
+  Empty, with a total count of 0, when attr_path exists but none of its
+  builds have an accepted stability.
 
 Sends a `GET` request to `/api/v1/catalog/packages/{attr_path}`
 
