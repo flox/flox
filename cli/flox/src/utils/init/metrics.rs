@@ -51,7 +51,9 @@ pub fn init_telemetry_uuid(data_dir: impl AsRef<Path>, cache_dir: impl AsRef<Pat
 
         "};
 
-    message::plain(notice);
+    // The UUID records that this notice was shown, so verbosity and logging
+    // filters must not suppress it.
+    message::unconditional(notice);
 
     fs::write(uuid_path, telemetry_uuid.to_string())?;
     Ok(())

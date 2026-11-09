@@ -107,3 +107,63 @@ enable_blocking_telemetry_endpoints() {
   assert_output --partial "192.0.2.1"
   assert [ -s "$FLOX_DATA_DIR/events-v2.json" ]
 }
+
+@test "quiet first run shows the notice once and records telemetry" {
+  unset RUST_LOG
+  export _FLOX_TESTING_DISABLE_BG_SIDE_EFFECTS=true
+
+  run --separate-stderr "$FLOX_BIN" -q envs --active
+  assert_success
+  assert_regex "$stderr" "disable_metrics"
+  refute_output --partial "disable_metrics"
+  assert [ -s "$FLOX_DATA_DIR/metrics-uuid" ]
+  assert [ -s "$FLOX_DATA_DIR/events-v2.json" ]
+  assert [ -s "$FLOX_CACHE_DIR/metrics-events-v2.json" ]
+
+  local uuid events
+  uuid="$(cat "$FLOX_DATA_DIR/metrics-uuid")"
+  events="$(wc -l < "$FLOX_DATA_DIR/events-v2.json")"
+  run --separate-stderr "$FLOX_BIN" -q envs --active
+  assert_success
+  assert_equal "$stderr" ""
+  assert_equal "$(cat "$FLOX_DATA_DIR/metrics-uuid")" "$uuid"
+  assert [ "$(wc -l < "$FLOX_DATA_DIR/events-v2.json")" -gt "$events" ]
+}
+
+@test "first-run notice bypasses RUST_LOG filters" {
+  export _FLOX_TESTING_DISABLE_BG_SIDE_EFFECTS=true
+
+  run --separate-stderr env RUST_LOG=off,flox::utils::message::unconditional=off "$FLOX_BIN" envs --active
+  assert_success
+  assert_regex "$stderr" "disable_metrics"
+  refute_output --partial "disable_metrics"
+  assert [ -s "$FLOX_DATA_DIR/metrics-uuid" ]
+  assert [ -s "$FLOX_DATA_DIR/events-v2.json" ]
+}
+
+@test "shell completion leaves the first-run notice for the next command" {
+  unset RUST_LOG
+  export _FLOX_TESTING_DISABLE_BG_SIDE_EFFECTS=true
+
+  run --separate-stderr "$FLOX_BIN" --bpaf-complete-rev=8 en
+  assert_success
+  assert_output --partial "envs"
+  assert_equal "$stderr" ""
+  refute [ -e "$FLOX_DATA_DIR/metrics-uuid" ]
+  refute [ -e "$FLOX_CACHE_DIR/metrics-lock" ]
+  refute [ -e "$FLOX_DATA_DIR/events-v2.json" ]
+  refute [ -e "$FLOX_CACHE_DIR/metrics-events-v2.json" ]
+
+  run "$FLOX_BIN" envs --active
+  assert_success
+  assert_output --partial "disable_metrics"
+  assert [ -s "$FLOX_DATA_DIR/metrics-uuid" ]
+}
+
+@test "metrics opt-out suppresses the first-run notice even in quiet mode" {
+  run env FLOX_DISABLE_METRICS=true "$FLOX_BIN" -q envs --active
+  assert_success
+  refute_output --partial "disable_metrics"
+  refute [ -e "$FLOX_DATA_DIR/metrics-uuid" ]
+  refute [ -e "$FLOX_DATA_DIR/events-v2.json" ]
+}
