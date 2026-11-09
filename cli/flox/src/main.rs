@@ -128,6 +128,14 @@ fn main() -> ExitCode {
             return ExitCode::from(1);
         },
     };
+    let args = commands::flox_cli().run_inner(Args::current_args());
+    // Completion must not print the first-run notice or create its device ID.
+    // Let bpaf recognize completion requests rather than inspecting raw flags.
+    if let Err(bpaf::ParseFailure::Completion(c)) = &args {
+        print!("{c}");
+        return ExitCode::from(0);
+    }
+
     let metrics_uuid = if !config.flox.disable_metrics {
         init_telemetry_uuid(&config.flox.data_dir, &config.flox.cache_dir)
             .and_then(|_| read_metrics_uuid(&config))
@@ -156,14 +164,8 @@ fn main() -> ExitCode {
     }
     debug!("set _FLOX_SUBSYSTEM_VERBOSITY={subsystem_verbosity}");
 
-    // Run the argument parser
-    //
-    // Pass through Completion "failure"; In completion mode this needs to be printed as is
-    // to work with the shell completion frontends
-    //
     // Pass through Stdout failure; This represents `--help`
     // todo: just `run()` the parser? Unless we still need to control which std{err/out} to use
-    let args = commands::flox_cli().run_inner(Args::current_args());
 
     if let Some(parse_err) = args.as_ref().err() {
         // `flox <name>` may be an installed beta extension rather than a typo.
@@ -198,9 +200,8 @@ fn main() -> ExitCode {
                 message::error(format!("{m:80}"));
                 return ExitCode::from(1);
             },
-            bpaf::ParseFailure::Completion(c) => {
-                print!("{c}");
-                return ExitCode::from(0);
+            bpaf::ParseFailure::Completion(_) => {
+                unreachable!("completion handled before telemetry")
             },
         }
     }
