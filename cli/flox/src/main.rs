@@ -155,6 +155,7 @@ fn main() -> ExitCode {
     //
     // Pass through Stdout failure; This represents `--help`
     // todo: just `run()` the parser? Unless we still need to control which std{err/out} to use
+    let global_json = commands::global::json_requested();
     let args = commands::flox_cli().run_inner(Args::current_args());
 
     if let Some(parse_err) = args.as_ref().err() {
@@ -187,7 +188,15 @@ fn main() -> ExitCode {
                 return ExitCode::from(0);
             },
             bpaf::ParseFailure::Stderr(m) => {
-                message::error(format!("{m:80}"));
+                if global_json {
+                    commands::global::render_early_error(
+                        &config.flox.data_dir,
+                        "usage",
+                        format!("{m:80}"),
+                    );
+                } else {
+                    message::error(format!("{m:80}"));
+                }
                 return ExitCode::from(1);
             },
             bpaf::ParseFailure::Completion(c) => {
@@ -214,6 +223,16 @@ fn main() -> ExitCode {
 
         // Do not print any error for a controlled exit
         Err(e) if e.is::<Exit>() => (e.downcast_ref::<Exit>().unwrap().0, Some("controlled_exit")),
+
+        Err(e) if global_json => {
+            let category = if e.is::<commands::Interrupted>() {
+                "interrupted"
+            } else {
+                "environment_failed"
+            };
+            commands::global::render_early_error(&config.flox.data_dir, category, e);
+            (1, Some(category))
+        },
 
         Err(e) => {
             let kind = if let Some((message, kind)) = display_and_kind(e) {

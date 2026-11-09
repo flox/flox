@@ -78,6 +78,7 @@ it matters, making them portable across the full software lifecycle.
 Usage: flox [[-v]... | -q] [--floxhub-url=URL] [-V] [COMMAND ...]
 
 Manage environments
+    global                 Manage globally available packages and commands
     init                   Create an environment in the current directory
     envs                   Show active and available environments
     delete                 Delete an environment

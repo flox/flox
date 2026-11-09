@@ -14,6 +14,7 @@ mod factory;
 mod gc;
 pub(crate) mod general;
 mod generations;
+pub(crate) mod global;
 mod hook_env;
 mod include;
 mod init;
@@ -779,6 +780,10 @@ impl Help {
 /// Manage environments
 #[derive(Bpaf, Clone)]
 enum ManageCommands {
+    /// Manage globally available packages and commands
+    #[bpaf(command, footer("Run 'man flox-global' for more details."))]
+    Global(#[bpaf(external(global::global))] global::Global),
+
     /// Create an environment in the current directory
     #[bpaf(
         command,
@@ -803,6 +808,7 @@ enum ManageCommands {
 impl ManageCommands {
     async fn handle(self, flox: Flox) -> Result<()> {
         match self {
+            ManageCommands::Global(args) => args.handle(flox).await?,
             ManageCommands::Init(args) => args.handle(flox).await?,
             ManageCommands::Envs(args) => args.handle(flox)?,
             ManageCommands::Delete(args) => args.handle(flox).await?,
@@ -812,6 +818,7 @@ impl ManageCommands {
 
     fn subcommand_name(&self) -> &'static str {
         match self {
+            ManageCommands::Global(args) => args.subcommand_name(),
             ManageCommands::Init(_) => "init",
             ManageCommands::Envs(_) => "envs",
             ManageCommands::Delete(_) => "delete",
