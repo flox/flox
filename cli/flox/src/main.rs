@@ -119,6 +119,21 @@ fn main() -> ExitCode {
         return ExitCode::from(1);
     }
 
+    // Parse once, before configuration/telemetry side effects. Keep existing
+    // parse-error and beta-extension dispatch below, in its original context.
+    let mut args = commands::flox_cli().run_inner(Args::current_args());
+    if let Ok(FloxCli(args)) = &mut args
+        && let Some(result) = args.handle_defaults_early()
+    {
+        return match result {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(err) => {
+                message::error(err.to_string());
+                ExitCode::FAILURE
+            },
+        };
+    }
+
     let config = Config::parse().unwrap_or_default();
     let metrics_uuid = if !config.flox.disable_metrics {
         init_telemetry_uuid(&config.flox.data_dir, &config.flox.cache_dir)
@@ -155,8 +170,6 @@ fn main() -> ExitCode {
     //
     // Pass through Stdout failure; This represents `--help`
     // todo: just `run()` the parser? Unless we still need to control which std{err/out} to use
-    let args = commands::flox_cli().run_inner(Args::current_args());
-
     if let Some(parse_err) = args.as_ref().err() {
         // `flox <name>` may be an installed beta extension rather than a typo.
         // Both non-completion arms need this, so it runs once ahead of the
@@ -275,6 +288,10 @@ fn main() -> ExitCode {
 fn display_and_kind(e: &anyhow::Error) -> Option<(String, &'static str)> {
     e.downcast_ref::<NoEnvironmentError>()
         .map(|err| (err.to_string(), kind_of(err)))
+        .or_else(|| {
+            e.downcast_ref::<commands::defaults::DefaultsError>()
+                .map(|err| (err.to_string(), kind_of(err)))
+        })
         .or_else(|| {
             e.downcast_ref::<EnvironmentError>()
                 .map(|err| (format_error(err), kind_of(err)))

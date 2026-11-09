@@ -62,6 +62,12 @@ account. Activating a private remote environment (`-r`) requires login; see
 `flox activate` currently supports `bash`, `fish`, `tcsh`, and `zsh` shells
 for any of the detection mechanisms described above.
 
+To save a startup selector and print manual shell integration, use
+[`flox-defaults(1)`](./flox-defaults.md).
+`flox defaults activate` uses the saved target with these same invocation
+forms and activation options. Saved startup selection does not change plain
+activation or the existing `-D` / `--default` environment.
+
 When invoked interactively,
 the shell prompt will be modified to display the active environments,
 as shown below:

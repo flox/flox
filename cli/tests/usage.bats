@@ -84,6 +84,8 @@ Manage environments
 
 Use environments
     activate               Enter the environment, run 'flox deactivate' to leave
+    defaults               Save and use a startup environment; print manual
+                           shell setup
     develop                Enter a development shell for a Nix expression build
     deactivate             Deactivate the current environment
     run                    Run a command from a Flox Catalog package
