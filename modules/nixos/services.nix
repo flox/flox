@@ -173,6 +173,7 @@ in
           extraFloxPullArgs
           pullAtServiceStart
           floxHubTokenFile
+          generation
           ;
         autoPull = aCfg.autoPull.enable;
         autoPullDates = aCfg.autoPull.dates;
@@ -196,6 +197,10 @@ in
         # hard dependency only propagates initial provisioning failures.
         requires = [ "flox-pull@${name}.service" ];
         wantedBy = [ "multi-user.target" ];
+        # Moving the pin restarts the service on `nixos-rebuild switch`,
+        # and the restart re-runs the pull unit, which provisions the
+        # newly pinned generation.
+        restartTriggers = optionals (aCfg.generation != null) [ (toString aCfg.generation) ];
         serviceConfig = {
           User = serviceUser name aCfg;
           Group = serviceGroup name aCfg;

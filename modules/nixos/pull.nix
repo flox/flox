@@ -93,6 +93,59 @@ let
         as_user ${flox} generations list --json 2>/dev/null | sha256sum
       }
 
+      ${optionalString (cfg.generation != null) ''
+        # Pinned to one generation: provision a detached copy of exactly
+        # that generation, then leave it alone until the pin changes.
+        pin=${toString cfg.generation}
+        marker="$workdir/.flox-pinned-generation"
+
+        if [ "$mode" = "timer" ]; then
+          # Scheduled pulls never move a pinned service.
+          exit 0
+        fi
+        if [ -e "$workdir/.flox" ] && [ "$(cat "$marker" 2>/dev/null)" = "$pin" ]; then
+          exit 0
+        fi
+
+        # Keep the current environment until the pinned one is in place,
+        # so a failed pull never leaves the service without one.
+        rm -rf "$workdir/.flox.prev"
+        if [ -e "$workdir/.flox" ]; then
+          mv "$workdir/.flox" "$workdir/.flox.prev"
+        fi
+        if as_user ${flox} pull ${pullArgs} --copy --generation "$pin" ${escapeShellArg cfg.environment}; then
+          rm -rf "$workdir/.flox.prev"
+          echo "$pin" > "$marker"
+          exit 0
+        fi
+        rm -rf "$workdir/.flox"
+        if [ -e "$workdir/.flox.prev" ]; then
+          mv "$workdir/.flox.prev" "$workdir/.flox"
+          echo "WARNING: failed to pull generation $pin of ${cfg.environment}; starting with the existing environment." >&2
+          exit 0
+        fi
+        echo "ERROR: failed to pull generation $pin of ${cfg.environment}." >&2
+        exit 1
+      ''}
+
+      ${optionalString (cfg.generation == null) ''
+        # Un-pinned after having been pinned: the existing environment is a
+        # detached copy with no link to FloxHub, so `flox pull --force` could
+        # never update it. Re-provision a linked environment instead.
+        if [ -e "$workdir/.flox-pinned-generation" ] && [ -e "$workdir/.flox" ]; then
+          rm -rf "$workdir/.flox.prev"
+          mv "$workdir/.flox" "$workdir/.flox.prev"
+          if as_user ${flox} pull ${pullArgs} ${escapeShellArg cfg.environment}; then
+            rm -rf "$workdir/.flox.prev" "$workdir/.flox-pinned-generation"
+            exit 0
+          fi
+          rm -rf "$workdir/.flox"
+          mv "$workdir/.flox.prev" "$workdir/.flox"
+          echo "WARNING: failed to re-link ${cfg.environment} to its live generation; still running the previously pinned copy." >&2
+          exit 0
+        fi
+      ''}
+
       if [ ! -e "$workdir/.flox" ]; then
         # First start: provision the environment. Failure is fatal - there
         # is nothing to run without an environment.
@@ -202,6 +255,10 @@ in
             };
             floxHubTokenFile = mkOption {
               type = types.nullOr types.path;
+              default = null;
+            };
+            generation = mkOption {
+              type = types.nullOr types.ints.positive;
               default = null;
             };
           };

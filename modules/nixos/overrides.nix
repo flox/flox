@@ -125,6 +125,9 @@ let
         # hard dependency only propagates initial provisioning failures.
         after = [ "flox-pull@${name}.service" ];
         requires = [ "flox-pull@${name}.service" ];
+        # Moving the pin restarts the unit on `nixos-rebuild switch`; the
+        # restart re-runs the pull unit, which provisions the new generation.
+        restartTriggers = optionals (fCfg.generation != null) [ (toString fCfg.generation) ];
         serviceConfig = mkMerge [
           {
             Environment = common.serviceEnvironment pkgs.runtimeShell WorkingDirectory (toString (
@@ -185,6 +188,7 @@ in
           extraFloxPullArgs
           pullAtServiceStart
           floxHubTokenFile
+          generation
           ;
         autoPull = svc.flox.autoPull.enable;
         autoPullDates = svc.flox.autoPull.dates;
