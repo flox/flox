@@ -207,7 +207,7 @@
           "catalog"
         ],
         "summary": "Shows available packages of a specific package",
-        "description": "Returns a list of versions for a given attr_path\n\nRequired Query Parameters:\n- **attr_path**: The attr_path, must be valid.\n\nOptional Query Parameters:\n- **page**: Optional page number for pagination (def = 0)\n- **pageSize**: Optional page size for pagination (def = 10)\n\nReturns:\n- **PackagesResult**: A list of PackageResolutionInfo and the total result count",
+        "description": "Returns a list of versions for a given attr_path\n\nRequired Query Parameters:\n- **attr_path**: The attr_path, must be valid.\n\nOptional Query Parameters:\n- **page**: Optional page number for pagination (def = 0)\n- **pageSize**: Optional page size for pagination (def = 10)\n\nReturns:\n- **PackagesResult**: A list of PackageResolutionInfo and the total result count.\n  Empty, with a total count of 0, when attr_path exists but none of its\n  builds have an accepted stability.",
         "operationId": "packages_api_v1_catalog_packages__attr_path__get",
         "security": [
           {
@@ -252,7 +252,7 @@
         ],
         "responses": {
           "200": {
-            "description": "A list of packages attr_path",
+            "description": "Versions of attr_path. Empty, with a total_count of 0, when attr_path exists but none of its builds have an accepted stability.",
             "content": {
               "application/json": {
                 "schema": {
@@ -262,7 +262,7 @@
             }
           },
           "404": {
-            "description": "attr_path was not found.",
+            "description": "attr_path does not exist, or is in a catalog the caller cannot read.",
             "content": {
               "application/json": {
                 "schema": {

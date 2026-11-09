@@ -8003,7 +8003,9 @@ Optional Query Parameters:
 - **pageSize**: Optional page size for pagination (def = 10)
 
 Returns:
-- **PackagesResult**: A list of PackageResolutionInfo and the total result count
+- **PackagesResult**: A list of PackageResolutionInfo and the total result count.
+  Empty, with a total count of 0, when attr_path exists but none of its
+  builds have an accepted stability.
 
 Sends a `GET` request to `/api/v1/catalog/packages/{attr_path}`
 
