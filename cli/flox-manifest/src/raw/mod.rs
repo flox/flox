@@ -1347,6 +1347,12 @@ fn update_raw_packages_from_typed_manifest(
             .keys()
             .cloned()
             .collect::<HashSet<String>>(),
+        Parsed::V1_20_0(manifest) => manifest
+            .install
+            .inner()
+            .keys()
+            .cloned()
+            .collect::<HashSet<String>>(),
     };
 
     // Don't create an [install] table if there are no packages in either
@@ -1549,6 +1555,19 @@ fn update_descriptor(
             }
         },
         Parsed::V1_19_0(manifest) => {
+            let typed = manifest
+                .install
+                .inner()
+                .get(install_id)
+                .ok_or(TomlEditError::PackageNotFound(install_id.to_string()))?;
+            use crate::parsed::v1_10_0::ManifestPackageDescriptor::*;
+            match typed {
+                Catalog(d) => update_v1_10_0_catalog_descriptor(raw, d),
+                FlakeRef(d) => update_v1_10_0_flake_descriptor(raw, d),
+                StorePath(d) => update_store_path_descriptor(raw, d),
+            }
+        },
+        Parsed::V1_20_0(manifest) => {
             let typed = manifest
                 .install
                 .inner()
@@ -2279,7 +2298,7 @@ curl.outputs = [\"bin\", \"man\"]
     #[test]
     fn remove_pkg_groups_keeps_comments_in_place() {
         let manifest = indoc! {r#"
-            schema-version = "1.19.0"
+            schema-version = "1.20.0"
 
             [install]
             hello.pkg-path = "hello"
@@ -2297,7 +2316,7 @@ curl.outputs = [\"bin\", \"man\"]
         "#};
 
         expect![[r#"
-            schema-version = "1.19.0"
+            schema-version = "1.20.0"
 
             [install]
             hello.pkg-path = "hello"
@@ -2317,7 +2336,7 @@ curl.outputs = [\"bin\", \"man\"]
     #[test]
     fn remove_pkg_groups_keeps_comments_in_order() {
         let manifest = indoc! {r#"
-            schema-version = "1.19.0"
+            schema-version = "1.20.0"
 
             # A comment
             [pkg-groups.alpha]
@@ -2341,7 +2360,7 @@ curl.outputs = [\"bin\", \"man\"]
         "#};
 
         expect![[r#"
-            schema-version = "1.19.0"
+            schema-version = "1.20.0"
 
             # A comment
 
@@ -2366,7 +2385,7 @@ curl.outputs = [\"bin\", \"man\"]
     #[test]
     fn remove_pkg_groups_under_pkg_groups_header() {
         let manifest = indoc! {r#"
-            schema-version = "1.19.0"
+            schema-version = "1.20.0"
 
             # about pkg-groups
             [pkg-groups]
@@ -2382,7 +2401,7 @@ curl.outputs = [\"bin\", \"man\"]
         "#};
 
         expect![[r#"
-            schema-version = "1.19.0"
+            schema-version = "1.20.0"
 
             # about pkg-groups
             [pkg-groups]
@@ -2398,7 +2417,7 @@ curl.outputs = [\"bin\", \"man\"]
         "#]]
         .assert_eq(&remove_pkg_groups_from(manifest, &["legacy", "tools"]));
         expect![[r#"
-            schema-version = "1.19.0"
+            schema-version = "1.20.0"
 
             # about pkg-groups
             [pkg-groups]
@@ -2413,7 +2432,7 @@ curl.outputs = [\"bin\", \"man\"]
         "#]]
         .assert_eq(&remove_pkg_groups_from(manifest, &["extra"]));
         expect![[r#"
-            schema-version = "1.19.0"
+            schema-version = "1.20.0"
 
             # about pkg-groups
 
@@ -2436,7 +2455,7 @@ curl.outputs = [\"bin\", \"man\"]
     #[test]
     fn remove_pkg_groups_at_top_level() {
         let dotted = indoc! {r#"
-            schema-version = "1.19.0"
+            schema-version = "1.20.0"
             # legacy comment
             pkg-groups.legacy.stability = "lts"
             # tools comment
@@ -2446,7 +2465,7 @@ curl.outputs = [\"bin\", \"man\"]
             systems = ["aarch64-darwin"]
         "#};
         let inline = indoc! {r#"
-            schema-version = "1.19.0"
+            schema-version = "1.20.0"
             # pkg-groups comment
             pkg-groups = { legacy = { stability = "lts" }, tools = { stability = "stable" } }
 
@@ -2455,7 +2474,7 @@ curl.outputs = [\"bin\", \"man\"]
         "#};
 
         expect![[r#"
-            schema-version = "1.19.0"
+            schema-version = "1.20.0"
             # legacy comment
 
             # tools comment
@@ -2466,7 +2485,7 @@ curl.outputs = [\"bin\", \"man\"]
         "#]]
         .assert_eq(&remove_pkg_groups_from(dotted, &["legacy"]));
         expect![[r#"
-            schema-version = "1.19.0"
+            schema-version = "1.20.0"
             # legacy comment
 
             # tools comment
@@ -2476,7 +2495,7 @@ curl.outputs = [\"bin\", \"man\"]
         "#]]
         .assert_eq(&remove_pkg_groups_from(dotted, &["legacy", "tools"]));
         expect![[r#"
-            schema-version = "1.19.0"
+            schema-version = "1.20.0"
             # pkg-groups comment
             pkg-groups = { tools = { stability = "stable" } }
 
@@ -2485,7 +2504,7 @@ curl.outputs = [\"bin\", \"man\"]
         "#]]
         .assert_eq(&remove_pkg_groups_from(inline, &["legacy"]));
         expect![[r#"
-            schema-version = "1.19.0"
+            schema-version = "1.20.0"
             # pkg-groups comment
 
             [options]
@@ -2848,6 +2867,9 @@ curl.outputs = [\"bin\", \"man\"]
             Parsed::V1_19_0(m) => {
                 m.install.inner_mut().remove(id);
             },
+            Parsed::V1_20_0(m) => {
+                m.install.inner_mut().remove(id);
+            },
         }
     }
 
@@ -2886,6 +2908,9 @@ curl.outputs = [\"bin\", \"man\"]
                 m.install.inner_mut().insert(id.to_string(), descriptor);
             },
             Parsed::V1_19_0(m) => {
+                m.install.inner_mut().insert(id.to_string(), descriptor);
+            },
+            Parsed::V1_20_0(m) => {
                 m.install.inner_mut().insert(id.to_string(), descriptor);
             },
             _ => panic!("expected v1_10_0 or later manifest"),
@@ -2938,6 +2963,10 @@ curl.outputs = [\"bin\", \"man\"]
                 v1_10_0::ManifestPackageDescriptor::Catalog(desc) => Some(desc),
                 _ => None,
             },
+            Parsed::V1_20_0(m) => match m.install.inner_mut().get_mut(id)? {
+                v1_10_0::ManifestPackageDescriptor::Catalog(desc) => Some(desc),
+                _ => None,
+            },
             _ => panic!("expected v1_10_0 or later manifest"),
         }
     }
@@ -2959,7 +2988,7 @@ curl.outputs = [\"bin\", \"man\"]
         manifest.update_raw_packages_from_typed_manifest().unwrap();
         let output = manifest.inner.raw.to_string();
         expect![[r#"
-            schema-version = "1.19.0"
+            schema-version = "1.20.0"
 
             [install]
 
@@ -2997,7 +3026,7 @@ curl.outputs = [\"bin\", \"man\"]
         manifest.update_raw_packages_from_typed_manifest().unwrap();
         let output = manifest.inner.raw.to_string();
         expect![[r#"
-            schema-version = "1.19.0"
+            schema-version = "1.20.0"
 
             [install]
             # my favorite greeting program
@@ -3029,7 +3058,7 @@ curl.outputs = [\"bin\", \"man\"]
         manifest.update_raw_packages_from_typed_manifest().unwrap();
         let output = manifest.inner.raw.to_string();
         expect![[r#"
-            schema-version = "1.19.0"
+            schema-version = "1.20.0"
 
             [install]
             # keep this comment about hello
@@ -3057,7 +3086,7 @@ curl.outputs = [\"bin\", \"man\"]
         manifest.update_raw_packages_from_typed_manifest().unwrap();
         let output = manifest.inner.raw.to_string();
         expect![[r#"
-            schema-version = "1.19.0"
+            schema-version = "1.20.0"
 
             [install]
             hello.pkg-path = "hello" # this is important
@@ -3129,7 +3158,7 @@ curl.outputs = [\"bin\", \"man\"]
         manifest.update_raw_packages_from_typed_manifest().unwrap();
         let output = manifest.inner.raw.to_string();
         expect![[r#"
-            schema-version = "1.19.0"
+            schema-version = "1.20.0"
 
             [install]
             # this comment is above hello
@@ -3175,7 +3204,7 @@ curl.outputs = [\"bin\", \"man\"]
         manifest.update_systems().unwrap();
         let output = manifest.inner.raw.to_string();
         expect![[r#"
-            schema-version = "1.19.0"
+            schema-version = "1.20.0"
 
             [options]
             systems = ["aarch64-darwin", "x86_64-linux"]
@@ -3231,7 +3260,7 @@ curl.outputs = [\"bin\", \"man\"]
         manifest.update_raw_packages_from_typed_manifest().unwrap();
         let output = manifest.inner.raw.to_string();
         expect![[r#"
-            schema-version = "1.19.0"
+            schema-version = "1.20.0"
 
             [install]
             hello.pkg-path = "hello"
@@ -3256,7 +3285,7 @@ curl.outputs = [\"bin\", \"man\"]
         let output = migrated.inner.migrated_raw.to_string();
         expect![[r##"
             # this comment is above version
-            schema-version = "1.19.0"
+            schema-version = "1.20.0"
 
             [install]
             hello.pkg-path = "hello"

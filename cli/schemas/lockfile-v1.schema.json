@@ -494,6 +494,13 @@
           "description": "A map of package ids to package build descriptors.\n\nThis is a version-specific copy of `common::Build` because V1_13_0 adds the\n`sandbox-allow` field to [BuildDescriptor]; the map is otherwise identical.",
           "type": "object"
         },
+        "Build3": {
+          "additionalProperties": {
+            "$ref": "#/$defs/BuildDescriptor3"
+          },
+          "description": "A map of package ids to package build descriptors.\n\nThis is a version-specific copy of the V1_13_0 `Build` because V1_20_0 adds\nthe `auto-patchelf` field to [BuildDescriptor]; the map is otherwise\nidentical.",
+          "type": "object"
+        },
         "BuildDescriptor": {
           "additionalProperties": false,
           "description": "The definition of a package built from within the environment",
@@ -561,6 +568,86 @@
           "additionalProperties": false,
           "description": "The definition of a package built from within the environment.\n\nV1_13_0 adds `sandbox-allow`: a list of paths/globs the build is permitted\nto read from outside its closure without a sandbox warning (or, under\n`enforce`, without failing). Otherwise identical to `common::BuildDescriptor`.",
           "properties": {
+            "command": {
+              "description": "The command to run to build a package.",
+              "type": "string"
+            },
+            "description": {
+              "description": "A short description of the package that will appear on FloxHub and in\nsearch results.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "license": {
+              "description": "A license to assign to the package in SPDX format.",
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "runtime-packages": {
+              "description": "Packages from the 'toplevel' group to include in the closure of the\nbuild result.",
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "sandbox": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/BuildSandbox2"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Sandbox mode for the build."
+            },
+            "sandbox-allow": {
+              "description": "Paths or glob patterns the build may read from outside its closure\nwithout the virtual sandbox warning about them (or, under `enforce`,\nblocking them). A leading `~/` is expanded to `$HOME`; `*`/`**` are\nmatched with `fnmatch`. Only meaningful for the local sandbox modes\n(`warn`/`enforce`).",
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "version": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/BuildVersion"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The version to assign the package."
+            }
+          },
+          "required": [
+            "command"
+          ],
+          "type": "object"
+        },
+        "BuildDescriptor3": {
+          "additionalProperties": false,
+          "description": "The definition of a package built from within the environment.\n\nV1_20_0 adds `auto-patchelf`: whether the package builder rewrites the\n`RUNPATH` of ELF files in the build result so that their shared library\ndependencies resolve from the build's runtime environment. Otherwise\nidentical to the V1_13_0 `BuildDescriptor`.",
+          "properties": {
+            "auto-patchelf": {
+              "description": "Whether to run `auto-patchelf` over the build result on Linux, after\nthe build command and before the executables in `$out/bin` are\nwrapped, so that ELF files whose `DT_NEEDED` libraries are only found\nin the build's runtime environment (e.g. PyPI wheels with native code)\nget a `RUNPATH` that resolves them. Ignored on macOS. Defaults to\n`false` because `auto-patchelf` replaces the `RUNPATH` of every ELF\nfile it visits.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "command": {
               "description": "The command to run to build a package.",
               "type": "string"
@@ -1753,6 +1840,102 @@
           "properties": {
             "build": {
               "$ref": "#/$defs/Build2",
+              "description": "Package build definitions"
+            },
+            "containerize": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Containerize"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "description": {
+              "description": "A human-readable description of the environment's purpose.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "hook": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Hook2"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Hooks that are run at various times during the lifecycle of the manifest\nin a known shell environment."
+            },
+            "include": {
+              "$ref": "#/$defs/Include"
+            },
+            "install": {
+              "$ref": "#/$defs/Install2",
+              "description": "The packages to install in the form of a map from install_id\nto package descriptor."
+            },
+            "minimum-cli-version": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/MinimumCliVersion"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The minimum CLI version that can activate this environment."
+            },
+            "options": {
+              "$ref": "#/$defs/Options3",
+              "default": {},
+              "description": "Options that control the behavior of the manifest."
+            },
+            "pkg-groups": {
+              "$ref": "#/$defs/PkgGroups",
+              "description": "Settings shared by every package in a package group, keyed by\ngroup name."
+            },
+            "plugins": {
+              "$ref": "#/$defs/Plugins",
+              "description": "Free-form data provided by installed plugins, keyed by plugin\npackage name (`[plugins.<pkg-name>]`). Each plugin defines and\nvalidates the shape of its own table; Flox does not interpret it.\nThe convention for secrets plugins is a flat table of\n`ENV_VAR_NAME = \"path/to/secret/in/store\"`, read by the plugin's\n`profile.d` script at activation."
+            },
+            "profile": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Profile2"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Profile scripts that are run in the user's shell upon activation\n(and, optionally, upon deactivation)."
+            },
+            "schema-version": {
+              "description": "Which schema version this manifest adheres to.\n\nMust be a valid Flox CLI version listed in [`KnownSchemaVersion`].",
+              "type": "string"
+            },
+            "services": {
+              "$ref": "#/$defs/Services3",
+              "description": "Service definitions"
+            },
+            "vars": {
+              "$ref": "#/$defs/Vars",
+              "description": "Variables that are exported to the shell environment upon activation."
+            }
+          },
+          "required": [
+            "schema-version"
+          ],
+          "type": "object"
+        },
+        "ManifestV1_20_0": {
+          "additionalProperties": false,
+          "description": "Not meant for writing manifest files, only for reading them.\nModifications should be made using `manifest::raw`.",
+          "properties": {
+            "build": {
+              "$ref": "#/$defs/Build3",
               "description": "Package build definitions"
             },
             "containerize": {
@@ -3170,6 +3353,9 @@
         },
         {
           "$ref": "#/$defs/ManifestV1_19_0"
+        },
+        {
+          "$ref": "#/$defs/ManifestV1_20_0"
         }
       ],
       "description": "A validated, typed manifest with a known schema.",

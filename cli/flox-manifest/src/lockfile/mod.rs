@@ -701,7 +701,7 @@ pub(crate) mod tests {
     use super::*;
     use crate::interfaces::AsTypedOnlyManifest;
     use crate::parsed::Inner;
-    use crate::parsed::latest::{ManifestLatest, ManifestPackageDescriptor};
+    use crate::parsed::latest::{BuildDescriptor, ManifestLatest, ManifestPackageDescriptor};
 
     #[test]
     fn content_hash_is_a_deterministic_digest() {
@@ -894,6 +894,49 @@ pub(crate) mod tests {
             packages,
             compose: None,
         }
+    }
+
+    /// The package builder reads `.manifest.build.<name>."auto-patchelf"`
+    /// from the lockfile with jq (`flox-build.mk`), so the field has to land
+    /// under that key, and has to be absent rather than `null` when unset so
+    /// that jq's `// false` default applies.
+    #[test]
+    fn lockfile_manifest_carries_build_auto_patchelf() {
+        let lockfile_json = |auto_patchelf: Option<bool>| {
+            let mut manifest = ManifestLatest::default();
+            manifest
+                .build
+                .inner_mut()
+                .insert("hello".to_string(), BuildDescriptor {
+                    command: "mkdir -p $out".to_string(),
+                    runtime_packages: None,
+                    sandbox: None,
+                    sandbox_allow: None,
+                    auto_patchelf,
+                    version: None,
+                    description: None,
+                    license: None,
+                });
+            let lockfile = Lockfile {
+                version: Version::<1>,
+                manifest: manifest.as_typed_only(),
+                packages: vec![],
+                compose: None,
+            };
+            serde_json::to_value(lockfile).unwrap()
+        };
+
+        assert_eq!(
+            lockfile_json(Some(true))["manifest"]["build"]["hello"]["auto-patchelf"],
+            serde_json::json!(true)
+        );
+        assert_eq!(
+            lockfile_json(None)["manifest"]["build"]["hello"]
+                .as_object()
+                .unwrap()
+                .contains_key("auto-patchelf"),
+            false
+        );
     }
 
     #[test]
