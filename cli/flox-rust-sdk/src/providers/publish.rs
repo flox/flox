@@ -115,8 +115,12 @@ pub enum PublishError {
     #[error(transparent)]
     Auth(#[from] AuthError),
 
-    #[error("Timed out waiting for publish completion")]
-    PublishTimeout,
+    /// The catalog accepted the publish but had not confirmed every store
+    /// path when the wait expired, even on a final check after the deadline.
+    /// The publish may still complete on its own, so this is not a failed
+    /// publish and callers should not suggest publishing again.
+    #[error("{}", unconfirmed_publish_message(.store_paths))]
+    PublishUnconfirmed { store_paths: Vec<String> },
 
     /// The user declined to replace the package's registered source.
     #[error("Publish canceled. The registered source was not changed.")]
@@ -859,37 +863,76 @@ where
             .iter()
             .map(|output| output.store_path.clone())
             .collect::<Vec<_>>();
-        let loop_poll_and_wait = async {
-            let start = tokio::time::Instant::now();
-            let wait_duration = tokio::time::Duration::from_millis(poll_interval_millis);
-            loop {
-                let now = tokio::time::Instant::now();
-                let elapsed = now.duration_since(start);
-                debug!(
-                    elapsed_millis = elapsed.as_millis(),
-                    "polling publish completion"
-                );
-                if client
-                    .is_publish_complete(&store_paths)
-                    .await
-                    .map_err(PublishError::CatalogError)?
-                {
-                    break;
-                }
-                debug!("not complete, sleeping");
-                tokio::time::sleep(wait_duration).await;
-            }
+        wait_for_store_paths_confirmed(client, store_paths, poll_interval_millis, timeout_millis)
+            .await
+    }
+}
+
+/// The client reports confirmation for the set of paths as a whole, so the
+/// message names every polled path rather than only the missing ones.
+fn unconfirmed_publish_message(store_paths: &[String]) -> String {
+    let paths = store_paths
+        .iter()
+        .map(|path| format!("  {path}"))
+        .join("\n");
+    formatdoc! {"
+        Publish accepted but not confirmed within the timeout.
+        The catalog has not confirmed these store paths:
+        {paths}"}
+}
+
+/// Polls the catalog until it confirms every store path or the timeout
+/// expires. The deadline can land while a poll is in flight or just before
+/// a confirmation would have shown up, so one more check after it tells a
+/// slow confirmation from a missing one.
+async fn wait_for_store_paths_confirmed(
+    client: &impl CatalogClientTrait,
+    store_paths: Vec<String>,
+    poll_interval_millis: u64,
+    timeout_millis: u64,
+) -> Result<(), PublishError> {
+    debug!(?store_paths, "polling publish completion for store paths");
+    let loop_poll_and_wait = async {
+        let start = tokio::time::Instant::now();
+        let wait_duration = tokio::time::Duration::from_millis(poll_interval_millis);
+        loop {
             let now = tokio::time::Instant::now();
             let elapsed = now.duration_since(start);
-            debug!(elapsed_millis = elapsed.as_millis(), "publish complete");
-            Ok::<_, PublishError>(())
-        };
-        let timeout = tokio::time::Duration::from_millis(timeout_millis);
-        tokio::time::timeout(timeout, loop_poll_and_wait)
-            .await
-            .map_err(|_| PublishError::PublishTimeout)??;
-        Ok(())
+            debug!(
+                elapsed_millis = elapsed.as_millis(),
+                "polling publish completion"
+            );
+            if client
+                .is_publish_complete(&store_paths)
+                .await
+                .map_err(PublishError::CatalogError)?
+            {
+                break;
+            }
+            debug!("not complete, sleeping");
+            tokio::time::sleep(wait_duration).await;
+        }
+        let now = tokio::time::Instant::now();
+        let elapsed = now.duration_since(start);
+        debug!(elapsed_millis = elapsed.as_millis(), "publish complete");
+        Ok::<_, PublishError>(())
+    };
+    let timeout = tokio::time::Duration::from_millis(timeout_millis);
+    if let Ok(polled) = tokio::time::timeout(timeout, loop_poll_and_wait).await {
+        return polled;
     }
+    debug!(
+        ?store_paths,
+        "timed out waiting for publish completion, checking once more"
+    );
+    if client
+        .is_publish_complete(&store_paths)
+        .await
+        .map_err(PublishError::CatalogError)?
+    {
+        return Ok(());
+    }
+    Err(PublishError::PublishUnconfirmed { store_paths })
 }
 
 /// Get the complete configuration for client-side interactions with the provided
@@ -1572,7 +1615,7 @@ pub mod tests {
     use flox_test_utils::GENERATED_DATA;
     use floxhub_client::auth::Credential;
     use floxhub_client::client::test_helpers::client_config;
-    use floxhub_client::{AuthContext, FloxhubClient};
+    use floxhub_client::{AuthContext, FloxhubClient, StorepathStatus, StorepathStatusResponse};
     use pretty_assertions::assert_eq;
 
     use super::*;
@@ -2366,6 +2409,90 @@ pub mod tests {
             res.unwrap().needs_publisher_wait,
             false,
             "MetadataOnly should not require publisher wait"
+        );
+    }
+
+    /// One `is_publish_complete` answer for the whole polled set, which is
+    /// all the client reports.
+    fn storepath_status(narinfo_known: bool) -> Response {
+        Response::GetStorepathStatus(StorepathStatusResponse {
+            items: HashMap::from([("/nix/store/dummy.drv".to_string(), vec![StorepathStatus {
+                catalog: "test".to_string(),
+                narinfo_known,
+                package: "mypkg".to_string(),
+            }])]),
+        })
+    }
+
+    /// Under paused time the polls land at 0, 100 and 200 ms, the deadline
+    /// at 250 ms, so exactly three queued answers feed the loop and the
+    /// fourth feeds the check after the timeout. A fifth poll would drain
+    /// the queue and panic, so a change in the polling cadence fails loudly.
+    const WAIT_POLL_INTERVAL_MILLIS: u64 = 100;
+    const WAIT_TIMEOUT_MILLIS: u64 = 250;
+
+    #[tokio::test(start_paused = true)]
+    async fn wait_for_publish_succeeds_when_the_check_after_the_timeout_confirms() {
+        let mut catalog = MockClient::new();
+        reset_mocks(&mut catalog, vec![
+            storepath_status(false),
+            storepath_status(false),
+            storepath_status(false),
+            storepath_status(true),
+        ]);
+
+        let result = wait_for_store_paths_confirmed(
+            &catalog,
+            vec!["/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-mypkg".to_string()],
+            WAIT_POLL_INTERVAL_MILLIS,
+            WAIT_TIMEOUT_MILLIS,
+        )
+        .await;
+
+        assert_eq!(result.map_err(|err| err.to_string()), Ok(()));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn wait_for_publish_names_the_polled_paths_when_still_unconfirmed() {
+        let mut catalog = MockClient::new();
+        reset_mocks(&mut catalog, vec![
+            storepath_status(false),
+            storepath_status(false),
+            storepath_status(false),
+            storepath_status(false),
+        ]);
+        let store_paths = vec![
+            "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-mypkg".to_string(),
+            "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-mypkg-dev".to_string(),
+        ];
+
+        let err = wait_for_store_paths_confirmed(
+            &catalog,
+            store_paths.clone(),
+            WAIT_POLL_INTERVAL_MILLIS,
+            WAIT_TIMEOUT_MILLIS,
+        )
+        .await
+        .unwrap_err();
+
+        let message = err.to_string();
+        let PublishError::PublishUnconfirmed {
+            store_paths: unconfirmed,
+        } = err
+        else {
+            panic!("expected PublishUnconfirmed, got {err:?}");
+        };
+        assert_eq!(
+            (unconfirmed, message),
+            (
+                store_paths,
+                indoc! {"
+                    Publish accepted but not confirmed within the timeout.
+                    The catalog has not confirmed these store paths:
+                      /nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-mypkg
+                      /nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-mypkg-dev"}
+                .to_string()
+            )
         );
     }
 

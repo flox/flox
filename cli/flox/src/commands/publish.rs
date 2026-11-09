@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Result, anyhow, bail};
 use bpaf::Bpaf;
 use flox_config::Config;
 use flox_events::{CliEnvironmentPublishPayload, EventKind, EventsHub};
@@ -148,6 +148,20 @@ fn publish_failure(err: PublishError) -> anyhow::Error {
     match err {
         err @ PublishError::LineageChangeDeclined => err.into(),
         err => anyhow!("Failed to publish package: {}", display_chain(&err)),
+    }
+}
+
+/// An accepted publish the catalog did not confirm in time is not a failed
+/// publish: the package may still land, so point at checking for it rather
+/// than publishing again. Anything else really did fail while waiting.
+fn publish_wait_failure(err: PublishError, catalog_name: &str, package: &str) -> anyhow::Error {
+    match err {
+        err @ PublishError::PublishUnconfirmed { .. } => anyhow!(formatdoc! {"
+            {err}
+
+            The package may still become available.
+            Check with 'flox show {catalog_name}/{package}' or 'flox install {catalog_name}/{package}' before publishing again."}),
+        err => anyhow!(err).context("Failed while waiting for publish confirmation"),
     }
 }
 
@@ -687,7 +701,13 @@ impl Publish {
                         PUBLISH_COMPLETION_TIMEOUT_MILLIS,
                     )
                     .await
-                    .context("Failed while waiting for publish confirmation")
+                    .map_err(|err| {
+                        publish_wait_failure(
+                            err,
+                            &catalog_name,
+                            &publish_provider.package_metadata.package.to_string(),
+                        )
+                    })
             },
         )
         .await?;
@@ -756,6 +776,30 @@ mod tests {
                 "Failed while waiting for publish confirmation: publisher timed out".to_owned()
             )
         );
+    }
+
+    /// An unconfirmed publish reads as "check for it", not as a failure that
+    /// invites publishing again.
+    #[test]
+    fn unconfirmed_publish_wait_points_at_checking_not_republishing() {
+        let err = publish_wait_failure(
+            PublishError::PublishUnconfirmed {
+                store_paths: vec![
+                    "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-hello".to_owned(),
+                    "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-hello-dev".to_owned(),
+                ],
+            },
+            "myorg",
+            "hello",
+        );
+        assert_eq!(format!("{err:#}"), indoc! {"
+            Publish accepted but not confirmed within the timeout.
+            The catalog has not confirmed these store paths:
+              /nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-hello
+              /nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-hello-dev
+
+            The package may still become available.
+            Check with 'flox show myorg/hello' or 'flox install myorg/hello' before publishing again."});
     }
 
     /// A stale committed lock fails a publish naming both the uncovered
