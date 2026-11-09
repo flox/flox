@@ -138,3 +138,48 @@ function set_manifest_vars {
     done < "$_envrc"
   )
 }
+
+# warn_run_mode_python_packages <flox_env>
+#
+# Run mode never sets PYTHONPATH (setup_python runs for dev and build
+# modes only), so a Python library installed to the environment is on
+# disk but not importable, and the resulting ModuleNotFoundError blames
+# the application rather than the activation mode. Warn, naming the
+# packages, when the environment holds both an interpreter and at least
+# one installed distribution. A `*.dist-info` or `*.egg-info` directory
+# under site-packages is what a `pythonXPackages.*` install leaves
+# behind; an interpreter alone leaves site-packages without one.
+function warn_run_mode_python_packages {
+  local _flox_env="${1?}"
+  [ -x "$_flox_env/bin/python3" ] || return 0
+
+  local -a _dists
+  read -r -a _dists < <(
+    shopt -s nullglob
+    echo "$_flox_env"/lib/python*/site-packages/*.dist-info \
+      "$_flox_env"/lib/python*/site-packages/*.egg-info
+  )
+
+  local _dist _name _packages=""
+  for _dist in "${_dists[@]}"; do
+    [ -d "$_dist" ] || continue
+    # Distribution directories are named <name>-<version>.<suffix>, and
+    # the name itself never contains a hyphen (wheel metadata normalizes
+    # it to an underscore); the version is sometimes absent from egg-info.
+    # The suffix goes first because "egg-info" contains a hyphen itself.
+    _name="${_dist##*/}"
+    _name="${_name%.dist-info}"
+    _name="${_name%.egg-info}"
+    _name="${_name%%-*}"
+    case " $_packages " in
+      *" $_name "*) ;;
+      *) _packages="${_packages:+$_packages }$_name" ;;
+    esac
+  done
+  [ -n "$_packages" ] || return 0
+
+  echo "WARNING: this environment is activated in run mode, which does not set PYTHONPATH." >&2
+  echo "Python packages installed in it (${_packages// /, }) will not import." >&2
+  echo "Build your app with a [build] section and install the result, or activate in dev mode." >&2
+  echo "See https://flox.dev/docs/concepts/activation" >&2
+}
