@@ -535,6 +535,19 @@ impl Install {
                     };
                     other_failures.push(ResolutionFailure::FallbackMessage { msg });
                 }
+                // Unlike other commands, `flox install` can suggest the exact
+                // command that installs the package at another stability.
+                let other_failures = other_failures
+                    .into_iter()
+                    .map(|failure| match failure {
+                        ResolutionFailure::UnavailableAtStability(failure) => {
+                            ResolutionFailure::FallbackMessage {
+                                msg: failure.install_message(),
+                            }
+                        },
+                        other => other,
+                    })
+                    .collect();
                 Err(EnvironmentError::Core(CoreEnvironmentError::Resolve(
                     ResolveError::ResolutionFailed(ResolutionFailures(other_failures)),
                 ))
