@@ -758,8 +758,8 @@ pub(crate) fn disallow_base_url_select_for_manifest_builds<'p>(
 ///   (i.e. `BaseCatalogUrlSelect::Stability` / `--stability <stability>`)
 ///   queries the nixpkgs url for the given stability from the catalog server
 ///   and uses the latest revision for that stability.
-/// * If neither argument is provided, uses the latest nixpkgs url for the
-///   default stability from the catalog server.
+/// * If neither argument is provided, uses the runtime `COMMON_NIXPKGS_URL`
+///   if set, or the latest URL for the default catalog stability.
 ///
 /// The environment's own locked nixpkgs is never consulted, so the manifest
 /// cannot pin, or stale, what an expression build resolves against.
@@ -772,6 +772,9 @@ pub(crate) async fn base_nixpkgs_url_from_url_select(
             return Ok(BaseCatalogUrl::from(url.as_str()));
         },
         Some(BaseCatalogUrlSelect::Stability(stability)) => Some(stability),
+        None if env::var_os("COMMON_NIXPKGS_URL").is_some() => {
+            return Ok(BaseCatalogUrl::from(COMMON_NIXPKGS_URL.as_str()));
+        },
         None => None,
     };
 

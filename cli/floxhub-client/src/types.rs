@@ -392,6 +392,10 @@ pub struct BaseCatalogUrl(String);
 
 impl BaseCatalogUrl {
     pub fn as_flake_ref(&self) -> Result<Url, BaseCatalogUrlError> {
+        let parsed = Url::parse(&self.0).map_err(BaseCatalogUrlError)?;
+        if !matches!(parsed.scheme(), "http" | "https" | "ssh" | "file") {
+            return Ok(parsed);
+        }
         let mut url = Url::parse(&format!("git+{}", self.0)).map_err(BaseCatalogUrlError)?;
         url.query_pairs_mut().append_pair("shallow", "1");
         Ok(url)
@@ -696,6 +700,18 @@ mod tests {
         assert_eq!(
             flake_ref.as_str(),
             "git+https://github.com/NixOS/nixpkgs?shallow=1"
+        );
+    }
+
+    #[test]
+    fn as_flake_ref_preserves_gitlab_host_and_revision() {
+        let reference = "gitlab:packages/nixpkgs?host=gitlab.example.org&rev=0123456789012345678901234567890123456789";
+        assert_eq!(
+            BaseCatalogUrl::from(reference)
+                .as_flake_ref()
+                .unwrap()
+                .as_str(),
+            reference
         );
     }
 
