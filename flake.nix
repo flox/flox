@@ -207,6 +207,7 @@
           in
           prev.lib.makeScope prev.newScope (self: {
             rust-internal-deps = prev.rust-internal-deps.override {
+              flox-activations = null;
               flox-buildenv = null;
               flox-package-builder = null;
               flox-nix-plugins = null;

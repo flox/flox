@@ -42,7 +42,6 @@ let
       SLEEP_BIN = "${coreutils}/bin/sleep";
       PROCESS_COMPOSE_BIN = "${process-compose}/bin/process-compose";
       GLOW_BIN = "${glow}/bin/glow";
-      FLOX_ACTIVATIONS_BIN = "${flox-activations}/libexec/flox-activations";
       # used internally to ensure CA certificates are available
       NIXPKGS_CACERT_BUNDLE_CRT = cacert.outPath + "/etc/ssl/certs/ca-bundle.crt";
 
@@ -73,6 +72,9 @@ let
     }
     # Our own tools
     # In the dev shell these will be set dynamically
+    // lib.optionalAttrs (flox-activations != null) {
+      FLOX_ACTIVATIONS_BIN = "${flox-activations}/libexec/flox-activations";
+    }
     // lib.optionalAttrs (flox-buildenv != null) {
       FLOX_BUILDENV_NIX = "${flox-buildenv}/lib/buildenv.nix";
     }
