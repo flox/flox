@@ -72,11 +72,28 @@ impl TryFrom<Value> for NixFlakeref {
     }
 }
 
+/// Format a filesystem path as a `path:` flakeref string.
+///
+/// Flakerefs are URL-like, so characters that carry meaning in a URL
+/// (`%`, `?`, `#`) and characters that would split or truncate the reference
+/// (whitespace, control characters, quotes) are percent-encoded.
+/// Nix decodes them again when parsing the `path:` flakeref.
+fn path_flakeref_string(path: &Path) -> String {
+    let mut out = String::from("path:");
+    for c in path.to_string_lossy().chars() {
+        match c {
+            '%' | '?' | '#' | '"' | '\\' | '\0'..=' ' | '\x7f' => {
+                out.push_str(&format!("%{:02X}", c as u8));
+            },
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
 impl NixFlakeref {
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self> {
-        format!("path:{}", path.as_ref().to_string_lossy())
-            .as_str()
-            .try_into()
+        path_flakeref_string(path.as_ref()).as_str().try_into()
     }
 
     pub fn from_git_with_dir(url: &Url, dir: Option<&Path>) -> Result<Self> {
@@ -152,5 +169,34 @@ impl From<&crate::lock::build_lock::GitSource> for RawNixFlakerefAttrs {
             "ref": value.ref_,
             "dir": value.dir,
         }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn path_flakeref_plain_path_is_unchanged() {
+        assert_eq!(
+            path_flakeref_string(Path::new("/tmp/demo/.flox")),
+            "path:/tmp/demo/.flox"
+        );
+    }
+
+    #[test]
+    fn path_flakeref_encodes_spaces_and_url_delimiters() {
+        assert_eq!(
+            path_flakeref_string(Path::new("/tmp/space demo/a%b?c#d")),
+            "path:/tmp/space%20demo/a%25b%3Fc%23d"
+        );
+    }
+
+    #[test]
+    fn path_flakeref_keeps_non_ascii_characters() {
+        assert_eq!(
+            path_flakeref_string(Path::new("/tmp/café dir")),
+            "path:/tmp/café%20dir"
+        );
     }
 }
