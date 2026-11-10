@@ -4321,210 +4321,6 @@ state implies. Absent (null) means ordinary circulation.*/
             Self(value)
         }
     }
-    ///`PackageResolutionInfo`
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "PackageResolutionInfo",
-    ///  "type": "object",
-    ///  "required": [
-    ///    "attr_path",
-    ///    "broken",
-    ///    "derivation",
-    ///    "description",
-    ///    "insecure",
-    ///    "license",
-    ///    "locked_url",
-    ///    "missing_builds",
-    ///    "name",
-    ///    "outputs",
-    ///    "outputs_to_install",
-    ///    "pkg_path",
-    ///    "pname",
-    ///    "rev",
-    ///    "rev_count",
-    ///    "rev_date",
-    ///    "scrape_date",
-    ///    "stabilities",
-    ///    "system",
-    ///    "unfree",
-    ///    "version"
-    ///  ],
-    ///  "properties": {
-    ///    "attr_path": {
-    ///      "title": "Attr Path",
-    ///      "type": "string"
-    ///    },
-    ///    "broken": {
-    ///      "title": "Broken",
-    ///      "type": [
-    ///        "boolean",
-    ///        "null"
-    ///      ]
-    ///    },
-    ///    "cache_uri": {
-    ///      "title": "Cache Uri",
-    ///      "type": [
-    ///        "string",
-    ///        "null"
-    ///      ]
-    ///    },
-    ///    "catalog": {
-    ///      "title": "Catalog",
-    ///      "type": [
-    ///        "string",
-    ///        "null"
-    ///      ]
-    ///    },
-    ///    "derivation": {
-    ///      "title": "Derivation",
-    ///      "type": "string"
-    ///    },
-    ///    "description": {
-    ///      "title": "Description",
-    ///      "type": [
-    ///        "string",
-    ///        "null"
-    ///      ]
-    ///    },
-    ///    "insecure": {
-    ///      "title": "Insecure",
-    ///      "type": [
-    ///        "boolean",
-    ///        "null"
-    ///      ]
-    ///    },
-    ///    "license": {
-    ///      "title": "License",
-    ///      "type": [
-    ///        "string",
-    ///        "null"
-    ///      ]
-    ///    },
-    ///    "locked_url": {
-    ///      "title": "Locked Url",
-    ///      "type": "string"
-    ///    },
-    ///    "missing_builds": {
-    ///      "title": "Missing Builds",
-    ///      "type": [
-    ///        "boolean",
-    ///        "null"
-    ///      ]
-    ///    },
-    ///    "name": {
-    ///      "title": "Name",
-    ///      "type": "string"
-    ///    },
-    ///    "outputs": {
-    ///      "$ref": "#/components/schemas/PackageOutputs"
-    ///    },
-    ///    "outputs_to_install": {
-    ///      "title": "Outputs To Install",
-    ///      "type": [
-    ///        "array",
-    ///        "null"
-    ///      ],
-    ///      "items": {
-    ///        "type": "string"
-    ///      }
-    ///    },
-    ///    "pkg_path": {
-    ///      "title": "Pkg Path",
-    ///      "type": "string"
-    ///    },
-    ///    "pname": {
-    ///      "title": "Pname",
-    ///      "type": "string"
-    ///    },
-    ///    "rev": {
-    ///      "title": "Rev",
-    ///      "type": "string"
-    ///    },
-    ///    "rev_count": {
-    ///      "title": "Rev Count",
-    ///      "type": "integer"
-    ///    },
-    ///    "rev_date": {
-    ///      "title": "Rev Date",
-    ///      "type": "string",
-    ///      "format": "date-time"
-    ///    },
-    ///    "scrape_date": {
-    ///      "title": "Scrape Date",
-    ///      "type": [
-    ///        "string",
-    ///        "null"
-    ///      ],
-    ///      "format": "date-time"
-    ///    },
-    ///    "stabilities": {
-    ///      "title": "Stabilities",
-    ///      "type": [
-    ///        "array",
-    ///        "null"
-    ///      ],
-    ///      "items": {
-    ///        "type": "string"
-    ///      }
-    ///    },
-    ///    "system": {
-    ///      "$ref": "#/components/schemas/PackageSystem"
-    ///    },
-    ///    "unfree": {
-    ///      "title": "Unfree",
-    ///      "type": [
-    ///        "boolean",
-    ///        "null"
-    ///      ]
-    ///    },
-    ///    "version": {
-    ///      "title": "Version",
-    ///      "type": "string"
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
-    pub struct PackageResolutionInfo {
-        pub attr_path: ::std::string::String,
-        pub broken: ::std::option::Option<bool>,
-        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-        pub cache_uri: ::std::option::Option<::std::string::String>,
-        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-        pub catalog: ::std::option::Option<::std::string::String>,
-        pub derivation: ::std::string::String,
-        pub description: ::std::option::Option<::std::string::String>,
-        pub insecure: ::std::option::Option<bool>,
-        pub license: ::std::option::Option<::std::string::String>,
-        pub locked_url: ::std::string::String,
-        pub missing_builds: ::std::option::Option<bool>,
-        pub name: ::std::string::String,
-        pub outputs: PackageOutputs,
-        pub outputs_to_install: ::std::option::Option<
-            ::std::vec::Vec<::std::string::String>,
-        >,
-        pub pkg_path: ::std::string::String,
-        pub pname: ::std::string::String,
-        pub rev: ::std::string::String,
-        pub rev_count: i64,
-        pub rev_date: ::chrono::DateTime<::chrono::offset::Utc>,
-        pub scrape_date: ::std::option::Option<
-            ::chrono::DateTime<::chrono::offset::Utc>,
-        >,
-        pub stabilities: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
-        pub system: PackageSystem,
-        pub unfree: ::std::option::Option<bool>,
-        pub version: ::std::string::String,
-    }
-    impl ::std::convert::From<&PackageResolutionInfo> for PackageResolutionInfo {
-        fn from(value: &PackageResolutionInfo) -> Self {
-            value.clone()
-        }
-    }
     ///A package's builds at one revision count, with recorded output sizes.
     ///
     /// <details><summary>JSON schema</summary>
@@ -4759,6 +4555,227 @@ state implies. Absent (null) means ordinary circulation.*/
             value.parse()
         }
     }
+    ///One version of a package for one system, as `/packages` lists it.
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "PackageVersionInfo",
+    ///  "description": "One version of a package for one system, as `/packages` lists it.",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "attr_path",
+    ///    "broken",
+    ///    "derivation",
+    ///    "description",
+    ///    "insecure",
+    ///    "license",
+    ///    "locked_url",
+    ///    "missing_builds",
+    ///    "name",
+    ///    "outputs",
+    ///    "outputs_to_install",
+    ///    "pkg_path",
+    ///    "pname",
+    ///    "rev",
+    ///    "rev_count",
+    ///    "rev_date",
+    ///    "scrape_date",
+    ///    "stabilities",
+    ///    "system",
+    ///    "unfree",
+    ///    "version"
+    ///  ],
+    ///  "properties": {
+    ///    "attr_path": {
+    ///      "title": "Attr Path",
+    ///      "type": "string"
+    ///    },
+    ///    "available_stabilities": {
+    ///      "title": "Available Stabilities",
+    ///      "description": "Every stability with a build of this version for this system, strictest first. `stabilities` names only the stabilities of the page this item's build comes from.",
+    ///      "type": [
+    ///        "array",
+    ///        "null"
+    ///      ],
+    ///      "items": {
+    ///        "type": "string"
+    ///      }
+    ///    },
+    ///    "broken": {
+    ///      "title": "Broken",
+    ///      "type": [
+    ///        "boolean",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "cache_uri": {
+    ///      "title": "Cache Uri",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "catalog": {
+    ///      "title": "Catalog",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "derivation": {
+    ///      "title": "Derivation",
+    ///      "type": "string"
+    ///    },
+    ///    "description": {
+    ///      "title": "Description",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "insecure": {
+    ///      "title": "Insecure",
+    ///      "type": [
+    ///        "boolean",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "license": {
+    ///      "title": "License",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "locked_url": {
+    ///      "title": "Locked Url",
+    ///      "type": "string"
+    ///    },
+    ///    "missing_builds": {
+    ///      "title": "Missing Builds",
+    ///      "type": [
+    ///        "boolean",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "name": {
+    ///      "title": "Name",
+    ///      "type": "string"
+    ///    },
+    ///    "outputs": {
+    ///      "$ref": "#/components/schemas/PackageOutputs"
+    ///    },
+    ///    "outputs_to_install": {
+    ///      "title": "Outputs To Install",
+    ///      "type": [
+    ///        "array",
+    ///        "null"
+    ///      ],
+    ///      "items": {
+    ///        "type": "string"
+    ///      }
+    ///    },
+    ///    "pkg_path": {
+    ///      "title": "Pkg Path",
+    ///      "type": "string"
+    ///    },
+    ///    "pname": {
+    ///      "title": "Pname",
+    ///      "type": "string"
+    ///    },
+    ///    "rev": {
+    ///      "title": "Rev",
+    ///      "type": "string"
+    ///    },
+    ///    "rev_count": {
+    ///      "title": "Rev Count",
+    ///      "type": "integer"
+    ///    },
+    ///    "rev_date": {
+    ///      "title": "Rev Date",
+    ///      "type": "string",
+    ///      "format": "date-time"
+    ///    },
+    ///    "scrape_date": {
+    ///      "title": "Scrape Date",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ],
+    ///      "format": "date-time"
+    ///    },
+    ///    "stabilities": {
+    ///      "title": "Stabilities",
+    ///      "type": [
+    ///        "array",
+    ///        "null"
+    ///      ],
+    ///      "items": {
+    ///        "type": "string"
+    ///      }
+    ///    },
+    ///    "system": {
+    ///      "$ref": "#/components/schemas/PackageSystem"
+    ///    },
+    ///    "unfree": {
+    ///      "title": "Unfree",
+    ///      "type": [
+    ///        "boolean",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "version": {
+    ///      "title": "Version",
+    ///      "type": "string"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct PackageVersionInfo {
+        pub attr_path: ::std::string::String,
+        ///Every stability with a build of this version for this system, strictest first. `stabilities` names only the stabilities of the page this item's build comes from.
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub available_stabilities: ::std::option::Option<
+            ::std::vec::Vec<::std::string::String>,
+        >,
+        pub broken: ::std::option::Option<bool>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub cache_uri: ::std::option::Option<::std::string::String>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub catalog: ::std::option::Option<::std::string::String>,
+        pub derivation: ::std::string::String,
+        pub description: ::std::option::Option<::std::string::String>,
+        pub insecure: ::std::option::Option<bool>,
+        pub license: ::std::option::Option<::std::string::String>,
+        pub locked_url: ::std::string::String,
+        pub missing_builds: ::std::option::Option<bool>,
+        pub name: ::std::string::String,
+        pub outputs: PackageOutputs,
+        pub outputs_to_install: ::std::option::Option<
+            ::std::vec::Vec<::std::string::String>,
+        >,
+        pub pkg_path: ::std::string::String,
+        pub pname: ::std::string::String,
+        pub rev: ::std::string::String,
+        pub rev_count: i64,
+        pub rev_date: ::chrono::DateTime<::chrono::offset::Utc>,
+        pub scrape_date: ::std::option::Option<
+            ::chrono::DateTime<::chrono::offset::Utc>,
+        >,
+        pub stabilities: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
+        pub system: PackageSystem,
+        pub unfree: ::std::option::Option<bool>,
+        pub version: ::std::string::String,
+    }
+    impl ::std::convert::From<&PackageVersionInfo> for PackageVersionInfo {
+        fn from(value: &PackageVersionInfo) -> Self {
+            value.clone()
+        }
+    }
     ///`PackagesResult`
     ///
     /// <details><summary>JSON schema</summary>
@@ -4790,7 +4807,7 @@ state implies. Absent (null) means ordinary circulation.*/
     ///      "title": "Items",
     ///      "type": "array",
     ///      "items": {
-    ///        "$ref": "#/components/schemas/PackageResolutionInfo"
+    ///        "$ref": "#/components/schemas/PackageVersionInfo"
     ///      }
     ///    },
     ///    "lifecycle": {
@@ -4820,7 +4837,7 @@ state implies. Absent (null) means ordinary circulation.*/
     pub struct PackagesResult {
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub deprecation: ::std::option::Option<DeprecationInfo>,
-        pub items: ::std::vec::Vec<PackageResolutionInfo>,
+        pub items: ::std::vec::Vec<PackageVersionInfo>,
         ///Lifecycle state of the requested package; null means no lifecycle state is recorded.
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub lifecycle: ::std::option::Option<PackageLifecycleInfo>,
@@ -8003,7 +8020,7 @@ Optional Query Parameters:
 - **pageSize**: Optional page size for pagination (def = 10)
 
 Returns:
-- **PackagesResult**: A list of PackageResolutionInfo and the total result count
+- **PackagesResult**: A list of PackageVersionInfo and the total result count
 
 Sends a `GET` request to `/api/v1/catalog/packages/{attr_path}`
 
@@ -8076,6 +8093,15 @@ Resolution Rules:
   returned.
 - The latest complete page includes full package details.
 - Additional candidate pages are returned without full details.
+
+Stability:
+- A group that resolves at one stability, its own or the realm default,
+  and fails with a `version_not_found` or
+  `attr_path_not_found.not_in_catalog` message carries two more context
+  keys on that message: `stability`, the stability it resolved at, and
+  `available_stabilities`, the comma-separated stabilities, strictest
+  first, with a build the descriptor accepts. It is empty when no
+  stability has one.
 
 PackageDescriptor Fields:
 - **install_id**: [required] Reference identifier for the package in the

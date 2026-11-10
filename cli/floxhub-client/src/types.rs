@@ -32,7 +32,7 @@ pub struct ResultsPage<T> {
 pub use api_types::PackageInfoSearch as SearchResult;
 pub type SearchResults = ResultsPage<SearchResult>;
 
-pub use api_types::{PackageOutput, PackageOutputs, PackageResolutionInfo as PackageBuild};
+pub use api_types::{PackageOutput, PackageOutputs, PackageVersionInfo as PackageBuild};
 pub type PackageDetails = ResultsPage<PackageBuild>;
 
 // Build-inputs lookup (lockless catalog locking, ECO-93). Re-exported so
