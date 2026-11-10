@@ -33,6 +33,7 @@
   pkg-config,
   pkgsFor,
   process-compose,
+  runCommand,
   rust-toolchain,
   rustPlatform,
   stdenv,
@@ -106,7 +107,7 @@ let
       OAUTH_DEVICE_AUTH_URL = "${auth0BaseUrl}/oauth/device/code";
     }
     // lib.optionalAttrs (flox-activations != null) {
-      FLOX_ACTIVATIONS_BIN = "${flox-activations}/bin/flox-activations";
+      FLOX_ACTIVATIONS_BIN = "${flox-activations}/libexec/flox-activations";
     };
 
     flox-activations = {
@@ -173,8 +174,15 @@ let
   };
 
   flox = workspace.workspaceMembers."flox".build;
-  activations = workspace.workspaceMembers."flox-activations".build;
   nef-lock-catalog = workspace.workspaceMembers."nef-lock-catalog".build;
+
+  # buildRustCrate installs the binary to `bin/`. The interpreter, buildenv and
+  # containers look for it at `libexec/flox-activations`, the layout of
+  # `pkgs/flox-activations`, so the package exposed here uses that layout too.
+  activations = runCommand "flox-activations-${FLOX_VERSION}" { } ''
+    mkdir -p "$out/libexec"
+    cp ${workspace.workspaceMembers."flox-activations".build}/bin/flox-activations "$out/libexec/"
+  '';
 in
 {
   # binary builds
