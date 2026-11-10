@@ -207,7 +207,7 @@
           "catalog"
         ],
         "summary": "Shows available packages of a specific package",
-        "description": "Returns a list of versions for a given attr_path\n\nRequired Query Parameters:\n- **attr_path**: The attr_path, must be valid.\n\nOptional Query Parameters:\n- **page**: Optional page number for pagination (def = 0)\n- **pageSize**: Optional page size for pagination (def = 10)\n\nReturns:\n- **PackagesResult**: A list of PackageResolutionInfo and the total result count",
+        "description": "Returns a list of versions for a given attr_path\n\nRequired Query Parameters:\n- **attr_path**: The attr_path, must be valid.\n\nOptional Query Parameters:\n- **page**: Optional page number for pagination (def = 0)\n- **pageSize**: Optional page size for pagination (def = 10)\n\nReturns:\n- **PackagesResult**: A list of PackageResolutionInfo and the total result count.\n  Empty, with a total count of 0, when attr_path exists but none of its\n  builds have an accepted stability.",
         "operationId": "packages_api_v1_catalog_packages__attr_path__get",
         "security": [
           {
@@ -252,7 +252,7 @@
         ],
         "responses": {
           "200": {
-            "description": "A list of packages attr_path",
+            "description": "Versions of attr_path. Empty, with a total_count of 0, when attr_path exists but none of its builds have an accepted stability.",
             "content": {
               "application/json": {
                 "schema": {
@@ -262,7 +262,7 @@
             }
           },
           "404": {
-            "description": "attr_path was not found.",
+            "description": "attr_path does not exist, or is in a catalog the caller cannot read.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1584,92 +1584,6 @@
         }
       }
     },
-    "/api/v1/catalog/catalogs/{catalog_name}/locked-sources": {
-      "get": {
-        "tags": [
-          "catalogs"
-        ],
-        "summary": "List all packages with their locked source metadata",
-        "description": "Return a flat paginated list of all packages in the catalog with their\nlocked source metadata (url, ref, rev, dir, buildType).\n\nOnly evaluated packages with source and build type metadata are included.\nThis endpoint supports the legacy lock protocol used by CLI v1.13.1;\nCLI v1.13.2 uses build-input lookup. Generated SDK methods remain available,\nand retirement requires an explicit compatibility policy.\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n\nQuery Parameters:\n- **page**: Zero-indexed page number (default: 0)\n- **pageSize**: Items per page (default: 10)\n\nReturns:\n- **LockedSourcesResponse**: Paginated list with total_count",
-        "operationId": "get_catalog_locked_sources_api_v1_catalog_catalogs__catalog_name__locked_sources_get",
-        "security": [
-          {
-            "HTTPBearer": []
-          },
-          {
-            "HTTPBasic": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "catalog_name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "pattern": "^[a-zA-Z0-9\\-_]{3,63}$",
-              "title": "Catalog Name",
-              "name": "catalog_name",
-              "example": "mycatalog"
-            }
-          },
-          {
-            "name": "page",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 0,
-              "default": 0,
-              "title": "Page"
-            }
-          },
-          {
-            "name": "pageSize",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 0,
-              "default": 10,
-              "title": "Pagesize"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Flat paginated list of packages with source metadata",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LockedSourcesResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "The catalog could not be found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "The request parameters are invalid",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v1/catalog/catalogs/{catalog_name}/store/config": {
       "get": {
         "tags": [
@@ -1874,6 +1788,37 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/BaseCatalogInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request could not be processed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalog/info/default-stability": {
+      "get": {
+        "tags": [
+          "info"
+        ],
+        "summary": "Get the default stability",
+        "operationId": "getDefaultStability_api_v1_catalog_info_default_stability_get",
+        "responses": {
+          "200": {
+            "description": "The effective default stability a group with no stability resolves against, and whether a deployment setting configured it",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultStabilityInfo"
                 }
               }
             }
@@ -2488,41 +2433,6 @@
         "title": "BuildRef",
         "description": "Reference to a specific build by catalog, attr_path, and revision."
       },
-      "BuildSource": {
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "git",
-            "title": "Type",
-            "default": "git"
-          },
-          "url": {
-            "type": "string",
-            "title": "Url"
-          },
-          "ref": {
-            "title": "Ref",
-            "nullable": true,
-            "type": "string"
-          },
-          "rev": {
-            "type": "string",
-            "title": "Rev"
-          },
-          "dir": {
-            "type": "string",
-            "title": "Dir",
-            "default": ".flox"
-          }
-        },
-        "type": "object",
-        "required": [
-          "url",
-          "rev"
-        ],
-        "title": "BuildSource",
-        "description": "Source provenance for a published package."
-      },
       "BuildType": {
         "type": "string",
         "enum": [
@@ -2968,6 +2878,25 @@
           "system": "x86_64-linux"
         }
       },
+      "DefaultStabilityInfo": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "configured": {
+            "type": "boolean",
+            "title": "Configured"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "configured"
+        ],
+        "title": "DefaultStabilityInfo",
+        "description": "The effective default stability a group with no stability resolves against.\n\n`configured` is True when a deployment setting configured the default, and\nFalse when it is the built-in fallback."
+      },
       "DeprecationInfo": {
         "properties": {
           "kind": {
@@ -3289,57 +3218,6 @@
         ],
         "title": "LockedInputEntry",
         "description": "Require the closure hash and preserve nullable inputs and reserved fields.\n\nLegacy publish ignores child lists; v2 publish requires the reachable closure."
-      },
-      "LockedSourceItem": {
-        "properties": {
-          "attr_path": {
-            "type": "string",
-            "title": "Attr Path"
-          },
-          "attr_path_components": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Attr Path Components"
-          },
-          "source": {
-            "$ref": "#/components/schemas/BuildSource"
-          },
-          "build_type": {
-            "$ref": "#/components/schemas/BuildType"
-          }
-        },
-        "type": "object",
-        "required": [
-          "attr_path",
-          "attr_path_components",
-          "source",
-          "build_type"
-        ],
-        "title": "LockedSourceItem",
-        "description": "A single entry in the /locked-sources response."
-      },
-      "LockedSourcesResponse": {
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/LockedSourceItem"
-            },
-            "type": "array",
-            "title": "Items"
-          },
-          "total_count": {
-            "type": "integer",
-            "title": "Total Count"
-          }
-        },
-        "type": "object",
-        "required": [
-          "items",
-          "total_count"
-        ],
-        "title": "LockedSourcesResponse"
       },
       "LookupGroup": {
         "properties": {

@@ -239,69 +239,6 @@ built repeatedly.*/
             value.clone()
         }
     }
-    ///Source provenance for a published package.
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "BuildSource",
-    ///  "description": "Source provenance for a published package.",
-    ///  "type": "object",
-    ///  "required": [
-    ///    "rev",
-    ///    "url"
-    ///  ],
-    ///  "properties": {
-    ///    "dir": {
-    ///      "title": "Dir",
-    ///      "default": ".flox",
-    ///      "type": "string"
-    ///    },
-    ///    "ref": {
-    ///      "title": "Ref",
-    ///      "type": [
-    ///        "string",
-    ///        "null"
-    ///      ]
-    ///    },
-    ///    "rev": {
-    ///      "title": "Rev",
-    ///      "type": "string"
-    ///    },
-    ///    "type": {
-    ///      "title": "Type",
-    ///      "default": "git",
-    ///      "type": "string"
-    ///    },
-    ///    "url": {
-    ///      "title": "Url",
-    ///      "type": "string"
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
-    pub struct BuildSource {
-        #[serde(default = "defaults::build_source_dir")]
-        pub dir: ::std::string::String,
-        #[serde(
-            rename = "ref",
-            default,
-            skip_serializing_if = "::std::option::Option::is_none"
-        )]
-        pub ref_: ::std::option::Option<::std::string::String>,
-        pub rev: ::std::string::String,
-        #[serde(rename = "type", default = "defaults::build_source_type")]
-        pub type_: ::std::string::String,
-        pub url: ::std::string::String,
-    }
-    impl ::std::convert::From<&BuildSource> for BuildSource {
-        fn from(value: &BuildSource) -> Self {
-            value.clone()
-        }
-    }
     /**Records the build methodology used to produce a package.
 
 NEF packages carry full source metadata and can be reproduced from source;
@@ -1247,6 +1184,45 @@ manifest packages were built via the traditional flox manifest workflow.*/
                 })
         }
     }
+    /**The effective default stability a group with no stability resolves against.
+
+`configured` is True when a deployment setting configured the default, and
+False when it is the built-in fallback.*/
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "DefaultStabilityInfo",
+    ///  "description": "The effective default stability a group with no stability resolves against.\n\n`configured` is True when a deployment setting configured the default, and\nFalse when it is the built-in fallback.",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "configured",
+    ///    "name"
+    ///  ],
+    ///  "properties": {
+    ///    "configured": {
+    ///      "title": "Configured",
+    ///      "type": "boolean"
+    ///    },
+    ///    "name": {
+    ///      "title": "Name",
+    ///      "type": "string"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct DefaultStabilityInfo {
+        pub configured: bool,
+        pub name: ::std::string::String,
+    }
+    impl ::std::convert::From<&DefaultStabilityInfo> for DefaultStabilityInfo {
+        fn from(value: &DefaultStabilityInfo) -> Self {
+            value.clone()
+        }
+    }
     ///Deprecation metadata for a package from nixpkgs aliases.nix
     ///
     /// <details><summary>JSON schema</summary>
@@ -1805,93 +1781,6 @@ without a client release.*/
     impl ::std::fmt::Display for LifecycleState {
         fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
             self.0.fmt(f)
-        }
-    }
-    ///A single entry in the /locked-sources response.
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "LockedSourceItem",
-    ///  "description": "A single entry in the /locked-sources response.",
-    ///  "type": "object",
-    ///  "required": [
-    ///    "attr_path",
-    ///    "attr_path_components",
-    ///    "build_type",
-    ///    "source"
-    ///  ],
-    ///  "properties": {
-    ///    "attr_path": {
-    ///      "title": "Attr Path",
-    ///      "type": "string"
-    ///    },
-    ///    "attr_path_components": {
-    ///      "title": "Attr Path Components",
-    ///      "type": "array",
-    ///      "items": {
-    ///        "type": "string"
-    ///      }
-    ///    },
-    ///    "build_type": {
-    ///      "$ref": "#/components/schemas/BuildType"
-    ///    },
-    ///    "source": {
-    ///      "$ref": "#/components/schemas/BuildSource"
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
-    pub struct LockedSourceItem {
-        pub attr_path: ::std::string::String,
-        pub attr_path_components: ::std::vec::Vec<::std::string::String>,
-        pub build_type: BuildType,
-        pub source: BuildSource,
-    }
-    impl ::std::convert::From<&LockedSourceItem> for LockedSourceItem {
-        fn from(value: &LockedSourceItem) -> Self {
-            value.clone()
-        }
-    }
-    ///`LockedSourcesResponse`
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "LockedSourcesResponse",
-    ///  "type": "object",
-    ///  "required": [
-    ///    "items",
-    ///    "total_count"
-    ///  ],
-    ///  "properties": {
-    ///    "items": {
-    ///      "title": "Items",
-    ///      "type": "array",
-    ///      "items": {
-    ///        "$ref": "#/components/schemas/LockedSourceItem"
-    ///      }
-    ///    },
-    ///    "total_count": {
-    ///      "title": "Total Count",
-    ///      "type": "integer"
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
-    pub struct LockedSourcesResponse {
-        pub items: ::std::vec::Vec<LockedSourceItem>,
-        pub total_count: i64,
-    }
-    impl ::std::convert::From<&LockedSourcesResponse> for LockedSourcesResponse {
-        fn from(value: &LockedSourcesResponse) -> Self {
-            value.clone()
         }
     }
     /**Accept owner-first exact references and wildcards in one group.
@@ -6719,12 +6608,6 @@ causes.*/
         {
             T::try_from(V).unwrap()
         }
-        pub(super) fn build_source_dir() -> ::std::string::String {
-            ".flox".to_string()
-        }
-        pub(super) fn build_source_type() -> ::std::string::String {
-            "git".to_string()
-        }
         pub(super) fn catalog_store_config_meta_only_store_type() -> ::std::string::String {
             "meta-only".to_string()
         }
@@ -7117,81 +7000,6 @@ Sends a `DELETE` request to `/api/v1/catalog/catalogs/{catalog_name}`
                 Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
             }
             501u16 => {
-                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
-            }
-            _ => Err(Error::UnexpectedResponse(response)),
-        }
-    }
-    /**List all packages with their locked source metadata
-
-Return a flat paginated list of all packages in the catalog with their
-locked source metadata (url, ref, rev, dir, buildType).
-
-Only evaluated packages with source and build type metadata are included.
-This endpoint supports the legacy lock protocol used by CLI v1.13.1;
-CLI v1.13.2 uses build-input lookup. Generated SDK methods remain available,
-and retirement requires an explicit compatibility policy.
-
-Path Parameters:
-- **catalog_name**: The name of the catalog
-
-Query Parameters:
-- **page**: Zero-indexed page number (default: 0)
-- **pageSize**: Items per page (default: 10)
-
-Returns:
-- **LockedSourcesResponse**: Paginated list with total_count
-
-Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/locked-sources`
-
-*/
-    pub async fn get_catalog_locked_sources_api_v1_catalog_catalogs_catalog_name_locked_sources_get<
-        'a,
-    >(
-        &'a self,
-        catalog_name: &'a types::CatalogName,
-        page: Option<u64>,
-        page_size: Option<u64>,
-    ) -> Result<
-        ResponseValue<types::LockedSourcesResponse>,
-        Error<types::ErrorResponse>,
-    > {
-        let url = format!(
-            "{}/api/v1/catalog/catalogs/{}/locked-sources",
-            self.baseurl,
-            encode_path(&catalog_name.to_string()),
-        );
-        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
-        header_map
-            .append(
-                ::reqwest::header::HeaderName::from_static("api-version"),
-                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
-            );
-        #[allow(unused_mut)]
-        let mut request = self
-            .client
-            .get(url)
-            .header(
-                ::reqwest::header::ACCEPT,
-                ::reqwest::header::HeaderValue::from_static("application/json"),
-            )
-            .query(&progenitor_client::QueryParam::new("page", &page))
-            .query(&progenitor_client::QueryParam::new("pageSize", &page_size))
-            .headers(header_map)
-            .build()?;
-        let info = OperationInfo {
-            operation_id: "get_catalog_locked_sources_api_v1_catalog_catalogs_catalog_name_locked_sources_get",
-        };
-        self.pre(&mut request, &info).await?;
-        let result = self.exec(request, &info).await;
-        self.post(&result, &info).await?;
-        let response = result?;
-        match response.status().as_u16() {
-            200u16 => ResponseValue::from_response(response).await,
-            404u16 => {
-                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
-            }
-            422u16 => {
                 Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
             }
             _ => Err(Error::UnexpectedResponse(response)),
@@ -8003,7 +7811,9 @@ Optional Query Parameters:
 - **pageSize**: Optional page size for pagination (def = 10)
 
 Returns:
-- **PackagesResult**: A list of PackageResolutionInfo and the total result count
+- **PackagesResult**: A list of PackageResolutionInfo and the total result count.
+  Empty, with a total count of 0, when attr_path exists but none of its
+  builds have an accepted stability.
 
 Sends a `GET` request to `/api/v1/catalog/packages/{attr_path}`
 
