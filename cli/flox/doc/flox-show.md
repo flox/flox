@@ -24,6 +24,8 @@ Show detailed information about a single package.
 The default output includes the package description,
 available outputs (with defaults marked by `*`),
 and available versions.
+Each version lists the stabilities that have it, strictest first.
+To install a version, its pkg-group must use one of those stabilities.
 
 ```{.include}
 ./include/package-names.md
