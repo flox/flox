@@ -1154,6 +1154,94 @@ pub mod tests {
         mock.assert();
     }
 
+    /// A catalog that reports where a package is available adds `stability`
+    /// and `available_stabilities` to a message's context; one that doesn't
+    /// leaves them out.
+    #[tokio::test]
+    async fn resolve_response_reads_stability_availability() {
+        let json_response = json!({ "items": [{
+            "name": "group",
+            "page": null,
+            "messages": [
+                {
+                    "type": "version_not_found",
+                    "level": "error",
+                    "message": "no 3.12 at lts",
+                    "context": {
+                        "attr_path": "python3",
+                        "install_id": "python3",
+                        "system": "x86_64-linux",
+                        "stability": "lts",
+                        "available_stabilities": "stable,staging,unstable",
+                    },
+                },
+                {
+                    "type": "attr_path_not_found.not_in_catalog",
+                    "level": "error",
+                    "message": "no hello",
+                    "context": {
+                        "attr_path": "hello",
+                        "install_id": "hello",
+                        "stability": "lts",
+                        "available_stabilities": "",
+                    },
+                },
+                {
+                    "type": "version_not_found",
+                    "level": "error",
+                    "message": "no 3.12",
+                    "context": {
+                        "attr_path": "python3",
+                        "install_id": "python3",
+                        "system": "x86_64-linux",
+                    },
+                },
+            ],
+        }]});
+        let server = MockServer::start_async().await;
+        let mock = server.mock(|_when, then| {
+            then.status(200).json_body(json_response);
+        });
+        let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
+
+        let res = client
+            .resolve(vec![PackageGroup {
+                name: "group".to_string(),
+                descriptors: vec![],
+                stability: None,
+            }])
+            .await
+            .unwrap();
+
+        let availabilities = res[0]
+            .msgs
+            .iter()
+            .map(|msg| match msg {
+                ResolutionMessage::VersionNotFound(msg) => msg.stability_availability.clone(),
+                ResolutionMessage::AttrPathNotFoundNotInCatalog(msg) => {
+                    msg.stability_availability.clone()
+                },
+                other => panic!("unexpected message: {other:?}"),
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(availabilities, vec![
+            Some(StabilityAvailability {
+                stability: "lts".to_string(),
+                available: vec![
+                    "stable".to_string(),
+                    "staging".to_string(),
+                    "unstable".to_string()
+                ],
+            }),
+            Some(StabilityAvailability {
+                stability: "lts".to_string(),
+                available: vec![],
+            }),
+            None,
+        ]);
+        mock.assert();
+    }
+
     #[tokio::test]
     async fn resolve_response_with_new_message_type() {
         let user_message = "User consumable Message";
