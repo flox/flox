@@ -4,6 +4,8 @@ use anyhow::Result;
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 
+use crate::commands::display_help;
+
 mod format;
 mod install;
 mod list;
@@ -12,6 +14,10 @@ mod remove;
 /// Manage flox extensions
 #[derive(Debug, Bpaf, Clone)]
 pub enum ExtensionCommands {
+    /// Prints help information
+    #[bpaf(command, hide)]
+    Help,
+
     /// Install an extension
     #[bpaf(command)]
     Install(#[bpaf(external(install::install))] install::Install),
@@ -28,6 +34,10 @@ pub enum ExtensionCommands {
 impl ExtensionCommands {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         match self {
+            ExtensionCommands::Help => {
+                display_help(Some("extension".to_string()));
+                Ok(())
+            },
             ExtensionCommands::Install(args) => args.handle(flox).await,
             ExtensionCommands::List(args) => args.handle(flox).await,
             ExtensionCommands::Remove(args) => args.handle(flox).await,
