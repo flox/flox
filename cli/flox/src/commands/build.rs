@@ -355,7 +355,7 @@ impl Build {
         {
             Some(from_toplevel)
         } else {
-            Some(select_nixpkgs_source(&flox, nixpkgs_url_select).await?)
+            Some(base_nixpkgs_url_from_url_select(&flox, nixpkgs_url_select).await?)
         };
 
         let expression_nixpkgs_flakeref = match &expression_nixpkgs {
@@ -496,8 +496,8 @@ impl Build {
                     "Cannot use --stability or --nixpkgs-url together with an explicit flake reference ('{parsed_flake_ref}'). Remove the flag or use a bare attribute path."
                 );
             }
-            let nixpkgs_source = select_nixpkgs_source(flox, Some(sel)).await?;
-            Ok(nixpkgs_source.as_flake_ref()?.to_string())
+            let base_nixpkgs_url = base_nixpkgs_url_from_url_select(flox, Some(sel)).await?;
+            Ok(base_nixpkgs_url.as_flake_ref()?.to_string())
         } else {
             Ok(parsed_flake_ref)
         }
@@ -746,7 +746,8 @@ pub(crate) fn disallow_base_url_select_for_manifest_builds<'p>(
     Ok(())
 }
 
-/// Select the nixpkgs source to fetch for an expression build.
+/// Determine the [BaseCatalogUrl] used for expression builds
+/// using the following rules:
 ///
 /// * If the command line arguments address a specific nixpkgs url
 ///   (i.e. `BaseCatalogUrlSelect::NixpkgsUrl` / `--nixpkgs-url <url>`)
@@ -762,7 +763,7 @@ pub(crate) fn disallow_base_url_select_for_manifest_builds<'p>(
 ///
 /// The environment's own locked nixpkgs is never consulted, so the manifest
 /// cannot pin, or stale, what an expression build resolves against.
-pub(crate) async fn select_nixpkgs_source(
+pub(crate) async fn base_nixpkgs_url_from_url_select(
     flox: &Flox,
     nixpkgs_url_select: Option<BaseCatalogUrlSelect>,
 ) -> Result<BaseCatalogUrl, anyhow::Error> {
@@ -1221,7 +1222,7 @@ mod test {
         flox.floxhub_client =
             FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
 
-        let err = select_nixpkgs_source(
+        let err = base_nixpkgs_url_from_url_select(
             &flox,
             Some(BaseCatalogUrlSelect::Stability("typo".to_string())),
         )
@@ -1646,14 +1647,14 @@ mod test {
         );
     }
 
-    // --- Test B: select_nixpkgs_source wrapper via httpmock server ---
+    // --- Test B: base_nixpkgs_url_from_url_select wrapper via httpmock server ---
 
     /// `Stability` variant: serving `BaseCatalogInfo::new_mock()` from an
     /// httpmock server and calling with
     /// `BaseCatalogUrlSelect::Stability("not-default")` returns the URL for
     /// the first page that carries "not-default" in the fixture.
     #[tokio::test]
-    async fn select_nixpkgs_source_stability_returns_catalog_url() {
+    async fn base_nixpkgs_url_from_url_select_stability_returns_catalog_url() {
         use floxhub_client::FloxhubClient;
         use floxhub_client::client::test_helpers::client_config;
         use httpmock::MockServer;
@@ -1669,7 +1670,7 @@ mod test {
         flox.floxhub_client =
             FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
 
-        let result = select_nixpkgs_source(
+        let result = base_nixpkgs_url_from_url_select(
             &flox,
             Some(BaseCatalogUrlSelect::Stability("not-default".to_string())),
         )
@@ -1689,12 +1690,12 @@ mod test {
     /// `BaseCatalogUrl` without any catalog call, and `.as_flake_ref()` adds
     /// the `git+` prefix and `?shallow=1` query parameter.
     #[tokio::test]
-    async fn select_nixpkgs_source_nixpkgs_url_passthrough() {
+    async fn base_nixpkgs_url_from_url_select_nixpkgs_url_passthrough() {
         let (flox, _temp_dir) = flox_instance();
 
         // No mock seeded — a catalog call here would panic.
         let raw_url: url::Url = "https://github.com/NixOS/nixpkgs".parse().unwrap();
-        let result = select_nixpkgs_source(
+        let result = base_nixpkgs_url_from_url_select(
             &flox,
             Some(BaseCatalogUrlSelect::NixpkgsUrl(raw_url.clone())),
         )
