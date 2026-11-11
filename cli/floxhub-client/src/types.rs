@@ -440,13 +440,11 @@ impl BaseCatalogInfo {
                 .any(|page_stability| page_stability == stability)
         })?;
 
-        let url = BaseCatalogUrl::from(format!(
-            "{base_url}?rev={rev}",
-            base_url = self.0.base_url,
-            rev = page_info.rev
-        ));
+        Some(self.url_for_revision(&page_info.rev))
+    }
 
-        Some(url)
+    pub fn url_for_revision(&self, rev: &str) -> BaseCatalogUrl {
+        BaseCatalogUrl::from(format!("{}?rev={rev}", self.0.base_url))
     }
 
     /// Return a url for the "default" stability.
