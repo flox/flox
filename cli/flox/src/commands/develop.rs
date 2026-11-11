@@ -29,12 +29,12 @@ use super::build::{
     BaseCatalogUrlSelect,
     TargetChoice,
     base_catalog_url_select,
-    base_nixpkgs_url_from_url_select,
     check_git_tracking_for_expression_builds,
     describe_nixpkgs,
     packages_to_build,
     prefetch_expression_build_flake_ref,
     prefetch_flake_ref,
+    select_nixpkgs_source,
 };
 use super::{
     DirEnvironmentSelect,
@@ -163,8 +163,7 @@ impl Develop {
         )
         .await?;
 
-        let expression_nixpkgs =
-            base_nixpkgs_url_from_url_select(&flox, base_catalog_url_select).await?;
+        let expression_nixpkgs = select_nixpkgs_source(&flox, base_catalog_url_select).await?;
         let base_nixpkgs_url = expression_nixpkgs.as_flake_ref()?;
 
         message::plain(format!(

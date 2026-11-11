@@ -46,6 +46,7 @@ use nef_lock_catalog::{
     scan_package,
 };
 use tracing::{debug, info_span, instrument, warn};
+use url::Url;
 
 use super::{DirEnvironmentSelect, dir_environment_select};
 use crate::commands::build::{
@@ -53,13 +54,13 @@ use crate::commands::build::{
     SystemOverride,
     TargetChoice,
     base_catalog_url_select,
-    base_nixpkgs_url_from_url_select,
     check_git_tracking_for_expression_builds,
     disallow_base_url_select_for_manifest_builds,
     expression_rel_paths,
     packages_to_build,
     prefetch_expression_build_flake_ref,
     prefetch_flake_ref,
+    select_nixpkgs_source,
     system_override,
 };
 use crate::commands::{SHELL_COMPLETION_FILE, ensure_auth, needs_project_files_error};
@@ -75,19 +76,19 @@ const PUBLISH_COMPLETION_TIMEOUT_MILLIS: u64 = 30 * 60 * 1_000; // 30 min
 
 async fn publish_catalog_url(
     flox: &Flox,
-    selected: Option<&BaseCatalogUrl>,
+    expression_source: Option<&BaseCatalogUrl>,
 ) -> Result<Option<BaseCatalogUrl>> {
-    let Some(source) = selected else {
+    let Some(source) = expression_source else {
         return Ok(None);
     };
-    let flake_ref = source.as_flake_ref()?;
-    if !matches!(flake_ref.scheme(), "github" | "gitlab") {
+    let source_url = Url::parse(&source.to_string())?;
+    if !matches!(source_url.scheme(), "github" | "gitlab") {
         return Ok(Some(source.clone()));
     }
 
     let revision = source
         .rev()
-        .or_else(|| flake_ref.path().splitn(3, '/').nth(2).map(str::to_owned))
+        .or_else(|| source_url.path().splitn(3, '/').nth(2).map(str::to_owned))
         .filter(|rev| rev.len() == 40 && rev.bytes().all(|b| b.is_ascii_hexdigit()))
         .with_context(|| format!("Pin '{source}' to a full commit hash before publishing."))?;
     let catalog = flox.floxhub_client.get_base_catalog_info().await?;
@@ -473,15 +474,14 @@ impl Publish {
         // Only an expression build needs a nixpkgs selected for it; a manifest
         // build uses the one its environment is locked to, which is also the
         // one it is recorded against.
-        let selected = match package.kind().is_expression_build() {
-            true => Some(
-                base_nixpkgs_url_from_url_select(&flox, publish_config.base_catalog_url_select)
-                    .await?,
-            ),
+        let expression_source = match package.kind().is_expression_build() {
+            true => {
+                Some(select_nixpkgs_source(&flox, publish_config.base_catalog_url_select).await?)
+            },
             false => None,
         };
 
-        let catalog_url = publish_catalog_url(&flox, selected.as_ref()).await?;
+        let catalog_url = publish_catalog_url(&flox, expression_source.as_ref()).await?;
         let package_metadata = check_package_metadata(
             catalog_url.as_ref(),
             env_metadata.toplevel_catalog_ref.as_ref(),
@@ -489,7 +489,8 @@ impl Publish {
         )?;
 
         // Keep the selected fetcher while recording the catalog's URL for the same revision.
-        let nixpkgs_source = selected.unwrap_or_else(|| package_metadata.base_catalog_ref.clone());
+        let nixpkgs_source =
+            expression_source.unwrap_or_else(|| package_metadata.base_catalog_ref.clone());
 
         prefetch_expression_build_flake_ref(
             [&package_metadata.package],
