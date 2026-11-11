@@ -88,6 +88,9 @@ pub enum PublishError {
         BaseCatalogUrlError,
     ),
 
+    #[error("Pin '{0}' to a full commit hash before publishing.")]
+    UnpinnedNixpkgsRef(BaseCatalogUrl),
+
     #[error("build of package(s) failed ({status})")]
     PackageBuildError { status: ExitStatus },
 
@@ -768,6 +771,23 @@ where
             None => (None, None),
         };
 
+        let source = &self.package_metadata.base_catalog_ref;
+        let locked_base_catalog_url =
+            if matches!(source.as_flake_ref()?.scheme(), "github" | "gitlab") {
+                let rev = source
+                    .rev()
+                    .filter(|rev| rev.len() == 40 && rev.bytes().all(|b| b.is_ascii_hexdigit()))
+                    .ok_or_else(|| PublishError::UnpinnedNixpkgsRef(source.clone()))?;
+                client
+                    .get_base_catalog_info()
+                    .await
+                    .map_err(PublishError::CatalogError)?
+                    .url_for_revision(&rev)
+                    .to_string()
+            } else {
+                source.to_string()
+            };
+
         let build_info = UserBuildPublish {
             derivation: UserDerivationInfo {
                 description: build_metadata.description.clone(),
@@ -784,7 +804,7 @@ where
                 unfree: build_metadata.unfree,
                 version: build_metadata.version.clone(),
             },
-            locked_base_catalog_url: Some(self.package_metadata.base_catalog_ref.to_string()),
+            locked_base_catalog_url: Some(locked_base_catalog_url),
             // Send empty roots too: the server uses their presence to select v2.
             locked_inputs: Some(closure.locked_inputs.clone().into_iter().collect()),
             direct_inputs: Some(closure.direct_inputs.clone()),

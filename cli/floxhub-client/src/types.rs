@@ -402,11 +402,18 @@ impl BaseCatalogUrl {
     }
 
     pub fn rev(&self) -> Option<String> {
-        Url::parse(&self.0)
-            .ok()?
-            .query_pairs()
+        let url = Url::parse(&self.0).ok()?;
+        url.query_pairs()
             .find(|(k, _)| k == "rev")
             .map(|(_, v)| v.into_owned())
+            .or_else(|| {
+                if !matches!(url.scheme(), "github" | "gitlab") {
+                    return None;
+                }
+                let rev = url.path().splitn(3, '/').nth(2)?;
+                (rev.len() == 40 && rev.bytes().all(|b| b.is_ascii_hexdigit()))
+                    .then(|| rev.to_owned())
+            })
     }
 }
 

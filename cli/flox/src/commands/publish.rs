@@ -28,7 +28,6 @@ use flox_rust_sdk::providers::publish::{
     check_package_metadata,
 };
 use floxhub_client::{
-    BaseCatalogUrl,
     CatalogClientTrait,
     CheckBuildQuery,
     CheckBuildResponse,
@@ -72,27 +71,6 @@ use crate::{environment_subcommand_metric, subcommand_metric};
 
 const PUBLISH_COMPLETION_POLL_INTERVAL_MILLIS: u64 = 2_000; // 1s
 const PUBLISH_COMPLETION_TIMEOUT_MILLIS: u64 = 30 * 60 * 1_000; // 30 min
-
-async fn publish_catalog_url(
-    flox: &Flox,
-    selected: Option<&BaseCatalogUrl>,
-) -> Result<Option<BaseCatalogUrl>> {
-    let Some(source) = selected else {
-        return Ok(None);
-    };
-    let flake_ref = source.as_flake_ref()?;
-    if !matches!(flake_ref.scheme(), "github" | "gitlab") {
-        return Ok(Some(source.clone()));
-    }
-
-    let revision = source
-        .rev()
-        .or_else(|| flake_ref.path().splitn(3, '/').nth(2).map(str::to_owned))
-        .filter(|rev| rev.len() == 40 && rev.bytes().all(|b| b.is_ascii_hexdigit()))
-        .with_context(|| format!("Pin '{source}' to a full commit hash before publishing."))?;
-    let catalog = flox.floxhub_client.get_base_catalog_info().await?;
-    Ok(Some(catalog.url_for_revision(&revision)))
-}
 
 fn emit_publish_warnings(outcome: &PublishOutcome, mut emit: impl FnMut(&str)) {
     for warning in &outcome.warnings {
@@ -481,15 +459,13 @@ impl Publish {
             false => None,
         };
 
-        let catalog_url = publish_catalog_url(&flox, selected.as_ref()).await?;
         let package_metadata = check_package_metadata(
-            catalog_url.as_ref(),
+            selected.as_ref(),
             env_metadata.toplevel_catalog_ref.as_ref(),
             package,
         )?;
 
-        // Keep the selected fetcher while recording the catalog's URL for the same revision.
-        let nixpkgs_source = selected.unwrap_or_else(|| package_metadata.base_catalog_ref.clone());
+        let nixpkgs_source = package_metadata.base_catalog_ref.clone();
 
         prefetch_expression_build_flake_ref(
             [&package_metadata.package],
