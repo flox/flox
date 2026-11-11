@@ -523,6 +523,7 @@ logged_catalog_lock_path() {
   "$FLOX_BIN" init -d "$PROJECT_DIR"
   git_init_project
   nef_package_setup greet
+  export _FLOX_USE_CATALOG_MOCK="$UNIT_TEST_GENERATED/get_base_catalog_nixpkgs_url.yaml"
 
   run "$FLOX_BIN" build -d "$PROJECT_DIR" greet
   assert_success
