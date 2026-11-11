@@ -322,8 +322,10 @@ define COMMON_BUILD_VARS_template =
 	@# Having confirmed the links, create the $(_pvarname)_resultLinks_json
 	@# variable used to construct build-meta.json in the form of a json string
 	@# like '{ "result-link1":"store-path1","result-link2":"store-path2",... }'.
+	@# Entries are space-separated, but $(PWD) may itself contain spaces, so
+	@# only replace the space between the closing and opening quotes.
 	$$(eval $(_pvarname)_resultLinks_json = \
-	  { $$(subst $$(space),$$(comma),$$($(_pvarname)_resultLinks)) })
+	  { $$(subst "$$(space)","$$(comma)",$$($(_pvarname)_resultLinks)) })
 
 endef
 
