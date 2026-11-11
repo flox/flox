@@ -55,4 +55,11 @@ pub use project::{
     resolve_lock,
     scan_references,
 };
-pub use scan::{CatalogRef, ImportSite, ScanError, scan_package, scan_package_with_roots};
+pub use scan::{
+    CatalogRef,
+    ImportSite,
+    ScanError,
+    deep_override_attr_paths_in,
+    scan_package,
+    scan_package_with_roots,
+};

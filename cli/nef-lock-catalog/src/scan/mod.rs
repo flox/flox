@@ -9,11 +9,13 @@ use tracing::{debug, instrument};
 
 mod analyze;
 mod attr_path;
+mod deep_overrides;
 mod error;
 mod graph;
 
 pub(crate) use attr_path::AttrPath;
 pub use attr_path::InvalidAttrPath;
+pub use deep_overrides::deep_override_attr_paths_in;
 pub use error::{ImportSite, ScanError};
 use graph::PackageGraph;
 
