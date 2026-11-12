@@ -3167,6 +3167,7 @@ dependencies = [
  "httpmock",
  "indent",
  "indoc",
+ "percent-encoding",
  "rnix",
  "rowan",
  "serde",

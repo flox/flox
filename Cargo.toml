@@ -134,6 +134,7 @@ tracing-indicatif = "0.3"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 unicode-width = "0.2.2"
 url = { version = "2.5", features = ["serde"] }
+percent-encoding = "2.3"
 url-escape = "0.1.1"
 uuid = { version = "1.16", features = ["serde", "v4"] }
 walkdir = "2"

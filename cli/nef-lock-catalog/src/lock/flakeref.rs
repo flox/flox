@@ -2,6 +2,7 @@ use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
+use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use url::Url;
@@ -73,22 +74,18 @@ impl TryFrom<Value> for NixFlakeref {
 }
 
 /// Format a filesystem path as a `path:` flakeref string.
-///
-/// Flakerefs are URL-like, so characters that carry meaning in a URL
-/// (`%`, `?`, `#`) and characters that would split or truncate the reference
-/// (whitespace, control characters, quotes) are percent-encoded.
-/// Nix decodes them again when parsing the `path:` flakeref.
+/// Keep path separators and URI-unreserved characters; Nix decodes the rest.
 fn path_flakeref_string(path: &Path) -> String {
-    let mut out = String::from("path:");
-    for c in path.to_string_lossy().chars() {
-        match c {
-            '%' | '?' | '#' | '"' | '\\' | '\0'..=' ' | '\x7f' => {
-                out.push_str(&format!("%{:02X}", c as u8));
-            },
-            _ => out.push(c),
-        }
-    }
-    out
+    let encode_set = NON_ALPHANUMERIC
+        .remove(b'/')
+        .remove(b'-')
+        .remove(b'.')
+        .remove(b'_')
+        .remove(b'~');
+    format!(
+        "path:{}",
+        utf8_percent_encode(&path.to_string_lossy(), &encode_set)
+    )
 }
 
 impl NixFlakeref {
@@ -193,10 +190,18 @@ mod tests {
     }
 
     #[test]
-    fn path_flakeref_keeps_non_ascii_characters() {
+    fn path_flakeref_encodes_punctuation() {
+        assert_eq!(
+            path_flakeref_string(Path::new("/tmp/a^b'c’d")),
+            "path:/tmp/a%5Eb%27c%E2%80%99d"
+        );
+    }
+
+    #[test]
+    fn path_flakeref_encodes_non_ascii_characters() {
         assert_eq!(
             path_flakeref_string(Path::new("/tmp/café dir")),
-            "path:/tmp/café%20dir"
+            "path:/tmp/caf%C3%A9%20dir"
         );
     }
 }
