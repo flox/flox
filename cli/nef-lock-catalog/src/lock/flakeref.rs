@@ -2,6 +2,7 @@ use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
+use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use url::Url;
@@ -72,11 +73,24 @@ impl TryFrom<Value> for NixFlakeref {
     }
 }
 
+/// Format a filesystem path as a `path:` flakeref string.
+/// Keep path separators and URI-unreserved characters; Nix decodes the rest.
+fn path_flakeref_string(path: &Path) -> String {
+    const PATH_FLAKEREF_SET: &AsciiSet = &NON_ALPHANUMERIC
+        .remove(b'/')
+        .remove(b'-')
+        .remove(b'.')
+        .remove(b'_')
+        .remove(b'~');
+    format!(
+        "path:{}",
+        utf8_percent_encode(&path.to_string_lossy(), PATH_FLAKEREF_SET)
+    )
+}
+
 impl NixFlakeref {
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self> {
-        format!("path:{}", path.as_ref().to_string_lossy())
-            .as_str()
-            .try_into()
+        path_flakeref_string(path.as_ref()).as_str().try_into()
     }
 
     pub fn from_git_with_dir(url: &Url, dir: Option<&Path>) -> Result<Self> {
@@ -152,5 +166,42 @@ impl From<&crate::lock::build_lock::GitSource> for RawNixFlakerefAttrs {
             "ref": value.ref_,
             "dir": value.dir,
         }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn path_flakeref_plain_path_is_unchanged() {
+        assert_eq!(
+            path_flakeref_string(Path::new("/tmp/demo/.flox")),
+            "path:/tmp/demo/.flox"
+        );
+    }
+
+    #[test]
+    fn path_flakeref_encodes_spaces_and_url_delimiters() {
+        assert_eq!(
+            path_flakeref_string(Path::new("/tmp/space demo/a%b?c#d")),
+            "path:/tmp/space%20demo/a%25b%3Fc%23d"
+        );
+    }
+
+    #[test]
+    fn path_flakeref_encodes_punctuation() {
+        assert_eq!(
+            path_flakeref_string(Path::new("/tmp/a^b'c’d")),
+            "path:/tmp/a%5Eb%27c%E2%80%99d"
+        );
+    }
+
+    #[test]
+    fn path_flakeref_encodes_non_ascii_characters() {
+        assert_eq!(
+            path_flakeref_string(Path::new("/tmp/café dir")),
+            "path:/tmp/caf%C3%A9%20dir"
+        );
     }
 }
