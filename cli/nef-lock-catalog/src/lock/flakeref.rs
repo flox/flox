@@ -2,7 +2,7 @@ use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
-use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
+use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use url::Url;
@@ -76,7 +76,7 @@ impl TryFrom<Value> for NixFlakeref {
 /// Format a filesystem path as a `path:` flakeref string.
 /// Keep path separators and URI-unreserved characters; Nix decodes the rest.
 fn path_flakeref_string(path: &Path) -> String {
-    let encode_set = NON_ALPHANUMERIC
+    const PATH_FLAKEREF_SET: &AsciiSet = &NON_ALPHANUMERIC
         .remove(b'/')
         .remove(b'-')
         .remove(b'.')
@@ -84,7 +84,7 @@ fn path_flakeref_string(path: &Path) -> String {
         .remove(b'~');
     format!(
         "path:{}",
-        utf8_percent_encode(&path.to_string_lossy(), &encode_set)
+        utf8_percent_encode(&path.to_string_lossy(), PATH_FLAKEREF_SET)
     )
 }
 

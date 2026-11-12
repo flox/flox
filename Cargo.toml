@@ -86,6 +86,7 @@ nix = { version = "0.31", features = ["signal", "process", "user", "fs"] }
 # uses, because native-tls takes precedence.
 oauth2 = { version = "5.0", default-features = false, features = ["reqwest"] }
 path-dedot = "3.1.1"
+percent-encoding = "2.3"
 pollster = "0.4.0"
 progenitor-client = "0.11.2"
 proptest = "1.9.0"
@@ -134,7 +135,6 @@ tracing-indicatif = "0.3"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 unicode-width = "0.2.2"
 url = { version = "2.5", features = ["serde"] }
-percent-encoding = "2.3"
 url-escape = "0.1.1"
 uuid = { version = "1.16", features = ["serde", "v4"] }
 walkdir = "2"
