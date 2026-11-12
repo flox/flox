@@ -47,6 +47,12 @@ fn print_message_to_buffer(out: &mut impl Write, v: impl Display) {
 pub(crate) fn plain(v: impl Display) {
     print_message(v);
 }
+
+/// Write a message through tracing regardless of verbosity or `RUST_LOG`.
+pub(crate) fn unconditional(v: impl Display) {
+    info!(target: "flox::utils::message::unconditional", "{v}");
+}
+
 pub(crate) fn error(v: impl Display) {
     print_message(format_error(v));
 }

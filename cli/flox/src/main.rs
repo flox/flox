@@ -45,8 +45,7 @@ mod beta;
 mod commands;
 mod utils;
 
-async fn run(args: FloxArgs) -> Result<()> {
-    let config = Config::parse()?;
+async fn run(args: FloxArgs, config: Config) -> Result<()> {
     args.handle(config).await?;
     Ok(())
 }
@@ -119,7 +118,24 @@ fn main() -> ExitCode {
         return ExitCode::from(1);
     }
 
-    let config = Config::parse().unwrap_or_default();
+    // Exit rather than fall back to the defaults, which enable metrics and
+    // leave the data and cache dirs empty, so they would create the metrics
+    // UUID in the current directory whatever the unparsed sources set.
+    let config = match Config::parse() {
+        Ok(config) => config,
+        Err(err) => {
+            message::error(format!("{err:#}"));
+            return ExitCode::from(1);
+        },
+    };
+    let args = commands::flox_cli().run_inner(Args::current_args());
+    // Completion must not print the first-run notice or create its device ID.
+    // Let bpaf recognize completion requests rather than inspecting raw flags.
+    if let Err(bpaf::ParseFailure::Completion(c)) = &args {
+        print!("{c}");
+        return ExitCode::from(0);
+    }
+
     let metrics_uuid = if !config.flox.disable_metrics {
         init_telemetry_uuid(&config.flox.data_dir, &config.flox.cache_dir)
             .and_then(|_| read_metrics_uuid(&config))
@@ -148,14 +164,8 @@ fn main() -> ExitCode {
     }
     debug!("set _FLOX_SUBSYSTEM_VERBOSITY={subsystem_verbosity}");
 
-    // Run the argument parser
-    //
-    // Pass through Completion "failure"; In completion mode this needs to be printed as is
-    // to work with the shell completion frontends
-    //
     // Pass through Stdout failure; This represents `--help`
     // todo: just `run()` the parser? Unless we still need to control which std{err/out} to use
-    let args = commands::flox_cli().run_inner(Args::current_args());
 
     if let Some(parse_err) = args.as_ref().err() {
         // `flox <name>` may be an installed beta extension rather than a typo.
@@ -177,7 +187,10 @@ fn main() -> ExitCode {
         let beta_enabled = config.features.unwrap_or_default().beta;
         if beta_enabled
             && !matches!(parse_err, bpaf::ParseFailure::Completion(_))
-            && let Some(exit) = beta::extensions::try_dispatch_external(&config.flox.data_dir)
+            && let Some(exit) = beta::extensions::try_dispatch_external(
+                &config.flox.data_dir,
+                config.flox.disable_metrics,
+            )
         {
             return exit;
         }
@@ -190,9 +203,8 @@ fn main() -> ExitCode {
                 message::error(format!("{m:80}"));
                 return ExitCode::from(1);
             },
-            bpaf::ParseFailure::Completion(c) => {
-                print!("{c}");
-                return ExitCode::from(0);
+            bpaf::ParseFailure::Completion(_) => {
+                unreachable!("completion handled before telemetry")
             },
         }
     }
@@ -206,7 +218,7 @@ fn main() -> ExitCode {
     let runtime = tokio::runtime::Runtime::new().unwrap();
 
     let dispatch_start = Instant::now();
-    let result = runtime.block_on(run(args));
+    let result = runtime.block_on(run(args, config.clone()));
 
     // Print errors; derive the exit code and the telemetry `error_kind`.
     let (code, error_kind): (u8, Option<&'static str>) = match &result {

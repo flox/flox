@@ -13,14 +13,17 @@ step-by-step procedure lives in the repo skill
 the rules that procedure enforces and why they exist.
 
 Telemetry can be disabled entirely with
-`flox config --set disable_metrics true` (or `FLOX_DISABLE_METRICS=true`).
+`flox config --set disable_metrics true` (or `FLOX_DISABLE_METRICS=true`
+or `DO_NOT_TRACK=true`).
 When disabled, no client is installed, no `Event` envelope is created,
 and nothing is sent — but payload construction at a call site still
 happens, since the payload is built as the `record_event` argument.
 That is why expensive payload-only work must go behind
 `when_client_set` (see Emission mechanics). Telemetry is on by
-default with a first-run notice; see `flox config --help` for the
-user-facing description of what is collected.
+default with a first-run notice; see `disable_metrics` in
+`flox-config(1)` (`cli/flox/doc/flox-config.md`) and
+<https://flox.dev/docs/concepts/data-collection> for the user-facing
+description of what is collected.
 
 ## The two streams
 
@@ -425,8 +428,9 @@ silent:
    flushes on expiry and in batches.
 3. Use a real dispatched subcommand. `flox --version` returns before
    the events client is installed and emits nothing by construction.
-4. Check that metrics aren't disabled (`flox config --get
-   disable_metrics`, `FLOX_DISABLE_METRICS`) — many developers have
+4. Check that metrics aren't disabled (`flox config` shows the
+   effective `disable_metrics`, including the effect of
+   `FLOX_DISABLE_METRICS` and `DO_NOT_TRACK`) — many developers have
    the opt-out set, and with it on no client is installed and nothing
    is sent, with no error. Also look in the right buffer: the v2
    stream buffers to `events-v2.json` in the data dir; the

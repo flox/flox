@@ -261,6 +261,10 @@ so don't include one without confirmation.
 
 Update your branch against `main` by rebasing — never a merge commit.
 
+Hot fixes for a release target the release branch directly: open the PR
+against `release-<version>` (e.g. `release-1.19.4`) rather than merging
+into `main` and cherry-picking onto the release branch.
+
 **Never mention customer names.** This is a public repository — keep
 customer and prospect names out of everything that lands on GitHub:
 PR titles and descriptions, commit messages, code comments, branch

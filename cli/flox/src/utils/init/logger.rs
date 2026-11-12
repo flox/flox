@@ -51,7 +51,15 @@ pub(crate) fn init_logger(verbosity: Option<Verbosity>) {
 pub fn update_filters(filter_handle: &Handle<EnvFilter, Registry>, log_filter: &str) {
     let result = filter_handle.modify(|layer| {
         match EnvFilter::try_from_default_env().or_else(|_| EnvFilter::try_new(log_filter)) {
-            Ok(new_filter) => *layer = new_filter,
+            Ok(new_filter) => {
+                // Apply last so even an explicit RUST_LOG directive cannot
+                // suppress messages emitted by message::unconditional.
+                *layer = new_filter.add_directive(
+                    "flox::utils::message::unconditional=info"
+                        .parse()
+                        .expect("valid unconditional message directive"),
+                );
+            },
             Err(err) => {
                 error!("Updating logger filter failed: {}", err);
             },

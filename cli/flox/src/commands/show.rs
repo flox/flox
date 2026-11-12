@@ -6,7 +6,7 @@ use anyhow::{Result, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
-use floxhub_client::{CatalogClientTrait, PackageBuild, PackageDetails, VersionsError};
+use floxhub_client::{CatalogClientTrait, PackageBuild, VersionsError};
 use tracing::instrument;
 
 use crate::subcommand_metric;
@@ -31,18 +31,16 @@ impl Show {
         tracing::debug!("using catalog client for show");
         let results = match flox.floxhub_client.package_versions(&self.pkg_path).await {
             Ok(results) => results,
-            // Below, results.is_empty() is used to mean the search_term
-            // didn't match a package.
-            // So translate 404 into an empty vec![].
-            // Once we drop the pkgdb code path, we can clean this up.
-            Err(VersionsError::NotFound) => PackageDetails {
-                results: vec![],
-                count: None::<u64>,
+            Err(VersionsError::NotFound) => {
+                bail!("no packages matched this pkg-path: '{}'", self.pkg_path);
             },
             Err(e) => Err(e)?,
         };
         if results.results.is_empty() {
-            bail!("no packages matched this pkg-path: '{}'", self.pkg_path);
+            bail!(
+                "No builds are available for '{}' in any stability.",
+                self.pkg_path
+            );
         }
         let expected_systems = [
             "aarch64-darwin",
@@ -195,11 +193,41 @@ fn render_show_catalog(
 mod test {
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::providers::catalog::test_helpers::auto_recording_catalog_client;
-    use floxhub_client::{PackageOutput, PackageOutputs, PackageSystem};
+    use floxhub_client::client::test_helpers::client_config;
+    use floxhub_client::{FloxhubClient, PackageOutput, PackageOutputs, PackageSystem};
+    use httpmock::MockServer;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
 
     use super::*;
+
+    #[tokio::test]
+    async fn show_handles_no_available_builds() {
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        // Use a hand-written response because no production package returning
+        // an empty successful result was found for an auto-recorded fixture.
+        let server = MockServer::start_async().await;
+        let mock = server.mock(|when, then| {
+            when.method("GET")
+                .path("/api/v1/catalog/packages/search_term");
+            then.status(200)
+                .json_body(serde_json::json!({"items": [], "total_count": 0}));
+        });
+        flox.floxhub_client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+
+        let err = Show {
+            pkg_path: "search_term".to_string(),
+        }
+        .handle(flox)
+        .await
+        .unwrap_err();
+
+        assert_eq!(
+            err.to_string(),
+            "No builds are available for 'search_term' in any stability."
+        );
+        mock.assert();
+    }
 
     #[tokio::test]
     async fn show_handles_404() {
