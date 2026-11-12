@@ -3353,25 +3353,36 @@ mod tests {
             new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/gcc_boost"));
         let env_path = env.parent_path().unwrap();
 
+        // `auto-patchelf` is a schema 1.20.0 attribute, and `BuildDescriptor`
+        // denies unknown fields, so lift the fixture's manifest to that
+        // schema before appending the build.
         let base_manifest = env
             .manifest_without_migrating(&flox)
             .unwrap()
             .as_writable()
             .to_string();
+        let fixture_schema = r#"schema-version = "1.10.0""#;
+        assert!(
+            base_manifest.contains(fixture_schema),
+            "gcc_boost fixture no longer declares {fixture_schema}"
+        );
+        let base_manifest = base_manifest.replace(fixture_schema, r#"schema-version = "1.20.0""#);
         // Omitting the attribute exercises the default.
         let auto_patchelf = auto_patchelf
             .map(|value| format!("auto-patchelf = {value}"))
             .unwrap_or_default();
+        // A literal (`'''`) string keeps the backslashes in the `sed`
+        // expression out of TOML's escape handling.
         let build_manifest = formatdoc! {r#"
             {base_manifest}
 
             [build.{package_name}]
-            command = """
+            command = '''
                 g++ -o {bin_name} {source_name} -lboost_exception
                 sed --binary -i 's%/nix/store/\([a-z0-9]\{{32\}}\)-developcopy-build-%/nix/stale/\1-developcopy-build-%g' {bin_name}
                 mkdir -p $out/bin
                 cp {bin_name} $out/bin/{bin_name}
-            """
+            '''
             runtime-packages = [ "boost", "gcc", "gcc-unwrapped" ]
             {auto_patchelf}
             "#};
