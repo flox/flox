@@ -196,7 +196,7 @@ fn main() -> ExitCode {
         }
         match parse_err {
             bpaf::ParseFailure::Stdout(m, _) => {
-                print!("{m:80}");
+                commands::display_help(m);
                 return ExitCode::from(0);
             },
             bpaf::ParseFailure::Stderr(m) => {

@@ -7,7 +7,7 @@ use indoc::indoc;
 use tracing::{debug, info_span, instrument};
 
 use super::EnvironmentSelect;
-use crate::commands::{display_help, environment_description, environment_select};
+use crate::commands::{display_command_help, environment_description, environment_select};
 use crate::environment_subcommand_metric;
 use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message::{self, print_overridden_manifest_fields};
@@ -48,7 +48,7 @@ impl IncludeCommands {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         match self {
             IncludeCommands::Help => {
-                display_help(Some("include".to_string()));
+                display_command_help(Some("include".to_string()));
             },
             IncludeCommands::Upgrade(args) => args.handle(flox).await?,
         }

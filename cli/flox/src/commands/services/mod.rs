@@ -27,7 +27,7 @@ use super::{
     activated_environments,
 };
 use crate::commands::activate::{ActivateOptions, CommandSelect};
-use crate::commands::display_help;
+use crate::commands::display_command_help;
 use crate::utils::message;
 
 mod logs;
@@ -120,7 +120,7 @@ impl ServicesCommands {
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
             ServicesCommands::Help => {
-                display_help(Some("services".to_string()));
+                display_command_help(Some("services".to_string()));
             },
             ServicesCommands::Restart(args) => args.handle(config, flox).await?,
             ServicesCommands::Start(args) => args.handle(config, flox).await?,
