@@ -10694,6 +10694,10 @@ rec {
             packageId = "indoc";
           }
           {
+            name = "percent-encoding";
+            packageId = "percent-encoding";
+          }
+          {
             name = "rnix";
             packageId = "rnix";
           }

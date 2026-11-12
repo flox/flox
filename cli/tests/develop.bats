@@ -512,3 +512,20 @@ logged_catalog_lock_path() {
   link_count="$(find "$PROJECT_DIR/.flox/run" -maxdepth 1 -name "$NIX_SYSTEM.greet.develop*" | wc -l)"
   assert_equal "$link_count" 1
 }
+
+@test "develop: builds a Nix expression from a project directory containing a space" {
+  project_setup_common
+  PROJECT_DIR="${BATS_TEST_TMPDIR?}/project with space"
+  rm -rf "${PROJECT_DIR?}"
+  mkdir -p "$PROJECT_DIR"
+  popd >/dev/null || true
+  pushd "$PROJECT_DIR" >/dev/null || return
+  "$FLOX_BIN" init -d "$PROJECT_DIR"
+  git_init_project
+  nef_package_setup greet
+  export _FLOX_USE_CATALOG_MOCK="$UNIT_TEST_GENERATED/get_base_catalog_nixpkgs_url.yaml"
+
+  run "$FLOX_BIN" build -d "$PROJECT_DIR" greet
+  assert_success
+  assert [ -e "$PROJECT_DIR/result-greet/hi" ]
+}
