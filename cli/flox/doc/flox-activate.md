@@ -15,6 +15,7 @@ flox [<general-options>] activate
      [-d=<path> | -r=<owner>/<name>]
      [-t]
      [--print-script]
+     [--hook-only]
      [--start-services | --no-start-services]
      [--add-sbin]
      [-m=(dev|run)]
@@ -105,12 +106,43 @@ so you do not have to run `flox activate` or `flox deactivate` by hand.
 
 Auto-activation is on by default and only requires the Flox prompt hook to be
 installed in your shell.
-The hook is installed by any in-place activation,
-so add a line such as `eval "$(flox activate -D)"` to your shell's startup
-file (for example `~/.bashrc`, `~/.zshrc`, `~/.config/fish/config.fish`, or
-`~/.tcshrc`).
+To install the hook without activating a startup environment,
+add the appropriate command to your shell's startup file.
+
+Bash (`~/.bashrc`) and Zsh (`~/.zshrc`):
+
+```bash
+eval "$(flox activate --hook-only)"
+```
+
+Fish (`~/.config/fish/config.fish`):
+
+```fish
+flox activate --hook-only | source
+```
+
+Tcsh (`~/.tcshrc`):
+
+```tcsh
+eval "`flox activate --hook-only`"
+```
+
+The shell is detected in the same way as for in-place activation.
+No default environment or FloxHub account is required.
+Generating the code does not open an environment, access the network, or
+realize packages with Nix.
+Existing directory permissions and auto-activation settings still apply.
+
+Initialization itself activates nothing.
+At the first prompt, the hook evaluates the current directory and its ancestors,
+so an allowed environment can activate immediately when the shell starts
+inside its directory tree.
+
+The hook is also installed by any in-place activation.
 If you already activate a default or other environment in-place at startup,
 the hook is already installed.
+For example, `eval "$(flox activate -D)"` installs the hook and activates the
+logged-in account's default environment in every new shell.
 
 Run `flox config --set disable_hook true` to opt out of the hook entirely,
 which both disables auto-activation and other features like `flox deactivate`.
@@ -196,6 +228,13 @@ options.
    a shell rather than activation via creating a subshell.
    `flox` automatically knows when to print the activation script to `stdout`,
    so this command is just a debugging aid for users.
+
+`--hook-only`
+:  Print shell integration without activating an environment.
+   Source the output in an interactive shell to enable auto-activation.
+   Allowed environments may activate at the first prompt.
+   Cannot be combined with environment selectors or activation options,
+   and requires `disable_hook = false`.
 
 `-s`, `--start-services`
 :  Start the services listed in the manifest when activating the environment.
