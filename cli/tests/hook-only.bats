@@ -80,6 +80,46 @@ hook_only_project_setup() {
   [[ "$stderr" == *"disable_hook = true"* ]]
 }
 
+@test "hook-only: bash preserves prompt commands and manages directory activation" {
+  hook_only_project_setup
+  run --separate-stderr bash --noprofile --norc -ic '
+    set -e
+    export FLOX_SHELL=$(command -v bash)
+    user_prompt() { :; }
+    user_tail() { :; }
+    PROMPT_COMMAND=(user_prompt user_tail)
+    eval "$($FLOX_BIN activate --hook-only)"
+    eval "$($FLOX_BIN activate --hook-only)"
+    [[ ${#PROMPT_COMMAND[@]} == 2 ]]
+    [[ ${PROMPT_COMMAND[0]} == "_flox_hook;user_prompt" ]]
+    [[ ${PROMPT_COMMAND[1]} == user_tail ]]
+    [[ -z ${FLOX_ENV-} ]]
+    cd "$PROJECT_DIR"
+    _flox_hook
+    [[ $FLOX_ENV_PROJECT == "$PROJECT_DIR" ]]
+    cd child
+    _flox_hook
+    [[ $FLOX_ENV_PROJECT == "$PROJECT_DIR" ]]
+    $FLOX_BIN deactivate
+    _flox_hook
+    [[ -z ${FLOX_ENV-} ]]
+    _flox_hook
+    [[ -z ${FLOX_ENV-} ]]
+    cd "$OUTSIDE_DIR"
+    _flox_hook
+    cd "$PROJECT_DIR"
+    _flox_hook
+    [[ $FLOX_ENV_PROJECT == "$PROJECT_DIR" ]]
+    cd "$OUTSIDE_DIR"
+    _flox_hook
+    [[ -z ${FLOX_ENV-} ]]
+    [[ ${#PROMPT_COMMAND[@]} == 2 ]]
+    echo complete
+  '
+  assert_success
+  assert_output --partial complete
+}
+
 @test "hook-only: zsh detects the caller and preserves hooks and fork ownership" {
   hook_only_project_setup
   run --separate-stderr zsh -fic '
@@ -132,6 +172,98 @@ hook_only_project_setup() {
   assert_output --partial complete
 }
 
+@test "hook-only: tcsh retains replaced and extended aliases across activation" {
+  hook_only_project_setup
+  export HOOK_ONLY_USER_LOG="$BATS_TEST_TMPDIR/user-hooks"
+  export HOOK_ONLY_USER_SCRIPT="$BATS_TEST_TMPDIR/user-hook"
+  # Tcsh ignores redirection in its special aliases; the helper writes the log.
+  cat > "$HOOK_ONLY_USER_SCRIPT" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$1" >> "$HOOK_ONLY_USER_LOG"
+EOF
+  chmod +x "$HOOK_ONLY_USER_SCRIPT"
+  cat > "$BATS_TEST_TMPDIR/commands.tcsh" <<'EOF'
+setenv FLOX_SHELL `which tcsh`
+alias precmd '"$HOOK_ONLY_USER_SCRIPT" prompt'
+alias cwdcmd '"$HOOK_ONLY_USER_SCRIPT" directory'
+eval "`$FLOX_BIN activate --hook-only`"
+eval "`$FLOX_BIN activate --hook-only`"
+alias precmd '"$HOOK_ONLY_USER_SCRIPT" updated-prompt'
+alias cwdcmd '"$HOOK_ONLY_USER_SCRIPT" updated-directory'
+eval "`$FLOX_BIN activate --hook-only`"
+alias _test_append '"$HOOK_ONLY_USER_SCRIPT" appended'
+alias cwdcmd "`alias cwdcmd`; _test_append"
+eval "`$FLOX_BIN activate --hook-only`"
+eval "`$FLOX_BIN activate --hook-only`"
+if ( $?FLOX_ENV ) exit 1
+cd "$PROJECT_DIR"
+if ( ! $?FLOX_ENV_PROJECT ) exit 2
+if ( "$FLOX_ENV_PROJECT" != "$PROJECT_DIR" ) exit 3
+(cd "$OUTSIDE_DIR")
+if ( "$FLOX_ENV_PROJECT" != "$PROJECT_DIR" ) exit 4
+cd child
+if ( "$FLOX_ENV_PROJECT" != "$PROJECT_DIR" ) exit 5
+cd "$OUTSIDE_DIR"
+if ( $?FLOX_ENV ) exit 6
+echo complete
+exit
+EOF
+  run --separate-stderr tcsh -fi < "$BATS_TEST_TMPDIR/commands.tcsh"
+  assert_success
+  assert_output --partial complete
+  # The forked cd also runs the user's own cwdcmd, but never Flox's callback.
+  run grep -c '^updated-directory$' "$HOOK_ONLY_USER_LOG"
+  assert_output 4
+  run grep -c '^appended$' "$HOOK_ONLY_USER_LOG"
+  assert_output 4
+  run tail -n 1 "$HOOK_ONLY_USER_LOG"
+  assert_output updated-prompt
+}
+
+@test "hook-only: tcsh profiles can save and restore callbacks across activation" {
+  hook_only_project_setup
+  run "$FLOX_BIN" edit --dir "$PROJECT_DIR" -f - <<'EOF'
+schema-version = "1.13.0"
+
+[profile]
+tcsh = '''
+set hook_only_saved_precmd="`alias precmd`"
+set hook_only_saved_cwdcmd="`alias cwdcmd`"
+alias precmd 'setenv HOOK_ONLY_PROMPT project'
+alias cwdcmd 'setenv HOOK_ONLY_DIRECTORY project'
+'''
+
+[profile.deactivate]
+tcsh = '''
+alias precmd "$hook_only_saved_precmd"
+alias cwdcmd "$hook_only_saved_cwdcmd"
+unset hook_only_saved_precmd hook_only_saved_cwdcmd
+'''
+EOF
+  assert_success
+  cat > "$BATS_TEST_TMPDIR/restore.tcsh" <<'EOF'
+setenv FLOX_SHELL `which tcsh`
+alias precmd 'setenv HOOK_ONLY_PROMPT base'
+alias cwdcmd 'setenv HOOK_ONLY_DIRECTORY base'
+eval "`$FLOX_BIN activate --hook-only`"
+cd "$PROJECT_DIR"
+if ( ! $?FLOX_ENV_PROJECT ) exit 1
+if ( "$HOOK_ONLY_PROMPT" != project ) exit 2
+cd child
+if ( "$HOOK_ONLY_DIRECTORY" != project ) exit 3
+cd "$OUTSIDE_DIR"
+if ( $?FLOX_ENV ) exit 4
+if ( "$HOOK_ONLY_PROMPT" != base ) exit 5
+cd .
+if ( "$HOOK_ONLY_DIRECTORY" != base ) exit 6
+eval "`$FLOX_BIN activate --hook-only`"
+if ( "$HOOK_ONLY_PROMPT" != base ) exit 7
+exit
+EOF
+  run --separate-stderr tcsh -fi < "$BATS_TEST_TMPDIR/restore.tcsh"
+  assert_success
+}
+
 @test "hook-only: fish retains configured prompt-only directory evaluation" {
   hook_only_project_setup
   run "$FLOX_BIN" config --set auto_activate_fish_mode disable_arrow
@@ -150,4 +282,93 @@ hook_only_project_setup() {
     not set -q FLOX_ENV; or exit 4
   '
   assert_success
+}
+
+@test "hook-only: tcsh replaces the previous native registration without chaining it" {
+  hook_only_project_setup
+  export HOOK_ONLY_LEGACY_BIN="$BATS_TEST_TMPDIR/old-flox"
+  cat > "$HOOK_ONLY_LEGACY_BIN" <<'EOF'
+#!/usr/bin/env bash
+printf 'setenv HOOK_ONLY_LEGACY_RAN yes;\n'
+EOF
+  chmod +x "$HOOK_ONLY_LEGACY_BIN"
+  cat > "$BATS_TEST_TMPDIR/legacy.tcsh" <<'EOF'
+setenv FLOX_SHELL `which tcsh`
+# Migrate pure native registrations first, then ones with appended user commands.
+alias precmd 'if ( ! $?_FLOX_INVOCATION_TYPES ) set _FLOX_INVOCATION_TYPES=""; setenv _FLOX_INVOCATION_TYPES_WIRE $_FLOX_INVOCATION_TYPES:q; eval "`exec $HOOK_ONLY_LEGACY_BIN hook-env --shell tcsh --shell-pid $$ --invocation-types-from-env --skip-in-forked-subshell`"; unsetenv _FLOX_INVOCATION_TYPES_WIRE; if ( $?_flox_exit ) exit'
+alias cwdcmd 'if ( ! $?_FLOX_INVOCATION_TYPES ) set _FLOX_INVOCATION_TYPES=""; setenv _FLOX_INVOCATION_TYPES_WIRE $_FLOX_INVOCATION_TYPES:q; eval "`exec $HOOK_ONLY_LEGACY_BIN hook-env --shell tcsh --shell-pid $$ --invocation-types-from-env --skip-in-forked-subshell`"; unsetenv _FLOX_INVOCATION_TYPES_WIRE; if ( $?_flox_exit ) exit'
+eval "`$FLOX_BIN activate --hook-only`"
+alias precmd 'if ( ! $?_FLOX_INVOCATION_TYPES ) set _FLOX_INVOCATION_TYPES=""; setenv _FLOX_INVOCATION_TYPES_WIRE $_FLOX_INVOCATION_TYPES:q; eval "`exec $HOOK_ONLY_LEGACY_BIN hook-env --shell tcsh --shell-pid $$ --invocation-types-from-env --skip-in-forked-subshell`"; unsetenv _FLOX_INVOCATION_TYPES_WIRE; if ( $?_flox_exit ) exit; echo "USER_PROMPT:$cwd"'
+alias cwdcmd 'if ( ! $?_FLOX_INVOCATION_TYPES ) set _FLOX_INVOCATION_TYPES=""; setenv _FLOX_INVOCATION_TYPES_WIRE $_FLOX_INVOCATION_TYPES:q; eval "`exec $HOOK_ONLY_LEGACY_BIN hook-env --shell tcsh --shell-pid $$ --invocation-types-from-env --skip-in-forked-subshell`"; unsetenv _FLOX_INVOCATION_TYPES_WIRE; if ( $?_flox_exit ) exit; echo "USER_DIRECTORY:`pwd`"'
+eval "`$FLOX_BIN activate --hook-only`"
+eval "`$FLOX_BIN activate --hook-only`"
+unsetenv HOOK_ONLY_LEGACY_RAN
+if ( $?HOOK_ONLY_LEGACY_RAN ) exit 1
+cd "$PROJECT_DIR"
+if ( $?HOOK_ONLY_LEGACY_RAN ) exit 2
+if ( ! $?FLOX_ENV_PROJECT ) exit 3
+if ( "$FLOX_ENV_PROJECT" != "$PROJECT_DIR" ) exit 4
+cd child
+cd "$OUTSIDE_DIR"
+if ( $?FLOX_ENV ) exit 5
+if ( $?_FLOX_MIGRATION_CODE || $?_FLOX_LEGACY_ALIAS ) exit 6
+exit
+EOF
+  run --separate-stderr tcsh -fi < "$BATS_TEST_TMPDIR/legacy.tcsh"
+  assert_success
+  assert_output --partial "USER_PROMPT:$OUTSIDE_DIR"
+  assert_output --partial "USER_DIRECTORY:$PROJECT_DIR/child"
+}
+
+@test "hook-only: bash preserves prompt callbacks and evaluates the starting directory at its first prompt" {
+  hook_only_project_setup
+  cd "$PROJECT_DIR" || return
+  export HOOK_ONLY_BASHRC="$BATS_TEST_TMPDIR/bashrc"
+  cat > "$HOOK_ONLY_BASHRC" <<'EOF'
+user_prompt() { printf 'USER:%s\n' "$?"; }
+if [[ $HOOK_ONLY_PROMPT_MODE == array ]]; then
+  PROMPT_COMMAND=(user_prompt)
+else
+  PROMPT_COMMAND=user_prompt
+fi
+eval "$($FLOX_BIN activate --hook-only)"
+eval "$($FLOX_BIN activate --hook-only)"
+[[ -z ${FLOX_ENV-} ]] || exit 99
+PS1='HOOK_ONLY> '
+EOF
+  cat > "$BATS_TEST_TMPDIR/first-prompt.exp" <<'EOF'
+set timeout 30
+spawn $env(FLOX_SHELL) --noprofile --rcfile $env(HOOK_ONLY_BASHRC) -i
+expect {
+  "HOOK_ONLY> " {}
+  timeout { exit 1 }
+  eof { exit 2 }
+}
+send {printf 'PROJECT:%s\n' "$FLOX_ENV_PROJECT"}
+send "\r"
+expect {
+  -exact "PROJECT:$env(PROJECT_DIR)\r\n" {}
+  timeout { exit 3 }
+  eof { exit 4 }
+}
+expect "HOOK_ONLY> "
+send "(exit 42)\r"
+expect {
+  -exact "USER:42\r\n" {}
+  timeout { exit 5 }
+  eof { exit 6 }
+}
+send "exit\r"
+expect eof
+EOF
+  # Bash 3 only evaluates array element zero; test it where the host provides it.
+  for shell in "$(command -v bash)" /bin/bash; do
+    [ -x "$shell" ] || continue
+    export FLOX_SHELL="$shell"
+    for mode in scalar array; do
+      export HOOK_ONLY_PROMPT_MODE="$mode"
+      run expect "$BATS_TEST_TMPDIR/first-prompt.exp"
+      assert_success
+    done
+  done
 }

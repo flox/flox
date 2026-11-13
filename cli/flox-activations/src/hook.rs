@@ -56,6 +56,8 @@ use indoc::formatdoc;
 pub fn bash_hook(flox_bin: &str) -> String {
     let flox_bin = shell_escape::escape(Cow::Borrowed(flox_bin));
     let marker = prompt_hook_marker_value(true);
+    // Scalar assignment retains later array elements and prefixes element zero,
+    // the only PROMPT_COMMAND element Bash 3 executes.
     formatdoc!(
         r#"
         export {PROMPT_HOOK_VERSION_ENV}={marker};
@@ -68,12 +70,20 @@ pub fn bash_hook(flox_bin: &str) -> String {
           trap - SIGINT;
           return $_prev_exit;
         }};
-        if [[ ";${{PROMPT_COMMAND[*]:-}};" != *";_flox_hook;"* ]]; then
-          if [[ "$(declare -p PROMPT_COMMAND 2>&1)" == "declare -a"* ]]; then
-            PROMPT_COMMAND=(_flox_hook "${{PROMPT_COMMAND[@]}}");
-          else
+        if [[ "$(declare -p PROMPT_COMMAND 2>&1)" == "declare -a"* ]]; then
+          _flox_hook_registered=;
+          for _flox_prompt_command in "${{PROMPT_COMMAND[@]:-}}"; do
+            if [[ ";$_flox_prompt_command;" == *";_flox_hook;"* ]]; then
+              _flox_hook_registered=1;
+              break;
+            fi;
+          done;
+          if [[ -z $_flox_hook_registered ]]; then
             PROMPT_COMMAND="_flox_hook${{PROMPT_COMMAND:+;$PROMPT_COMMAND}}";
           fi;
+          unset _flox_hook_registered _flox_prompt_command;
+        elif [[ ";${{PROMPT_COMMAND:-}};" != *";_flox_hook;"* ]]; then
+          PROMPT_COMMAND="_flox_hook${{PROMPT_COMMAND:+;$PROMPT_COMMAND}}";
         fi;
         "#
     )
@@ -219,6 +229,8 @@ pub fn fish_hook(flox_bin: &str, auto_activate_fish_mode: Option<AutoActivateFis
 // passes the running binary's store path instead, which is always safe.
 pub fn tcsh_hook(flox_bin: &str) -> String {
     let flox_bin = tcsh_escape_in_alias(flox_bin);
+    let bash_bin = env!("X_BASH_BIN");
+    let printenv_bin = concat!(env!("COREUTILS"), "/bin/printenv");
     // A tcsh alias body must be a single line, so assemble the statements here
     // and join them with "; " rather than writing one long string literal.
     let hook = [
@@ -232,11 +244,40 @@ pub fn tcsh_hook(flox_bin: &str) -> String {
     ]
     .join("; ");
     let marker = prompt_hook_marker_value(true);
+    // Keep user alias bodies in separate, immutable aliases so quoting survives
+    // and profiles can save and restore old wrappers. Retain appended wrappers
+    // instead of adding another native callback, but capture replacement aliases.
+    //
+    // This migration can be removed after a few releases. PROMPT_HOOK_VERSION
+    // stays unchanged because there are so few tcsh users: a bump would require
+    // users of every shell to restart for this tcsh-specific change.
+    // Strip only the old native prefix, keeping appended user commands. Pass alias
+    // text as data to pinned Bash because tcsh cannot remove a variable prefix
+    // without splitting or reinterpreting it. Temporary aliases delay command
+    // substitution until migration is needed. Bash -p ignores startup configuration.
     formatdoc!(
         r#"
         setenv {PROMPT_HOOK_VERSION_ENV} {marker};
-        alias precmd '{hook}';
-        alias cwdcmd '{hook}';
+        alias _flox_hook '{hook}';
+        if ( ! $?_flox_hook_alias_generation ) set _flox_hook_alias_generation=0;
+        @ _flox_hook_alias_generation++;
+        set _flox_saved_precmd_name="_flox_saved_precmd_$_flox_hook_alias_generation";
+        set _flox_saved_cwdcmd_name="_flox_saved_cwdcmd_$_flox_hook_alias_generation";
+        set _flox_previous_precmd="`alias precmd`";
+        set _flox_previous_cwdcmd="`alias cwdcmd`";
+        setenv _FLOX_MIGRATION_CODE 'printf "%s" "${{_FLOX_LEGACY_ALIAS#*; if ( \$\?_flox_exit ) exit}}"';
+        alias _flox_migrate_precmd 'setenv _FLOX_LEGACY_ALIAS $_flox_previous_precmd:q; set _flox_previous_precmd="`{printenv_bin} _FLOX_MIGRATION_CODE | {bash_bin} -p`"; unsetenv _FLOX_LEGACY_ALIAS';
+        if ( "$_flox_previous_precmd" =~ 'if ( ! $?{FLOX_INVOCATION_TYPES_VAR} ) set {FLOX_INVOCATION_TYPES_VAR}=*; if ( $?_flox_exit ) exit*' ) eval _flox_migrate_precmd;
+        unalias _flox_migrate_precmd;
+        alias _flox_migrate_cwdcmd 'setenv _FLOX_LEGACY_ALIAS $_flox_previous_cwdcmd:q; set _flox_previous_cwdcmd="`{printenv_bin} _FLOX_MIGRATION_CODE | {bash_bin} -p`"; unsetenv _FLOX_LEGACY_ALIAS';
+        if ( "$_flox_previous_cwdcmd" =~ 'if ( ! $?{FLOX_INVOCATION_TYPES_VAR} ) set {FLOX_INVOCATION_TYPES_VAR}=*; if ( $?_flox_exit ) exit*' ) eval _flox_migrate_cwdcmd;
+        unalias _flox_migrate_cwdcmd;
+        if ( "$_flox_previous_precmd" !~ '*_flox_saved_precmd*; _flox_hook*' ) alias $_flox_saved_precmd_name "$_flox_previous_precmd";
+        if ( "$_flox_previous_cwdcmd" !~ '*_flox_saved_cwdcmd*; _flox_hook*' ) alias $_flox_saved_cwdcmd_name "$_flox_previous_cwdcmd";
+        if ( "$_flox_previous_precmd" !~ '*_flox_saved_precmd*; _flox_hook*' ) alias precmd "$_flox_saved_precmd_name; _flox_hook";
+        if ( "$_flox_previous_cwdcmd" !~ '*_flox_saved_cwdcmd*; _flox_hook*' ) alias cwdcmd "$_flox_saved_cwdcmd_name; _flox_hook";
+        unset _flox_previous_precmd _flox_previous_cwdcmd _flox_saved_precmd_name _flox_saved_cwdcmd_name;
+        unsetenv _FLOX_MIGRATION_CODE;
         "#
     )
 }
