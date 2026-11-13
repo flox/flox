@@ -421,9 +421,6 @@ impl Publish {
             bail!(build_repo_err("Environment must be locked."));
         };
 
-        // Used for non building expressions and manifest builds
-        prefetch_flake_ref(&COMMON_NIXPKGS_URL)?;
-
         let lockfile_manifest = lockfile.migrated_manifest()?;
         let package = {
             let expression_dir_parent = path_env.dot_flox_path();
@@ -445,6 +442,9 @@ impl Publish {
             publish_config.base_catalog_url_select.as_ref(),
         )?;
         let has_manifest_build = package.kind().is_manifest_build();
+        if has_manifest_build {
+            prefetch_flake_ref(&COMMON_NIXPKGS_URL)?;
+        }
         let fetcher = match &publish_config.base_catalog_url_select {
             Some(BaseCatalogUrlSelect::NixpkgsUrl(_)) => None,
             _ if has_manifest_build => None,

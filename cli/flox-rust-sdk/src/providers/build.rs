@@ -844,8 +844,7 @@ pub fn find_toplevel_group_nixpkgs(lockfile: &Lockfile) -> Option<BaseCatalogUrl
 ///
 /// **NOTE**
 /// The current implementation will _not_ evaluate any of the packages.
-/// Therefore `nixpkgs` passed to the nef subsystem,
-/// is only used for its library functions.
+/// Reflection uses the library bundled with the package builder.
 /// Additionally, the `expression_ref`
 /// only needs to resolve to a directory containing `pkgs` dir,
 /// and it _does not_ have to use a git fetcher
@@ -864,7 +863,7 @@ fn get_nix_expression_targets(
     let mut command = nix_base_command();
     command
         .arg("eval")
-        .args(["--argstr", "nixpkgs-url", COMMON_NIXPKGS_URL.as_str()])
+        .args(["--arg", "use-bundled-lib", "true"])
         .args(["--argstr", "source-ref", expression_ref.as_url().as_str()])
         .args([
             "--file",

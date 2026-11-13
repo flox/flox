@@ -145,7 +145,7 @@ ifneq (,$(NIX_EXPRESSION_REF))
   __nix_expression_build_tuples := $(shell \
     $(_nix) eval \
       --argstr source-ref '$(NIX_EXPRESSION_REF)' \
-      --argstr nixpkgs-url '$(BUILDTIME_NIXPKGS_URL)' \
+      --arg use-bundled-lib true \
       --argstr system '$(NIX_SYSTEM)' \
       --file $(_nef) \
       reflect.attrPaths --json | \
