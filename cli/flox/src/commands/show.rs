@@ -5,7 +5,7 @@ use anyhow::{Result, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
-use floxhub_client::{CatalogClientTrait, PackageBuild, PackageDetails, VersionsError};
+use floxhub_client::{CatalogClientTrait, PackageBuild, VersionsError};
 use itertools::Itertools;
 use tracing::instrument;
 

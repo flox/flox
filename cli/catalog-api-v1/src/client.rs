@@ -8020,7 +8020,11 @@ Optional Query Parameters:
 - **pageSize**: Optional page size for pagination (def = 10)
 
 Returns:
-- **PackagesResult**: A list of PackageVersionInfo and the total result count
+- **PackagesResult**: A list of PackageVersionInfo and the total result count.
+  Empty, with a total count of 0, when attr_path exists but none of its
+  builds have an accepted stability. Each item's `available_stabilities`
+  lists every stability with a build of that version for that system,
+  strictest first.
 
 Sends a `GET` request to `/api/v1/catalog/packages/{attr_path}`
 

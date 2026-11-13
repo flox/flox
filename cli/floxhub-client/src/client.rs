@@ -1156,7 +1156,8 @@ pub mod tests {
 
     /// A catalog that reports where a package is available adds `stability`
     /// and `available_stabilities` to a message's context; one that doesn't
-    /// leaves them out.
+    /// leaves them out. `not_on_current_stability` is only meaningful with
+    /// them, and reads as `not_in_catalog` without.
     #[tokio::test]
     async fn resolve_response_reads_stability_availability() {
         let json_response = json!({ "items": [{
@@ -1176,14 +1177,32 @@ pub mod tests {
                     },
                 },
                 {
-                    "type": "attr_path_not_found.not_in_catalog",
+                    "type": "attr_path_not_found.not_on_current_stability",
                     "level": "error",
-                    "message": "no hello",
+                    "message": "hello is not at lts",
                     "context": {
                         "attr_path": "hello",
                         "install_id": "hello",
                         "stability": "lts",
-                        "available_stabilities": "",
+                        "available_stabilities": "unstable",
+                    },
+                },
+                {
+                    "type": "attr_path_not_found.not_on_current_stability",
+                    "level": "error",
+                    "message": "no context",
+                    "context": {
+                        "attr_path": "hello",
+                        "install_id": "hello",
+                    },
+                },
+                {
+                    "type": "attr_path_not_found.not_in_catalog",
+                    "level": "error",
+                    "message": "no nope",
+                    "context": {
+                        "attr_path": "nope",
+                        "install_id": "nope",
                     },
                 },
                 {
@@ -1217,27 +1236,39 @@ pub mod tests {
             .msgs
             .iter()
             .map(|msg| match msg {
-                ResolutionMessage::VersionNotFound(msg) => msg.stability_availability.clone(),
-                ResolutionMessage::AttrPathNotFoundNotInCatalog(msg) => {
-                    msg.stability_availability.clone()
+                ResolutionMessage::VersionNotFound(msg) => {
+                    ("version_not_found", msg.stability_availability.clone())
                 },
+                ResolutionMessage::AttrPathNotFoundNotOnCurrentStability(msg) => (
+                    "not_on_current_stability",
+                    Some(msg.stability_availability.clone()),
+                ),
+                ResolutionMessage::AttrPathNotFoundNotInCatalog(_) => ("not_in_catalog", None),
                 other => panic!("unexpected message: {other:?}"),
             })
             .collect::<Vec<_>>();
         assert_eq!(availabilities, vec![
-            Some(StabilityAvailability {
-                stability: "lts".to_string(),
-                available: vec![
-                    "stable".to_string(),
-                    "staging".to_string(),
-                    "unstable".to_string()
-                ],
-            }),
-            Some(StabilityAvailability {
-                stability: "lts".to_string(),
-                available: vec![],
-            }),
-            None,
+            (
+                "version_not_found",
+                Some(StabilityAvailability {
+                    stability: "lts".to_string(),
+                    available: vec![
+                        "stable".to_string(),
+                        "staging".to_string(),
+                        "unstable".to_string()
+                    ],
+                })
+            ),
+            (
+                "not_on_current_stability",
+                Some(StabilityAvailability {
+                    stability: "lts".to_string(),
+                    available: vec!["unstable".to_string()],
+                })
+            ),
+            ("not_in_catalog", None),
+            ("not_in_catalog", None),
+            ("version_not_found", None),
         ]);
         mock.assert();
     }
