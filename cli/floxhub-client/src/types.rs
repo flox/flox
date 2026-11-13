@@ -113,6 +113,7 @@ pub use api_types::{
     StoreInfo,
     StoreInfoRequest,
     StoreInfoResponse,
+    StorepathStatus,
     StorepathStatusResponse,
 };
 
