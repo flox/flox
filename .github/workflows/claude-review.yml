@@ -72,9 +72,9 @@ jobs:
           prompt: |
             Review PR #${{ github.event.pull_request.number }} in ${{ github.repository }}.
 
-            Conduct the review using the superpowers:requesting-code-review skill
-            and its code-reviewer template, reviewing the PR's full diff against
-            its base.
+            Review the PR's full diff against its base.
+            Use the reviewing-flox-changes skill at
+            .agents/skills/reviewing-flox-changes/SKILL.md.
 
             Fetch whatever git history you need using `gh pr diff`, `gh pr
             view`, or `git fetch`. The current checkout is shallow.
@@ -86,3 +86,6 @@ jobs:
             - Finish by writing the review summary into the tracking comment.
               If there are no issues, say specifically what you reviewed and
               verified rather than a bare "no issues found".
+            - Append this feedback request to each inline finding only:
+              "React with 👍 or 👎 if this was helpful or not to help build
+              an eval data set."

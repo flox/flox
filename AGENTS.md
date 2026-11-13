@@ -100,72 +100,18 @@ pre-commit run -a              # Run all linters
 | `cli/tests/` | Integration tests (32 bats files) |
 | `nix-plugins/` | C++ Nix plugins (Meson build) |
 | `pkgs/` | Nix package definitions |
-| `assets/activation-scripts/` | Shell activation scripts |
+| `assets/environment-interpreter/` | Shell activation scripts |
 | `test_data/` | Mock responses and test fixtures |
 
-## ld-floxlib (LD_AUDIT shared library)
+## ld-floxlib
 
-`ld-floxlib/ld-floxlib.c` is a C shared library loaded via
-`LD_AUDIT` to resolve dynamic libraries from Flox environments.
+Use [changing-ld-floxlib](.agents/skills/changing-ld-floxlib/SKILL.md)
+when changing ld-floxlib.
 
-### GLIBC version binding requirement
+## Package builder
 
-**Every libc function used in this file MUST have an explicit
-`.symver` asm binding** in both architecture blocks:
-- `__aarch64__`: `GLIBC_2.17`
-- `__x86_64__`: `GLIBC_2.2.5`
-
-When adding or changing any C standard library call (`malloc`,
-`strlen`, `strdup`, etc.), add the corresponding `__asm__`
-statement in both `#if` blocks at the top of the file. Missing
-bindings cause the library to link against a newer GLIBC version
-than the target host supports, breaking portability.
-
-### Build and test
-
-```
-cd ld-floxlib && make clean && make && make test
-```
-
-## Makefile conventions (`package-builder/flox-build.mk`)
-
-GNU make's dependency semantics express most lifecycle logic on their
-own. If a recipe contains shell logic deciding whether its own work
-should happen, the rule is probably modeling the wrong thing — reach
-for a make feature first:
-
-- **Create-if-missing artifact:** a file target with no prerequisites.
-  The recipe runs only when the file is absent; an existing file is
-  authoritative. No `[ -f ... ]` recipe guards.
-- **Temp file the build may create for itself:** mark it
-  `.INTERMEDIATE`, unconditionally. make deletes an intermediate it
-  created at the end of the run (and on fatal signals) and leaves a
-  pre-existing file untouched — that distinction needs no flag
-  variables and no `rm` bookkeeping.
-- **Steps that must run on every invocation** are `.PHONY` themselves
-  (see the next bullet) — phony-ness does not propagate, so transitive
-  reach through the phony `check-build-prerequisites` root is not
-  enough. The root's job is validation and ordering; do not add it as a
-  direct prerequisite of targets that already reach it — redundant
-  edges obscure the graph.
-- **A real file that must be regenerated unconditionally** (the
-  per-invocation build chain: source lists/tarballs, build caches,
-  rendered build scripts, evals, build outputs, result files): mark the
-  target `.PHONY`. make then triggers the recipe irrespective of the
-  file's presence or timestamp, so the rule can never tie with
-  prerequisites written in the same second. Phony-ness does not
-  propagate — a phony prerequisite forces only its direct dependent,
-  whose own output is again an ordinary file — so mark every link of a
-  must-regenerate chain, not just its head. Prefer this over a
-  `FORCE`-style empty prerequisite, which an out-of-band file named
-  `FORCE` would defeat. Cross-invocation caching is nix's job, not
-  make's.
-- **Returning data to the CLI:** fold it into `build-meta.json`
-  (`jq --slurpfile`), never hand back a path for the caller to read
-  and clean up. Each subsystem cleans up the files it creates.
-- `mkVarname`'s define body carries leading whitespace: `$(strip ...)`
-  the result, or launder it through an assignment, before interpolating
-  it into a variable name.
+Use [changing-package-builder](.agents/skills/changing-package-builder/SKILL.md)
+when changing build rules or the metadata handoff to the CLI.
 
 ## Testing
 
@@ -182,7 +128,7 @@ for a make feature first:
 - Prefer a type that makes an
   invalid state unrepresentable (`NonZero`, domain types) over a
   runtime guard plus a test for it. Do not add a client mock to
-  test a thin wrapper; see the provider-trait rule above.
+  test a thin wrapper; see the provider-trait rules under Conventions.
 - Test when logic is complicated and there are multiple correct codepaths
   through that logic
 - Test when there are many callers of the same logic, and different callers
@@ -200,42 +146,10 @@ for a make feature first:
 
 Mock catalog responses are generated against local floxhub services. See `CONTRIBUTING.md` for details on regenerating mocks.
 
-## Debugging Activation Scripts
+## Activation scripts and hooks
 
-Set `FLOX_ACTIVATE_TRACE=1` to trace activation script execution:
-
-```bash
-nix build
-FLOX_ACTIVATE_TRACE=1 result/bin/flox activate [args]
-```
-
-## Generating shell code for tcsh
-
-**Any tcsh code consumed via `eval` of a command substitution MUST double-quote
-the backticks.** Use the quoted form, never the bare form:
-
-```tcsh
-eval "`flox activate`"   # correct
-eval `flox activate`     # WRONG — output is word-split and brace-expanded
-```
-
-## Shell hooks and forked subshells
-
-**Shell code that Flox registers to run on a directory change MUST do nothing
-in a forked subshell.** zsh's `chpwd_functions` and tcsh's `cwdcmd` alias also
-run when a fork of the shell changes directory, and `$$` there still expands
-to the parent's PID:
-
-```zsh
-x=$(cd .. && pwd)   # the hook must not act here
-( cd .. )           # nor here
-```
-
-A hook that acts in the fork detaches the parent shell from an activation it is
-still using. zsh's own `cd` completion runs a command substitution like the one
-above, so no unusual setup is needed to hit it. Never treat `$$` as proof that
-the interactive shell itself is running the code; guard new hooks the way
-`zsh_hook` and `tcsh_hook` do in `cli/flox-activations/src/hook.rs`.
+Use [changing-activation-scripts](.agents/skills/changing-activation-scripts/SKILL.md)
+when changing activation scripts, generated shell code, or hooks.
 
 ## Metrics / telemetry
 
@@ -270,6 +184,11 @@ customer and prospect names out of everything that lands on GitHub:
 PR titles and descriptions, commit messages, code comments, branch
 names, test names, and test data. Refer to "a customer" and link the
 internal Linear issue instead.
+
+## Beta commands
+
+For new beta commands, use
+[adding-beta-subcommand](.agents/skills/adding-beta-subcommand/SKILL.md).
 
 ## Conventions
 
@@ -354,80 +273,9 @@ internal Linear issue instead.
     confirm behavior (paging base, defaults, error shapes) against
     the OpenAPI spec or schema before relying on it. Do not write
     doc comments asserting behavior you have not verified.
-  - **User-visible message syntax, structure, and content:**
-    - Use complete sentences. Do not use "I", "we", or "flox"
-      as the subject — drop it instead
-      ("did not find an environment", not
-      "flox did not find an environment").
-      Exception: the first sentence of an error may omit the
-      subject for easier parsing.
-    - Write errors in sentence case, ending with a period.
-      Exception: omit the period when system information
-      follows on the same line.
-    - Strive for one sentence per line.
-    - **Line 1:** A generic statement of the problem written
-      for a user who has never read the source.
-      Example: "Environment already exists at {location}."
-    - **Line 2+:** No dead ends — suggest a next step unless
-      there truly is none. Put the most actionable information
-      last.
-    - **Avoid the error when possible:** If you are certain
-      there is a single next step, take it automatically and
-      print a sentence describing what you did.
-      Example: `flox push` without auth should run
-      `flox auth login` and print "Auth information not found.
-      Redirecting to 'flox auth login'."
-    - **Do not surface internal tool output:** Intercept nix
-      or git errors and rewrite them at the product level.
-  - **CLI output conventions:**
-    - **Brand names:** "Flox" (capital F), except when
-      referring to CLI commands directly (`flox install`).
-      "FloxHub" (one word, capital F and H). "Flox Catalog"
-      and "Flox Factory" (both words capitalized). Use the
-      article where needed: "search the Flox Catalog".
-    - **Parameter notation in messages:**
-      `<REQUIRED_PARAM>` for required values,
-      `[OPTIONAL_PARAM]` for optional values — UPPERCASE,
-      angle or square brackets.
-      Example: `flox install <PACKAGE> --dir=<PATH>`
-    - **Emoji usage:** One emoji per response, two spaces
-      after the emoji. Standard map:
-      `❌ ERROR:` (errors), `⚠️` (warnings),
-      `✨` (creation), `✅` (success/confirmation),
-      `🗑️` (removal), `🚀` (new release available),
-      `ℹ️` (general notes), `🤖` (announcements unrelated
-      to the command), `⬇️`/`⬆️` (pull/push).
-    - **Suggest next steps** at the end of success messages
-      when there is an obvious path forward. Use "shell
-      points" for multiple options:
-      ```
-      Next:
-        $ flox search <PACKAGE>    <- Search for a package
-        $ flox install <PACKAGE>   <- Install a package
-        $ flox activate            <- Enter the environment
-      ```
-    - **Line length:** Wrap output at 80 characters.
-    - **Voice:** Active voice, US English, plain language.
-      Be concise — describe facts as if speaking to a
-      junior engineer seeing the terminal for the first time.
-    - **Spelling:** Use US English spelling in all text that
-      Flox writes: command output, errors, progress messages,
-      log messages, help text, and man pages. This applies
-      even where Nix spells the same idea the British way:
-      print `Realizing`, not `Realising`. Two kinds of text keep
-      their original spelling. Show output that Flox relays
-      from Nix verbatim, such as the stderr of a failed
-      `nix build`. Leave alone the words that the user types
-      or a program parses: a Nix flag such as
-      `nix-store --realise`, or an API value such as the
-      `cancelled` status of a Flox Factory build. The rule
-      does not call for renaming identifiers or rewriting
-      comments.
-    - **Output relayed from Nix:** When Flox shows output from
-      Nix, introduce it with a line that Flox writes and that
-      names Nix as the source, so that users can tell Nix's
-      text, British spellings included, from Flox's.
-      `Caught Nix error while locking flake:` is an example.
+  - **User-facing messages:** Use
+    [changing-user-messages](.agents/skills/changing-user-messages/SKILL.md)
+    when changing messages, CLI help, or man pages.
   - **Naming new helpers:** Before introducing a helper
     function, search for the naming convention used by similar
     helpers in the same file. Follow established patterns
@@ -444,62 +292,14 @@ internal Linear issue instead.
 - **Commits:** Conventional commits format (`feat:`, `fix:`, `chore:`, etc.). Use `cz commit` for interactive commits
 - **Rust 2024 edition** for main crates
 
-## Manifest usage (`flox-manifest` crate)
+## Manifest usage
 
-The `flox-manifest` crate uses a type-state pattern (`Manifest<S>`) to enforce
-correct manifest lifecycle at compile time. Follow these rules strictly.
-
-- **New schema version for shape changes** - any change to the manifest schema
-  (adding, removing, or renaming fields/sections/tables) requires creating a
-  new schema version. Never modify an existing schema version's structure.
-
-- **Adding new schemas** - copy the latest `flox-manifest/src/parsed/v*.rs` to
-  a new version file and duplicate modified leaf types. Unmodified types
-  continue to live in `parsed::common` or their respective version.
-
-- **Always use `Manifest` constructors** - don't pass manifest content as
-  `String` or deserialize into inner types directly (e.g.
-  `toml_edit::de::from_str::<ManifestLatest>()`). Any manifest read from disk
-  or received as text must be migrated. Use the typed constructors:
-  - `Manifest::read_typed(path)` / `Manifest::parse_toml_typed(s)` →
-    `Manifest<Validated>`
-  - `Manifest::read_and_migrate(path, lockfile)` /
-    `Manifest::parse_and_migrate(s, lockfile)` → `Manifest<Migrated>`
-  - `Manifest::parse_json(s)` for lockfile-embedded manifests →
-    `Manifest<TypedOnly>`
-
-- **Never serialize manifests by hand** - don't use
-  `toml_edit::ser::to_string()` on inner types. Use
-  `manifest.as_writable().to_string()` or
-  `manifest.as_writable().write_to_file(path)`, which handle schema version
-  selection and format preservation.
-
-- **Outside `flox-manifest`, operate on `ManifestLatest`** - do not introduce
-  or expand adapter traits like `CommonFields` so callers can pretend all
-  schema versions are interchangeable. The intended model is: migrate to the
-  latest schema, then operate on `ManifestLatest`.
-
-- The pattern for `PackageLookup` and `SchemaVersion` doesn't quite match the
-  pattern we want to use for operating on `ManifestLatest`, but for now we'll
-  keep using the `PackageLookup` trait.
-
-- **Use lockfile migration helpers** - when reading manifest data from a
-  `Lockfile`, prefer `lockfile.migrated_manifest()` for the merged manifest and
-  `lockfile.migrated_user_manifest()` for the user-authored manifest instead of
-  calling `lockfile.manifest.migrate_typed_only(...)` directly at call sites.
-
-
+Use [working-with-manifests](.agents/skills/working-with-manifests/SKILL.md)
+when changing schemas, migration, or manifest read/write and lockfile paths.
 
 ## IDE Setup
 
-For rust-analyzer, add to `.vscode/settings.json`:
-
-```json
-{
-  "rust-analyzer.linkedProjects": ["${workspaceFolder}/Cargo.toml"],
-  "rust-analyzer.cargo.features": ["extra-tests"]
-}
-```
+See [CONTRIBUTING.md](CONTRIBUTING.md#setting-up-rust-ide-support) for rust-analyzer configuration.
 
 ## Comments
 
