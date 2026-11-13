@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, HashMap};
+use std::env;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::LazyLock;
-use std::{env, fs};
 
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::lockfile::Lockfile;
@@ -798,115 +798,6 @@ pub fn nix_expression_dir(environment: &impl Environment) -> PathBuf {
 /// hold the path rather than the environment.
 pub fn nix_expression_dir_in(dot_flox_path: impl AsRef<Path>) -> PathBuf {
     dot_flox_path.as_ref().join("pkgs")
-}
-
-/// The marker file that promotes a package directory to a deep override,
-/// mirroring `deepOverrideMarkerFile` in
-/// `package-builder/nef/lib/deepOverrides.nix`.
-const DEEP_OVERRIDE_MARKER_FILE: &str = "deep-override";
-
-/// One name's classified `pkgs/` entry, for the collision rule
-/// [deep_override_attr_paths_in] follows: a `.nix` file replaces a
-/// same-named directory in the scan, never the reverse.
-#[derive(Debug, Clone)]
-enum PkgsEntry {
-    NixFile,
-    Directory(PathBuf),
-}
-
-/// Attribute paths of the deep overrides declared under a repository's
-/// `pkgs/` directory (FLO-95), for reporting to the catalog at publish
-/// time.
-///
-/// Mirrors how NEF classifies `pkgs/` entries
-/// (`package-builder/nef/lib/dirToAttrs.nix`) and marks one as a deep
-/// override (`isMarkedAsDeepOverride` in
-/// `package-builder/nef/lib/deepOverrides.nix`): a directory holding a
-/// `default.nix` is a package, and a package is a deep override iff it
-/// also holds a `deep-override` file beside that `default.nix`. A
-/// package directory is never recursed into. A directory without
-/// `default.nix` is a package set and is recursed into, so a nested
-/// override is reported with its full path, e.g.
-/// `["setMakeScope", "makeScopeDependency"]`. A `.nix` file has no
-/// directory of its own to hold the marker, so it is never an override.
-/// Where a `.nix` file and a directory share a name, the file wins the name
-/// (`dirToAttrs.nix`), so the directory is not scanned at all, marked or
-/// not.
-///
-/// An absent `pkgs/` directory is a repository with no overrides, so
-/// this returns an empty list rather than an error. The result is
-/// sorted.
-pub fn deep_override_attr_paths_in(dot_flox_path: impl AsRef<Path>) -> Vec<Vec<String>> {
-    let mut attr_paths = Vec::new();
-    scan_pkgs_dir_for_deep_overrides(
-        &nix_expression_dir_in(dot_flox_path),
-        &mut Vec::new(),
-        &mut attr_paths,
-    );
-    attr_paths.sort();
-    attr_paths
-}
-
-/// Recursive worker for [deep_override_attr_paths_in]. `attr_path` is the
-/// path to `dir` from the `pkgs/` root, mutated in place as a scratch
-/// stack rather than rebuilt per call, and restored before returning so
-/// a sibling directory sees the prefix as it found it.
-fn scan_pkgs_dir_for_deep_overrides(
-    dir: &Path,
-    attr_path: &mut Vec<String>,
-    out: &mut Vec<Vec<String>>,
-) {
-    let Ok(read_dir) = fs::read_dir(dir) else {
-        return;
-    };
-    let entries: Vec<PathBuf> = read_dir.flatten().map(|entry| entry.path()).collect();
-
-    // Two passes so a `.nix` file always wins its name over a same-named
-    // directory, regardless of the order `read_dir` happens to yield them.
-    let mut by_name: BTreeMap<String, PkgsEntry> = BTreeMap::new();
-    for path in &entries {
-        if !path.is_dir() {
-            continue;
-        }
-        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
-            continue;
-        };
-        by_name.insert(name.to_string(), PkgsEntry::Directory(path.clone()));
-    }
-    for path in &entries {
-        if path.extension().and_then(|ext| ext.to_str()) != Some("nix") {
-            continue;
-        }
-        let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
-            continue;
-        };
-        // dirToAttrs.nix excludes any file ending in "flake.nix" from the
-        // scan, not only a file named exactly that.
-        if file_name.ends_with("flake.nix") {
-            continue;
-        }
-        let Some(stem) = path.file_stem().and_then(|stem| stem.to_str()) else {
-            continue;
-        };
-        by_name.insert(stem.to_string(), PkgsEntry::NixFile);
-    }
-
-    for (name, entry) in by_name {
-        let PkgsEntry::Directory(path) = entry else {
-            continue;
-        };
-        if !path.join("default.nix").is_file() {
-            attr_path.push(name);
-            scan_pkgs_dir_for_deep_overrides(&path, attr_path, out);
-            attr_path.pop();
-            continue;
-        }
-        if path.join(DEEP_OVERRIDE_MARKER_FILE).is_file() {
-            let mut marked_path = attr_path.clone();
-            marked_path.push(name);
-            out.push(marked_path);
-        }
-    }
 }
 
 pub fn build_symlink_path(
@@ -1738,119 +1629,6 @@ mod tests {
         };
         let slug: &'static str = (&err).into();
         assert_eq!(slug, "build.build_failure");
-    }
-
-    /// A package directory marked with `deep-override` beside its
-    /// `default.nix` is reported, as a single-component attribute path.
-    #[test]
-    fn marked_package_directory_is_listed() {
-        let dot_flox = tempfile::tempdir().unwrap();
-        let pkgs = dot_flox.path().join("pkgs");
-        fs::create_dir_all(pkgs.join("openssl")).unwrap();
-        fs::write(pkgs.join("openssl").join("default.nix"), "").unwrap();
-        fs::write(pkgs.join("openssl").join("deep-override"), "").unwrap();
-
-        let paths = deep_override_attr_paths_in(dot_flox.path());
-
-        assert_eq!(paths, vec![vec!["openssl".to_string()]]);
-    }
-
-    /// A package directory without the marker file is a shallow
-    /// package, not reported.
-    #[test]
-    fn unmarked_package_directory_is_not_listed() {
-        let dot_flox = tempfile::tempdir().unwrap();
-        let pkgs = dot_flox.path().join("pkgs");
-        fs::create_dir_all(pkgs.join("zlib")).unwrap();
-        fs::write(pkgs.join("zlib").join("default.nix"), "").unwrap();
-
-        let paths = deep_override_attr_paths_in(dot_flox.path());
-
-        assert_eq!(paths, Vec::<Vec<String>>::new());
-    }
-
-    /// A lone `.nix` file has no directory of its own to hold the
-    /// marker, so a `deep-override` file sitting beside it at the same
-    /// `pkgs/` level attaches to nothing.
-    #[test]
-    fn nix_file_beside_a_deep_override_file_is_not_listed() {
-        let dot_flox = tempfile::tempdir().unwrap();
-        let pkgs = dot_flox.path().join("pkgs");
-        fs::create_dir_all(&pkgs).unwrap();
-        fs::write(pkgs.join("foo.nix"), "").unwrap();
-        fs::write(pkgs.join("deep-override"), "").unwrap();
-
-        let paths = deep_override_attr_paths_in(dot_flox.path());
-
-        assert_eq!(paths, Vec::<Vec<String>>::new());
-    }
-
-    /// A marked package nested inside a package set (a directory with
-    /// no `default.nix` of its own) is reported with its full
-    /// attribute path, not just its own name.
-    #[test]
-    fn nested_override_in_a_package_set_is_listed_with_full_path() {
-        let dot_flox = tempfile::tempdir().unwrap();
-        let pkgs = dot_flox.path().join("pkgs");
-        let nested = pkgs.join("setMakeScope").join("makeScopeDependency");
-        fs::create_dir_all(&nested).unwrap();
-        fs::write(nested.join("default.nix"), "").unwrap();
-        fs::write(nested.join("deep-override"), "").unwrap();
-
-        let paths = deep_override_attr_paths_in(dot_flox.path());
-
-        assert_eq!(paths, vec![vec![
-            "setMakeScope".to_string(),
-            "makeScopeDependency".to_string(),
-        ]]);
-    }
-
-    /// A package directory is never recursed into, even when it holds
-    /// a nested directory that would otherwise look like a marked
-    /// package-set member.
-    #[test]
-    fn subdirectory_of_a_marked_package_is_not_scanned() {
-        let dot_flox = tempfile::tempdir().unwrap();
-        let pkgs = dot_flox.path().join("pkgs");
-        let openssl = pkgs.join("openssl");
-        fs::create_dir_all(&openssl).unwrap();
-        fs::write(openssl.join("default.nix"), "").unwrap();
-        fs::write(openssl.join("deep-override"), "").unwrap();
-        let nested = openssl.join("nested");
-        fs::create_dir_all(&nested).unwrap();
-        fs::write(nested.join("default.nix"), "").unwrap();
-        fs::write(nested.join("deep-override"), "").unwrap();
-
-        let paths = deep_override_attr_paths_in(dot_flox.path());
-
-        assert_eq!(paths, vec![vec!["openssl".to_string()]]);
-    }
-
-    /// A `.nix` file wins its name over a same-named directory
-    /// (`dirToAttrs.nix`), so the directory is not scanned at all, even
-    /// when it is validly marked as a deep override.
-    #[test]
-    fn nix_file_wins_the_name_over_a_marked_directory() {
-        let dot_flox = tempfile::tempdir().unwrap();
-        let pkgs = dot_flox.path().join("pkgs");
-        fs::create_dir_all(&pkgs).unwrap();
-        fs::write(pkgs.join("foo.nix"), "").unwrap();
-        fs::create_dir_all(pkgs.join("foo")).unwrap();
-        fs::write(pkgs.join("foo").join("default.nix"), "").unwrap();
-        fs::write(pkgs.join("foo").join("deep-override"), "").unwrap();
-
-        let paths = deep_override_attr_paths_in(dot_flox.path());
-
-        assert_eq!(paths, Vec::<Vec<String>>::new());
-    }
-
-    /// A repository with no `pkgs/` directory at all declares no
-    /// overrides; that is an empty list, not an error.
-    #[test]
-    fn deep_override_attr_paths_in_is_empty_without_pkgs_dir() {
-        let dot_flox = tempfile::tempdir().unwrap();
-
-        assert!(deep_override_attr_paths_in(dot_flox.path()).is_empty());
     }
 
     /// An unsupported `--system` reaches Rust as the eval result's `system`
@@ -4702,7 +4480,12 @@ mod nef_tests {
 
     use floxhub_client::LockedInputEntry;
     use indoc::{formatdoc, indoc};
-    use nef_lock_catalog::build_lock_from_locked_inputs;
+    use nef_lock_catalog::{
+        CatalogRef,
+        build_lock_from_locked_inputs,
+        override_input,
+        render_builder_lock,
+    };
     use pretty_assertions::assert_eq;
 
     use super::*;
@@ -4717,12 +4500,12 @@ mod nef_tests {
     use crate::providers::git::tests::test_git_options;
     use crate::providers::git::{GitCommandProvider, GitProvider};
 
-    /// Write the builder-facing catalog JSON pinning `catalogs.myorg.hello`
-    /// to `source_dir` at its current revision. The fixture uses the same
-    /// materialization as the CLI, with no catalog request. The entry is keyed in the
-    /// server's canonical `<catalog>/<attr-path>` form, which the expression
-    /// references in dot-rendered form.
-    fn write_builder_catalog_lock(path: &Path, repo: &GitCommandProvider, source_dir: &Path) {
+    /// A catalog lock pinning `catalogs.myorg.hello` to `source_dir` at its
+    /// current revision. The fixture uses the same transform as the CLI,
+    /// with no catalog request. The entry is keyed in the server's canonical
+    /// `<catalog>/<attr-path>` form, which the expression references in
+    /// dot-rendered form.
+    fn hello_catalog_lock(repo: &GitCommandProvider, source_dir: &Path) -> BuildLock {
         let status = repo.status().unwrap();
         let entry: LockedInputEntry = serde_json::from_value(serde_json::json!({
             "attr_path": ["hello"],
@@ -4743,9 +4526,39 @@ mod nef_tests {
         .unwrap();
 
         let key = "myorg/hello".to_string();
-        let lock =
-            build_lock_from_locked_inputs(HashMap::from([(key.clone(), entry)]), [&key]).unwrap();
-        fs::write(path, nef_lock_catalog::render_builder_lock(&lock).unwrap()).unwrap();
+        build_lock_from_locked_inputs(HashMap::from([(key.clone(), entry)]), [&key]).unwrap()
+    }
+
+    /// The expressions `catalog_fixture` builds: `foo` references the
+    /// catalog input `catalogs.myorg.hello`, and `hello` is the package that
+    /// reference resolves to.
+    const CATALOG_FIXTURE: &[(&[&str], &str)] = &[
+        (&["foo"], indoc! {r#"
+            {catalogs, runCommand}: runCommand "foo" {} ''
+                echo -n "Hello, World!" >> $out
+                cat ${catalogs.myorg.hello} >> $out
+            ''
+            "#}),
+        (&["hello"], indoc! {r#"
+            {runCommand}: runCommand "hello" {} ''
+                echo -n "Hello from the catalog" > $out
+            ''
+            "#}),
+    ];
+
+    /// Write [CATALOG_FIXTURE] to a committed git repository in `base`. The
+    /// directory hosting both packages doubles as `hello`'s git-fetchable
+    /// source, so the build resolves the reference for real with no network
+    /// access. Returns the expressions and a lock pinning `hello` to the
+    /// commit.
+    fn catalog_fixture(base: &Path) -> (NixFlakeref, BuildLock) {
+        let (expressions_dir, expressions_ref) =
+            prepare_nix_expressions_dir_in(base, CATALOG_FIXTURE);
+        let repo =
+            GitCommandProvider::init_with(test_git_options(), &expressions_dir, false).unwrap();
+        repo.add(&[&expressions_dir]).unwrap();
+        repo.commit("add nef catalog fixtures").unwrap();
+        (expressions_ref, hello_catalog_lock(&repo, &expressions_dir))
     }
 
     /// The build consumes the catalog lock it is handed: the NEF eval reads
@@ -4764,30 +4577,9 @@ mod nef_tests {
         let mut env = new_path_environment(&flox, &manifest);
         let env_path = env.parent_path().unwrap();
 
-        // `foo` references a catalog input; `hello` is the package that
-        // reference resolves to. The directory hosting both doubles as
-        // `hello`'s git-fetchable source, so the build resolves the
-        // reference for real with no network access.
-        let (expressions_dir, expressions_ref) = prepare_nix_expressions_dir_in(&tempdir, &[
-            (&[pname], indoc! {r#"
-                {catalogs, runCommand}: runCommand "foo" {} ''
-                    echo -n "Hello, World!" >> $out
-                    cat ${catalogs.myorg.hello} >> $out
-                ''
-                "#}),
-            (&["hello"], indoc! {r#"
-                {runCommand}: runCommand "hello" {} ''
-                    echo -n "Hello from the catalog" > $out
-                ''
-                "#}),
-        ]);
-        let repo =
-            GitCommandProvider::init_with(test_git_options(), &expressions_dir, false).unwrap();
-        repo.add(&[&expressions_dir]).unwrap();
-        repo.commit("add nef catalog fixtures").unwrap();
-
+        let (expressions_ref, lock) = catalog_fixture(tempdir.path());
         let lockfile = tempdir.path().join("catalog.lock");
-        write_builder_catalog_lock(&lockfile, &repo, &expressions_dir);
+        fs::write(&lockfile, render_builder_lock(&lock).unwrap()).unwrap();
         let lock_bytes = fs::read(&lockfile).unwrap();
 
         assert_build_status_with_nix_expr(
@@ -4808,6 +4600,54 @@ mod nef_tests {
             lock_bytes,
             "the build must not rewrite the lock it is handed"
         );
+    }
+
+    /// A build against an overridden input uses the overriding source in
+    /// place of the revision the lock pins.
+    #[tokio::test]
+    async fn nef_build_uses_an_overridden_catalog_input() {
+        let pname = "foo";
+
+        let (flox, tempdir) = flox_instance();
+        let mut env = new_path_environment(&flox, "version = 1");
+        let env_path = env.parent_path().unwrap();
+        let (expressions_ref, mut lock) = catalog_fixture(tempdir.path());
+
+        // A NEF project with its own `hello`, which is neither committed nor
+        // known to the catalog. Nix refuses a path input with a symlinked
+        // component, such as `/tmp` on macOS.
+        let override_dir = tempdir.path().join("hello-override");
+        let override_pkgs = override_dir.join(".flox/pkgs");
+        fs::create_dir_all(&override_pkgs).unwrap();
+        fs::write(override_pkgs.join("hello.nix"), indoc! {r#"
+            {runCommand}: runCommand "hello" {} ''
+                echo -n "Hello from the override" > $out
+            ''
+            "#})
+        .unwrap();
+        override_input(
+            &mut lock,
+            &flox.floxhub_client,
+            &CatalogRef::from_str("catalogs.myorg.hello").unwrap(),
+            &NixFlakeref::from_path(override_dir.canonicalize().unwrap()).unwrap(),
+        )
+        .await
+        .unwrap();
+
+        let lockfile = tempdir.path().join("catalog.lock");
+        fs::write(&lockfile, render_builder_lock(&lock).unwrap()).unwrap();
+        assert_build_status_with_nix_expr(
+            &flox,
+            &mut env,
+            &expressions_ref,
+            pname,
+            Some(&lockfile),
+            None,
+            true,
+        );
+
+        let content = fs::read_to_string(env_path.join(format!("result-{pname}"))).unwrap();
+        assert_eq!(content, "Hello, World!Hello from the override");
     }
 
     #[test]

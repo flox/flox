@@ -31,7 +31,7 @@ use git_url_parse::GitUrl;
 use indexmap::IndexSet;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
-use nef_lock_catalog::{NixFlakeref, PackageClosure};
+use nef_lock_catalog::{NixFlakeref, PackageClosure, deep_override_attr_paths_in};
 use thiserror::Error;
 use tracing::{debug, instrument};
 use url::Url;
@@ -44,8 +44,8 @@ use super::build::{
     PackageTarget,
     PackageTargetError,
     PackageTargetKind,
-    deep_override_attr_paths_in,
     find_toplevel_group_nixpkgs,
+    nix_expression_dir_in,
 };
 use super::buildenv::BuildEnvOutputs;
 use super::git::{GitCommandError, GitCommandGetOriginError, GitCommandProvider, StatusInfo};
@@ -818,9 +818,11 @@ where
             // states that the repository declares no overrides, rather
             // than leaving the field unstated for the server to guess at.
             deep_overrides: Some(deep_overrides_for_wire(deep_override_attr_paths_in(
-                self.env_metadata
-                    .repo_root_path
-                    .join(&self.env_metadata.rel_expression_build_base_dir),
+                nix_expression_dir_in(
+                    self.env_metadata
+                        .repo_root_path
+                        .join(&self.env_metadata.rel_expression_build_base_dir),
+                ),
             ))?),
         };
 
