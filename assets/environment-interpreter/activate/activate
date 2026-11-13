@@ -259,6 +259,7 @@ case "$_FLOX_ENV_ACTIVATION_MODE" in
   run)
     # shellcheck disable=SC1091 # from interpreter package
     source "$_interpreter_profile_d/0100_common-run-mode-paths.sh"
+    warn_run_mode_python_packages "$_FLOX_ENV"
     ;;
   build)
     # shellcheck disable=SC1090 # from interpreter package
