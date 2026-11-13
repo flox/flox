@@ -207,7 +207,7 @@
           "catalog"
         ],
         "summary": "Shows available packages of a specific package",
-        "description": "Returns a list of versions for a given attr_path\n\nRequired Query Parameters:\n- **attr_path**: The attr_path, must be valid.\n\nOptional Query Parameters:\n- **page**: Optional page number for pagination (def = 0)\n- **pageSize**: Optional page size for pagination (def = 10)\n\nReturns:\n- **PackagesResult**: A list of PackageResolutionInfo and the total result count",
+        "description": "Returns a list of versions for a given attr_path\n\nRequired Query Parameters:\n- **attr_path**: The attr_path, must be valid.\n\nOptional Query Parameters:\n- **page**: Optional page number for pagination (def = 0)\n- **pageSize**: Optional page size for pagination (def = 10)\n\nReturns:\n- **PackagesResult**: A list of PackageVersionInfo and the total result count.\n  Empty, with a total count of 0, when attr_path exists but none of its\n  builds have an accepted stability. Each item's `available_stabilities`\n  lists every stability with a build of that version for that system,\n  strictest first.",
         "operationId": "packages_api_v1_catalog_packages__attr_path__get",
         "security": [
           {
@@ -290,7 +290,7 @@
           "catalog"
         ],
         "summary": "Resolve a list of Package Groups",
-        "description": "Resolves a list of package groups, each being a list of package descriptors.\n\nRequired Body:\n- **groups**: An object with an `items` array of PackageGroups to resolve.\n\nOptional Query Parameters:\n- **candidate_pages**: Number of additional candidate pages to return\n  (default: 0)\n\nReturns:\n- **ResolvedPackageGroups**: An object with an `items` array of\n  `ResolvedPackageGroup` items.\n\nResolution Rules:\n- Each `PackageGroup` is resolved independently.\n- Each page that has packages meeting all descriptors in the group is\n  returned.\n- The latest complete page includes full package details.\n- Additional candidate pages are returned without full details.\n\nPackageDescriptor Fields:\n- **install_id**: [required] Reference identifier for the package in the\n  manifest. Used for error messages and result correlation.\n- **attr_path**: [required] The nix attribute path to match exactly.\n- **systems**: [required] List of systems to resolve for (e.g.,\n  x86_64-linux).\n- **version**: [optional] Version constraint. Can be a literal version or\n  semver constraint. Packages whose version cannot be parsed as semver are\n  excluded when using semver constraints.\n- **derivation**: [optional] Specific derivation path to match.\n- **allow_pre_releases**: [optional] Include pre-release versions when using\n  semver constraints (default: False).\n- **allow_broken**: [optional] Include packages marked as broken\n  (default: False).\n- **allow_unfree**: [optional] Include packages with unfree licenses\n  (default: True).\n- **allow_insecure**: [optional] Include packages marked as insecure\n  (default: False).\n- **allowed_licenses**: [optional] List of acceptable license identifiers.\n- **allow_missing_builds**: [optional] Include packages without confirmed\n  build artifacts (default: False). If resolution fails with this\n  constraint, it may be relaxed with a warning message.",
+        "description": "Resolves a list of package groups, each being a list of package descriptors.\n\nRequired Body:\n- **groups**: An object with an `items` array of PackageGroups to resolve.\n\nOptional Query Parameters:\n- **candidate_pages**: Number of additional candidate pages to return\n  (default: 0)\n\nReturns:\n- **ResolvedPackageGroups**: An object with an `items` array of\n  `ResolvedPackageGroup` items.\n\nResolution Rules:\n- Each `PackageGroup` is resolved independently.\n- Each page that has packages meeting all descriptors in the group is\n  returned.\n- The latest complete page includes full package details.\n- Additional candidate pages are returned without full details.\n\nStability:\n- A group that resolves at one stability, its own or the realm default,\n  and fails with a `version_not_found` or\n  `attr_path_not_found.not_in_catalog` message carries two more context\n  keys on that message: `stability`, the stability it resolved at, and\n  `available_stabilities`, the comma-separated stabilities, strictest\n  first, with a build the descriptor accepts. It is empty when no\n  stability has one.\n\nPackageDescriptor Fields:\n- **install_id**: [required] Reference identifier for the package in the\n  manifest. Used for error messages and result correlation.\n- **attr_path**: [required] The nix attribute path to match exactly.\n- **systems**: [required] List of systems to resolve for (e.g.,\n  x86_64-linux).\n- **version**: [optional] Version constraint. Can be a literal version or\n  semver constraint. Packages whose version cannot be parsed as semver are\n  excluded when using semver constraints.\n- **derivation**: [optional] Specific derivation path to match.\n- **allow_pre_releases**: [optional] Include pre-release versions when using\n  semver constraints (default: False).\n- **allow_broken**: [optional] Include packages marked as broken\n  (default: False).\n- **allow_unfree**: [optional] Include packages with unfree licenses\n  (default: True).\n- **allow_insecure**: [optional] Include packages marked as insecure\n  (default: False).\n- **allowed_licenses**: [optional] List of acceptable license identifiers.\n- **allow_missing_builds**: [optional] Include packages without confirmed\n  build artifacts (default: False). If resolution fails with this\n  constraint, it may be relaxed with a warning message.",
         "operationId": "resolve_api_v1_catalog_resolve_post",
         "security": [
           {
@@ -3383,6 +3383,7 @@
           "attr_path_not_found",
           "constraints_too_tight",
           "attr_path_not_found.not_in_catalog",
+          "attr_path_not_found.not_on_current_stability",
           "attr_path_not_found.systems_not_on_same_page",
           "attr_path_not_found.not_found_for_all_systems",
           "missing_builds",
@@ -4554,7 +4555,81 @@
         "type": "array",
         "title": "PackageOutputs"
       },
-      "PackageResolutionInfo": {
+      "PackageRevisionBuilds": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PackageBuildWithSizes"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "PackageRevisionBuilds",
+        "description": "A package's builds at one revision count, with recorded output sizes."
+      },
+      "PackageSbomRequest": {
+        "properties": {},
+        "type": "object",
+        "title": "PackageSbomRequest",
+        "description": "Request body for package SBOM endpoint (reserved for future extension)."
+      },
+      "PackageSearchResult": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PackageInfoSearch"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total_count": {
+            "type": "integer",
+            "title": "Total Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total_count"
+        ],
+        "title": "PackageSearchResult",
+        "example": {
+          "items": [
+            {
+              "attr_path": "foo.bar.curl",
+              "catalog": "nixpkgs",
+              "description": "A very nice Item",
+              "name": "curl",
+              "pkg_path": "foo.bar.curl",
+              "pname": "curl",
+              "stabilities": [
+                "stable",
+                "unstable"
+              ],
+              "system": "x86_64-linux",
+              "version": "1.0"
+            }
+          ],
+          "total_count": 1
+        }
+      },
+      "PackageSystem": {
+        "type": "string",
+        "enum": [
+          "aarch64-darwin",
+          "aarch64-linux",
+          "x86_64-darwin",
+          "x86_64-linux",
+          "invalid"
+        ],
+        "title": "PackageSystem"
+      },
+      "PackageVersionInfo": {
         "properties": {
           "catalog": {
             "title": "Catalog",
@@ -4664,6 +4739,15 @@
             "title": "Cache Uri",
             "nullable": true,
             "type": "string"
+          },
+          "available_stabilities": {
+            "title": "Available Stabilities",
+            "description": "Every stability with a build of this version for this system, strictest first. `stabilities` names only the stabilities of the page this item's build comes from.",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           }
         },
         "type": "object",
@@ -4690,87 +4774,14 @@
           "stabilities",
           "scrape_date"
         ],
-        "title": "PackageResolutionInfo"
-      },
-      "PackageRevisionBuilds": {
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/PackageBuildWithSizes"
-            },
-            "type": "array",
-            "title": "Items"
-          }
-        },
-        "type": "object",
-        "required": [
-          "items"
-        ],
-        "title": "PackageRevisionBuilds",
-        "description": "A package's builds at one revision count, with recorded output sizes."
-      },
-      "PackageSbomRequest": {
-        "properties": {},
-        "type": "object",
-        "title": "PackageSbomRequest",
-        "description": "Request body for package SBOM endpoint (reserved for future extension)."
-      },
-      "PackageSearchResult": {
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/PackageInfoSearch"
-            },
-            "type": "array",
-            "title": "Items"
-          },
-          "total_count": {
-            "type": "integer",
-            "title": "Total Count"
-          }
-        },
-        "type": "object",
-        "required": [
-          "items",
-          "total_count"
-        ],
-        "title": "PackageSearchResult",
-        "example": {
-          "items": [
-            {
-              "attr_path": "foo.bar.curl",
-              "catalog": "nixpkgs",
-              "description": "A very nice Item",
-              "name": "curl",
-              "pkg_path": "foo.bar.curl",
-              "pname": "curl",
-              "stabilities": [
-                "stable",
-                "unstable"
-              ],
-              "system": "x86_64-linux",
-              "version": "1.0"
-            }
-          ],
-          "total_count": 1
-        }
-      },
-      "PackageSystem": {
-        "type": "string",
-        "enum": [
-          "aarch64-darwin",
-          "aarch64-linux",
-          "x86_64-darwin",
-          "x86_64-linux",
-          "invalid"
-        ],
-        "title": "PackageSystem"
+        "title": "PackageVersionInfo",
+        "description": "One version of a package for one system, as `/packages` lists it."
       },
       "PackagesResult": {
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/PackageResolutionInfo"
+              "$ref": "#/components/schemas/PackageVersionInfo"
             },
             "type": "array",
             "title": "Items"

@@ -32,7 +32,7 @@ pub struct ResultsPage<T> {
 pub use api_types::PackageInfoSearch as SearchResult;
 pub type SearchResults = ResultsPage<SearchResult>;
 
-pub use api_types::{PackageOutput, PackageOutputs, PackageResolutionInfo as PackageBuild};
+pub use api_types::{PackageOutput, PackageOutputs, PackageVersionInfo as PackageBuild};
 pub type PackageDetails = ResultsPage<PackageBuild>;
 
 // Build-inputs lookup (lockless catalog locking, ECO-93). Re-exported so
@@ -138,13 +138,47 @@ pub struct MsgGeneral {
     pub msg: String,
 }
 
-/// A message indicating a package attr_path is not present in the catalog.
+/// The stability a pkg-group resolved at, and the stabilities that have a
+/// build the package would accept.
+///
+/// Catalogs that don't report this leave it out of a message.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct StabilityAvailability {
+    pub stability: String,
+    /// Strictest first. Empty when no stability has such a build.
+    pub available: Vec<String>,
+}
+
+/// A message indicating a package attr_path has no build at any stability.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MsgAttrPathNotFoundNotInCatalog {
     pub level: MessageLevel,
     pub msg: String,
     pub attr_path: String,
     pub install_id: String,
+}
+
+/// A message indicating a package attr_path has builds, but only at
+/// stabilities other than the one its pkg-group resolved at.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MsgAttrPathNotFoundNotOnCurrentStability {
+    pub level: MessageLevel,
+    pub msg: String,
+    pub attr_path: String,
+    pub install_id: String,
+    pub stability_availability: StabilityAvailability,
+}
+
+/// A message indicating no build of a package on `system` satisfies its
+/// version constraint.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MsgVersionNotFound {
+    pub level: MessageLevel,
+    pub msg: String,
+    pub attr_path: String,
+    pub install_id: String,
+    pub system: String,
+    pub stability_availability: Option<StabilityAvailability>,
 }
 
 /// A message indicating no single page contains a package for all requested
@@ -192,8 +226,10 @@ pub struct MsgUnknown {
 pub enum ResolutionMessage {
     General(MsgGeneral),
     AttrPathNotFoundNotInCatalog(MsgAttrPathNotFoundNotInCatalog),
+    AttrPathNotFoundNotOnCurrentStability(MsgAttrPathNotFoundNotOnCurrentStability),
     AttrPathNotFoundSystemsNotOnSamePage(MsgAttrPathNotFoundSystemsNotOnSamePage),
     AttrPathNotFoundNotFoundForAllSystems(MsgAttrPathNotFoundNotFoundForAllSystems),
+    VersionNotFound(MsgVersionNotFound),
     ConstraintsTooTight(MsgConstraintsTooTight),
     Unknown(MsgUnknown),
 }
@@ -203,8 +239,10 @@ impl ResolutionMessage {
         match self {
             ResolutionMessage::General(msg) => &msg.msg,
             ResolutionMessage::AttrPathNotFoundNotInCatalog(msg) => &msg.msg,
+            ResolutionMessage::AttrPathNotFoundNotOnCurrentStability(msg) => &msg.msg,
             ResolutionMessage::AttrPathNotFoundSystemsNotOnSamePage(msg) => &msg.msg,
             ResolutionMessage::AttrPathNotFoundNotFoundForAllSystems(msg) => &msg.msg,
+            ResolutionMessage::VersionNotFound(msg) => &msg.msg,
             ResolutionMessage::ConstraintsTooTight(msg) => &msg.msg,
             ResolutionMessage::Unknown(msg) => &msg.msg,
         }
@@ -214,8 +252,10 @@ impl ResolutionMessage {
         match self {
             ResolutionMessage::General(msg) => msg.level,
             ResolutionMessage::AttrPathNotFoundNotInCatalog(msg) => msg.level,
+            ResolutionMessage::AttrPathNotFoundNotOnCurrentStability(msg) => msg.level,
             ResolutionMessage::AttrPathNotFoundSystemsNotOnSamePage(msg) => msg.level,
             ResolutionMessage::AttrPathNotFoundNotFoundForAllSystems(msg) => msg.level,
+            ResolutionMessage::VersionNotFound(msg) => msg.level,
             ResolutionMessage::ConstraintsTooTight(msg) => msg.level,
             ResolutionMessage::Unknown(msg) => msg.level,
         }
@@ -237,6 +277,23 @@ impl ResolutionMessage {
             .filter(|s| !s.is_empty())
             .map(|s| s.to_string())
             .collect()
+    }
+
+    /// Present only when the catalog sent both `stability` and
+    /// `available_stabilities`, the latter comma-separated.
+    fn stability_availability_from_context(
+        context: &HashMap<String, String>,
+    ) -> Option<StabilityAvailability> {
+        let stability = context.get("stability")?;
+        let available = context.get("available_stabilities")?;
+        Some(StabilityAvailability {
+            stability: stability.clone(),
+            available: available
+                .split(',')
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string())
+                .collect(),
+        })
     }
 
     fn install_id_from_context(context: &HashMap<String, String>) -> String {
@@ -264,6 +321,45 @@ impl From<api_types::ResolutionMessageGeneral> for ResolutionMessage {
                     msg: r_msg.message,
                     attr_path: Self::attr_path_from_context(&r_msg.context),
                     install_id: Self::install_id_from_context(&r_msg.context),
+                })
+            },
+            api_types::MessageType::AttrPathNotFoundNotOnCurrentStability => {
+                let attr_path = Self::attr_path_from_context(&r_msg.context);
+                let install_id = Self::install_id_from_context(&r_msg.context);
+                match Self::stability_availability_from_context(&r_msg.context) {
+                    Some(stability_availability) => {
+                        ResolutionMessage::AttrPathNotFoundNotOnCurrentStability(
+                            MsgAttrPathNotFoundNotOnCurrentStability {
+                                level: r_msg.level,
+                                msg: r_msg.message,
+                                attr_path,
+                                install_id,
+                                stability_availability,
+                            },
+                        )
+                    },
+                    // Without the stabilities there's nothing to suggest, so
+                    // treat it as the package not being found.
+                    None => ResolutionMessage::AttrPathNotFoundNotInCatalog(
+                        MsgAttrPathNotFoundNotInCatalog {
+                            level: r_msg.level,
+                            msg: r_msg.message,
+                            attr_path,
+                            install_id,
+                        },
+                    ),
+                }
+            },
+            api_types::MessageType::VersionNotFound => {
+                ResolutionMessage::VersionNotFound(MsgVersionNotFound {
+                    level: r_msg.level,
+                    msg: r_msg.message,
+                    attr_path: Self::attr_path_from_context(&r_msg.context),
+                    install_id: Self::install_id_from_context(&r_msg.context),
+                    system: r_msg.context.get("system").cloned().unwrap_or_default(),
+                    stability_availability: Self::stability_availability_from_context(
+                        &r_msg.context,
+                    ),
                 })
             },
             api_types::MessageType::AttrPathNotFoundSystemsNotOnSamePage => {
