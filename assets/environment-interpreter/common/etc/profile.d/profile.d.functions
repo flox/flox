@@ -32,11 +32,28 @@ function setup_python {
       # Note that if a program forks, it's children won't be able to find system
       # provided modules either,
       # but that improves reproducibility
-      PYTHONPATH="$FLOX_ENV/$_env_suffix"
+      #
+      # A build output with a pyvenv.cfg is a virtual environment that owns its
+      # sys.path. PYTHONPATH always precedes site-packages on sys.path, so
+      # setting it would put the build environment's libraries ahead of the
+      # versions the venv installed.
+      #
+      # Only add a site-packages directory that exists, so that a build whose
+      # runtime environment has only an interpreter doesn't get a dangling
+      # sys.path entry.
+      #
+      # In both of those cases unset PYTHONPATH rather than leave it, so the
+      # caller's value never reaches the program either.
+      if [[ ! (-n "${FLOX_MANIFEST_BUILD_OUT:-}" && -e "${FLOX_MANIFEST_BUILD_OUT:-}/pyvenv.cfg") && -d "$FLOX_ENV/$_env_suffix" ]]; then
+        PYTHONPATH="$FLOX_ENV/$_env_suffix"
+        export PYTHONPATH
+      else
+        unset PYTHONPATH
+      fi
     else
       PYTHONPATH="$($_flox_activations prepend-and-dedup --env-dirs "$FLOX_ENV_DIRS" --suffix "$_env_suffix" --path-like "${PYTHONPATH:-}")"
+      export PYTHONPATH
     fi
-    export PYTHONPATH
   fi
 
   # Only run if `pip' is in `PATH' for non-containerize activations.
