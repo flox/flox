@@ -21,7 +21,7 @@ stdenv.mkDerivation {
   version = "1.0.0";
   src = builtins.path {
     name = "package-builder-src";
-    path = "${./../../package-builder}";
+    path = ./../../package-builder;
   };
   nativeBuildInputs = [ shellcheck ];
   postPatch = ''
