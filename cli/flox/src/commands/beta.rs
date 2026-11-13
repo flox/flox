@@ -13,7 +13,13 @@ pub enum BetaCommands {
 
     /// Manage flox extensions
     #[bpaf(command("extension"), hide)]
-    Extension(#[bpaf(external(extension::extension_commands))] extension::ExtensionCommands),
+    Extension(
+        #[bpaf(
+            external(extension::extension_commands),
+            fallback(extension::ExtensionCommands::Help)
+        )]
+        extension::ExtensionCommands,
+    ),
 }
 
 impl BetaCommands {

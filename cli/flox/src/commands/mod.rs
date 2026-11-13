@@ -1086,7 +1086,7 @@ impl ShareCommands {
 enum AdminCommands {
     /// FloxHub authentication commands
     #[bpaf(command, footer("Run 'man flox-auth' for more details."))]
-    Auth(#[bpaf(external(auth::auth))] auth::Auth),
+    Auth(#[bpaf(external(auth::auth), fallback(auth::Auth::Help))] auth::Auth),
 
     /// View and set configuration options
     #[bpaf(command, footer("Run 'man flox-config' for more details."))]
