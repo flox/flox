@@ -444,6 +444,12 @@ impl Publish {
             [&package],
             publish_config.base_catalog_url_select.as_ref(),
         )?;
+        let has_manifest_build = package.kind().is_manifest_build();
+        let fetcher = match &publish_config.base_catalog_url_select {
+            Some(BaseCatalogUrlSelect::NixpkgsUrl(_)) => None,
+            _ if has_manifest_build => None,
+            _ => config.flox.catalog_flake_fetcher.as_deref(),
+        };
 
         // Check the environment for appropriate state to build and publish
         let env_metadata = check_environment_metadata(&flox, &path_env)?;
@@ -468,11 +474,9 @@ impl Publish {
         // The page the package is recorded against is the page it is built
         // against, so there is one value rather than two to keep in step.
         let selected_base_nixpkgs_url = package_metadata.base_catalog_ref.clone();
+        let selected_flake_ref = selected_base_nixpkgs_url.as_flake_ref(fetcher)?;
 
-        prefetch_expression_build_flake_ref(
-            [&package_metadata.package],
-            &selected_base_nixpkgs_url.as_flake_ref()?,
-        )?;
+        prefetch_expression_build_flake_ref([&package_metadata.package], &selected_flake_ref)?;
 
         let auth = NixAuth::from_flox(&flox)?;
         let publish_provider = PublishProvider::new(env_metadata, package_metadata, auth);
@@ -485,11 +489,6 @@ impl Publish {
             .package
             .kind()
             .is_expression_build();
-        let has_manifest_build = publish_provider
-            .package_metadata
-            .package
-            .kind()
-            .is_manifest_build();
         subcommand_metric!(
             "publish",
             "has_expression_build" = has_expression_build,
@@ -633,6 +632,7 @@ impl Publish {
         let build_metadata = check_build_metadata(
             &flox,
             &selected_base_nixpkgs_url,
+            fetcher,
             system_override_inner,
             &publish_provider.env_metadata,
             &publish_provider.package_metadata.package,

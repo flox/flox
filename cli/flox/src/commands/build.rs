@@ -9,6 +9,7 @@ use std::time::Instant;
 use ::nix::sys::signal::Signal;
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
+use flox_config::Config;
 use flox_core::data::CanonicalPath;
 use flox_events::{CliBuildPayload, EventKind, EventsHub, Outcome};
 use flox_manifest::lockfile::Lockfile;
@@ -214,7 +215,7 @@ impl Build {
         }
     }
 
-    pub async fn handle(self, mut flox: Flox) -> Result<()> {
+    pub async fn handle(self, config: &Config, mut flox: Flox) -> Result<()> {
         match self.subcommand_or_targets {
             SubcommandOrBuildTargets::Clean { targets } => {
                 let env = self
@@ -260,6 +261,7 @@ impl Build {
                     env,
                     targets,
                     base_catalog_url_select,
+                    config.flox.catalog_flake_fetcher.as_deref(),
                     system_override.into_inner(),
                     override_inputs,
                 )
@@ -317,6 +319,7 @@ impl Build {
         mut env: ConcreteEnvironment,
         packages: Vec<String>,
         nixpkgs_url_select: Option<BaseCatalogUrlSelect>,
+        fetcher: Option<&str>,
         system_override: Option<String>,
         override_inputs: Vec<OverrideInput>,
     ) -> Result<()> {
@@ -398,6 +401,11 @@ impl Build {
             expression_rel_paths(&packages_to_build)
         };
 
+        let fetcher = match &nixpkgs_url_select {
+            Some(BaseCatalogUrlSelect::NixpkgsUrl(_)) => None,
+            _ if !has_expression_build => None,
+            _ => fetcher,
+        };
         let expression_nixpkgs = if expression_lock_rel_paths.is_empty() {
             None
         }
@@ -413,7 +421,7 @@ impl Build {
 
         let expression_nixpkgs_flakeref = match &expression_nixpkgs {
             Some(nixpkgs) => {
-                let flakeref = nixpkgs.as_flake_ref()?;
+                let flakeref = nixpkgs.as_flake_ref(fetcher)?;
                 prefetch_expression_build_flake_ref(&packages_to_build, &flakeref)?;
                 message::plain(format!(
                     "Nix expression builds use nixpkgs {}.",
@@ -568,7 +576,7 @@ impl Build {
                 );
             }
             let base_nixpkgs_url = base_nixpkgs_url_from_url_select(flox, Some(sel)).await?;
-            Ok(base_nixpkgs_url.as_flake_ref()?.to_string())
+            Ok(base_nixpkgs_url.as_flake_ref(None)?.to_string())
         } else {
             Ok(parsed_flake_ref)
         }
@@ -1755,7 +1763,7 @@ mod test {
     }
 
     /// `NixpkgsUrl` pass-through: passing a raw URL returns it as a
-    /// `BaseCatalogUrl` without any catalog call, and `.as_flake_ref()` adds
+    /// `BaseCatalogUrl` without any catalog call, and `.as_flake_ref(None)` adds
     /// the `git+` prefix and `?shallow=1` query parameter.
     #[tokio::test]
     async fn base_nixpkgs_url_from_url_select_nixpkgs_url_passthrough() {
@@ -1774,7 +1782,9 @@ mod test {
         assert_eq!(result, expected, "URL must be passed through unchanged");
 
         // Verify that as_flake_ref() produces the expected git+…?shallow=1 form.
-        let flake_ref = result.as_flake_ref().expect("should convert to flake ref");
+        let flake_ref = result
+            .as_flake_ref(None)
+            .expect("should convert to flake ref");
         assert_eq!(
             flake_ref.as_str(),
             "git+https://github.com/NixOS/nixpkgs?shallow=1"
@@ -1815,7 +1825,7 @@ mod test {
             .url_for_latest_page_with_stability("not-default")
             .expect("fixture must have not-default stability");
         let expected = base_url
-            .as_flake_ref()
+            .as_flake_ref(None)
             .expect("should convert to flake ref")
             .to_string();
 
@@ -1862,7 +1872,7 @@ mod test {
             .url_for_latest_page_with_stability("not-default")
             .expect("fixture must have not-default stability");
         let expected = base_url
-            .as_flake_ref()
+            .as_flake_ref(None)
             .expect("should convert to flake ref")
             .to_string();
 

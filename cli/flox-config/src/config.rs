@@ -132,6 +132,9 @@ pub struct FloxConfig {
     // Manually setting derived urls should be an internal knob (see _FLOX_FLOXHUB_GIT_URL).
     pub catalog_url: Option<Url>,
 
+    /// Nixpkgs fetcher for build and publish: git (default), github, or gitlab.
+    pub catalog_flake_fetcher: Option<String>,
+
     /// Authentication mode for FloxHub.
     /// Unset means the consumer's compiled-in default.
     pub floxhub_authn_mode: Option<AuthnMode>,
