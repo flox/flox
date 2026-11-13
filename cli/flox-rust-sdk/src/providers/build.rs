@@ -3019,6 +3019,31 @@ mod tests {
         );
     }
 
+    /// A program that links against `libboost_exception` and prints `42`.
+    /// From <https://www.boost.org/doc/libs/latest/libs/exception/doc/tutorial_transporting_data.html>
+    const BOOST_EXCEPTION_SOURCE: &str = indoc! {r#"
+        #include <boost/exception/all.hpp>
+        #include <iostream>
+
+        typedef boost::error_info<struct tag_my_info,int> my_info; //(1)
+        struct my_error: virtual boost::exception, virtual std::exception { }; //(2)
+
+        void f() {
+            throw my_error() << my_info(42); //(3)
+        }
+
+        int main() {
+            try {
+                f();
+            } catch( my_error & x ) {
+                if( int const * mi=boost::get_error_info<my_info>(x) )
+                    std::cout << *mi;
+            }
+            return 0;
+        }
+
+        "#};
+
     /// Test that Flox provided boost can be included at build time and linked
     /// against when boost is in runtime-packages.
     /// but if linking isn't needed, runtime-packages can be empty.
@@ -3052,30 +3077,7 @@ mod tests {
             "#, if sandbox { "pure" } else { "off" }};
         env.edit(&flox, build_manifest).unwrap();
 
-        // From <https://www.boost.org/doc/libs/latest/libs/exception/doc/tutorial_transporting_data.html>
-        let source_code = indoc! {r#"
-            #include <boost/exception/all.hpp>
-            #include <iostream>
-
-            typedef boost::error_info<struct tag_my_info,int> my_info; //(1)
-            struct my_error: virtual boost::exception, virtual std::exception { }; //(2)
-
-            void f() {
-                throw my_error() << my_info(42); //(3)
-            }
-
-            int main() {
-                try {
-                    f();
-                } catch( my_error & x ) {
-                    if( int const * mi=boost::get_error_info<my_info>(x) )
-                        std::cout << *mi;
-                }
-                return 0;
-            }
-
-            "#};
-        fs::write(env_path.join(&source_name), source_code).unwrap();
+        fs::write(env_path.join(&source_name), BOOST_EXCEPTION_SOURCE).unwrap();
 
         if sandbox {
             let git = GitCommandProvider::init(&env_path, false).unwrap();
@@ -3105,6 +3107,107 @@ mod tests {
     #[test]
     fn boost_runtime_sandbox_pure() {
         boost_runtime(true);
+    }
+
+    /// Builds a program whose `RUNPATH` does not resolve one of its
+    /// `DT_NEEDED` libraries even though the runtime environment provides
+    /// it, which is the shape of a PyPI wheel with native code, and returns
+    /// the result of running the built program.
+    ///
+    /// The environment's `g++` records `$FLOX_ENV/lib` of the develop copy
+    /// in the `RUNPATH`, and the package builder rewrites that store path
+    /// to the build wrapper environment. Changing `/nix/store/` to the
+    /// same-length `/nix/stale/` in that one entry (and nowhere else in the
+    /// binary, so the interpreter path stays valid) keeps the rewrite from
+    /// matching, leaving a `RUNPATH` that resolves nothing.
+    #[cfg(target_os = "linux")]
+    fn dangling_runpath_build(auto_patchelf: Option<bool>) -> std::process::Output {
+        let package_name = String::from("dangling_runpath");
+        let source_name = String::from("test_boost.cpp");
+        let bin_name = String::from("test_boost");
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env =
+            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/gcc_boost"));
+        let env_path = env.parent_path().unwrap();
+
+        // `auto-patchelf` is a schema 1.20.0 attribute, and `BuildDescriptor`
+        // denies unknown fields, so lift the fixture's manifest to that
+        // schema before appending the build.
+        let base_manifest = env
+            .manifest_without_migrating(&flox)
+            .unwrap()
+            .as_writable()
+            .to_string();
+        let fixture_schema = r#"schema-version = "1.10.0""#;
+        assert!(
+            base_manifest.contains(fixture_schema),
+            "gcc_boost fixture no longer declares {fixture_schema}"
+        );
+        let base_manifest = base_manifest.replace(fixture_schema, r#"schema-version = "1.20.0""#);
+        // Omitting the attribute exercises the default.
+        let auto_patchelf = auto_patchelf
+            .map(|value| format!("auto-patchelf = {value}"))
+            .unwrap_or_default();
+        // A literal (`'''`) string keeps the backslashes in the `sed`
+        // expression out of TOML's escape handling.
+        let build_manifest = formatdoc! {r#"
+            {base_manifest}
+
+            [build.{package_name}]
+            command = '''
+                g++ -o {bin_name} {source_name} -lboost_exception
+                sed --binary -i 's%/nix/store/\([a-z0-9]\{{32\}}\)-developcopy-build-%/nix/stale/\1-developcopy-build-%g' {bin_name}
+                mkdir -p $out/bin
+                cp {bin_name} $out/bin/{bin_name}
+            '''
+            runtime-packages = [ "boost", "gcc", "gcc-unwrapped" ]
+            {auto_patchelf}
+            "#};
+        env.edit(&flox, build_manifest).unwrap();
+        fs::write(env_path.join(&source_name), BOOST_EXCEPTION_SOURCE).unwrap();
+
+        assert_build_status(&flox, &mut env, &package_name, None, true);
+
+        let result_path = result_dir(&env_path, &package_name)
+            .join("bin")
+            .join(&bin_name);
+        Command::new(&result_path).output().unwrap()
+    }
+
+    /// `auto-patchelf = true` points the program at the runtime environment's
+    /// `lib`, where `libboost_exception` and `libstdc++` are found, so the
+    /// program runs outside of an activated environment.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn build_auto_patchelf_resolves_dangling_runpath() {
+        let output = dangling_runpath_build(Some(true));
+
+        assert!(
+            output.status.success(),
+            "should execute successfully, stderr: {:?}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(String::from_utf8_lossy(&output.stdout).trim_end(), "42");
+    }
+
+    /// Without the attribute the package builder leaves the `RUNPATH` alone,
+    /// so the dynamic linker still cannot find the library.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn build_without_auto_patchelf_leaves_runpath_untouched() {
+        let output = dangling_runpath_build(None);
+
+        assert!(
+            !output.status.success(),
+            "should fail to load libboost_exception, stdout: {:?}",
+            String::from_utf8_lossy(&output.stdout)
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("libboost_exception") && stderr.contains("cannot open shared object"),
+            "unexpected stderr: {stderr:?}"
+        );
     }
 
     /// Test that Flox provided boost can be included at build time,
