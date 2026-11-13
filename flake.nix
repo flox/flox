@@ -149,13 +149,22 @@
           # Same binaries built from the generated Cargo.nix.
           #
           # `flox-activations` is this package's own build, passed back
-          # through the overlay's fixed point. Only the `flox` crate reads the
-          # resulting path, and building flox-activations does not, so this
-          # does not need a second instantiation of the crate graph.
-          crate2nix-builds = callPackage ./pkgs/crate2nix {
-            inherit nixpkgsInputLockedURL;
-            inherit (final.crate2nix-builds) flox-activations;
-          };
+          # through the overlay's fixed point, and so are the interpreter and
+          # buildenv built on top of it. Without those two, `flox-rust-sdk`
+          # would read the crane `flox-activations` through them, and any
+          # change in the workspace would rebuild the SDK.
+          # Building flox-activations reads none of these paths (it depends
+          # only on flox-core and shell_gen), so this does not need a second
+          # instantiation of the crate graph.
+          crate2nix-builds =
+            let
+              inherit (final.crate2nix-builds) flox-activations;
+              flox-interpreter = final.flox-interpreter.override { inherit flox-activations; };
+            in
+            callPackage ./pkgs/crate2nix {
+              inherit nixpkgsInputLockedURL flox-activations flox-interpreter;
+              flox-buildenv = final.flox-buildenv.override { inherit flox-activations flox-interpreter; };
+            };
 
           # (Linux-only) LD_AUDIT library for using dynamic libraries in Flox envs.
           ld-floxlib = callPackage ./pkgs/ld-floxlib { };
@@ -198,6 +207,7 @@
           in
           prev.lib.makeScope prev.newScope (self: {
             rust-internal-deps = prev.rust-internal-deps.override {
+              flox-activations = null;
               flox-buildenv = null;
               flox-package-builder = null;
               flox-nix-plugins = null;
