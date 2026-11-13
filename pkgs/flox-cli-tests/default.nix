@@ -31,6 +31,7 @@
   jq,
   man,
   nix,
+  nixpkgsLib,
   ncurses,
   yq,
   openssh,
@@ -203,6 +204,7 @@ writeShellScriptBin PROJECT_NAME ''
 
     export FLOX_BIN="${flox}/bin/flox"
     export NIX_BIN="${nix}/bin/nix"
+    export NIXPKGS_LIB_URL="path:${nixpkgsLib}"
     export BUILDENV_BIN="${flox-buildenv}/bin/buildenv"
     export NIX_PLUGINS="${flox-nix-plugins}/lib/nix-plugins"
     export FLOX_ACTIVATIONS_BIN="${flox-activations}/libexec/flox-activations"

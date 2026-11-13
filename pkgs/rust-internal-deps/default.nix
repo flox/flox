@@ -15,6 +15,7 @@
   inputs,
   lib,
   nixpkgsInputLockedURL,
+  nixpkgsLib,
   nix,
   pkgsFor,
   process-compose,
@@ -52,6 +53,7 @@ let
       # a) bundled at buildtime if possible (binaries/packages)
       # b) use this version of nixpkgs i.e. (nix library utils such as `lib` and `runCommand`)
       COMMON_NIXPKGS_URL = nixpkgsInputLockedURL inputs.nixpkgs;
+      NIXPKGS_LIB_URL = "path:${nixpkgsLib}";
       # Some tests need a URL in https format
       TESTING_BASE_CATALOG_URL = "https://github.com/flox/nixpkgs?rev=${inputs.nixpkgs.rev}";
 

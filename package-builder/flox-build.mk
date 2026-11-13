@@ -95,6 +95,7 @@ endif
 
 # Path to Nix expression (NEF) library.
 _nef := $(_libexec_dir)/nef
+NIXPKGS_LIB_URL ?= @nixpkgsLibUrl@
 
 # Set makefile verbosity based on the value of _FLOX_SUBSYSTEM_VERBOSITY [sic]
 # as set in the environment by the flox CLI. First set it to 0 if not defined.
@@ -145,7 +146,7 @@ ifneq (,$(NIX_EXPRESSION_REF))
   __nix_expression_build_tuples := $(shell \
     $(_nix) eval \
       --argstr source-ref '$(NIX_EXPRESSION_REF)' \
-      --argstr nixpkgs-url '$(BUILDTIME_NIXPKGS_URL)' \
+      --argstr nixpkgs-lib-url '$(NIXPKGS_LIB_URL)' \
       --argstr system '$(NIX_SYSTEM)' \
       --file $(_nef) \
       reflect.attrPaths --json | \
@@ -879,6 +880,7 @@ define NIX_EXPRESSION_BUILD_template =
   $($(_pvarname)_evalJSON): $(CATALOG_LOCKFILE) $(PROJECT_TMPDIR)/check-build-prerequisites
 	$(_V_) $(_mkdir) -p $$(@D)
 	$(_V_) $(_nix) eval -L --file $(_nef) \
+	  --argstr nixpkgs-lib-url '$(NIXPKGS_LIB_URL)' \
 	  --argstr nixpkgs-url '$(EXPRESSION_BUILD_NIXPKGS_URL)' \
 	  --argstr system '$(NIX_SYSTEM)' \
 	  --argstr source-ref '$(NIX_EXPRESSION_REF)' \

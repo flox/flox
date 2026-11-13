@@ -112,12 +112,18 @@
           pkgsFor = final // {
             inherit cacert;
           };
+          # Share the pinned library between NEF callers, including dev shells.
+          nixpkgsLib = prev.runCommand "nixpkgs-lib" { } ''
+            mkdir -p "$out"
+            cp -R "${inputs.nixpkgs}/lib/." "$out/"
+            cp "${inputs.nixpkgs}/COPYING" "$out/"
+          '';
           callPackage = final.lib.callPackageWith (
             final
             // {
               inherit inputs; # passing in inputs... beware
               inherit (inputs) self;
-              inherit cacert pkgsFor;
+              inherit cacert nixpkgsLib pkgsFor;
               # Flox packages bake git into their runtime closure.
               gitMinimal = final.gitMinimal-brotli-fixed;
             }
