@@ -8,7 +8,18 @@ use flox_core::data::System;
 use indoc::indoc;
 use itertools::Itertools;
 use reqwest::Url;
-use toml_edit::{self, Array, DocumentMut, Formatted, InlineTable, Item, Table, TableLike, Value};
+use toml_edit::{
+    self,
+    Array,
+    DocumentMut,
+    Formatted,
+    InlineTable,
+    Item,
+    Key,
+    Table,
+    TableLike,
+    Value,
+};
 use tracing::{debug, trace};
 
 use crate::interfaces::CommonFields;
@@ -951,28 +962,71 @@ impl SyncTypedToRaw for Manifest<Migrated> {
     }
 }
 
+/// Sets the `schema-version` (or, for V1, `version`) key of a raw manifest to
+/// `schema_version`, keeping the comments and whitespace attached to the key.
+///
+/// Comments directly above the first key of a manifest are how users document
+/// an environment, so they must survive every write-back. There are two cases:
+///
+/// - The document already uses the right key: the value is assigned in place
+///   and the existing `Key` is left untouched. Going through
+///   [`Table::insert`] instead would replace the `Key` with a freshly
+///   formatted one and silently drop the comment block above it.
+/// - The document uses the other key (a `version = 1` manifest being migrated
+///   to `schema-version`, or the reverse): the key is renamed and both the
+///   key's decor (the comments above it) and the value's decor (a trailing
+///   comment on the same line) are carried over to the new key.
+///
+/// A stray copy of the other key is removed in either case.
 pub(crate) fn update_schema_version(raw: &mut DocumentMut, schema_version: KnownSchemaVersion) {
-    let (old_key, new_key, new_value) = match schema_version {
+    let (old_key, new_key, mut new_value): (_, _, Value) = match schema_version {
         KnownSchemaVersion::V1 => (
             "schema-version",
             "version",
-            Value::Integer(Formatted::new(1)).into(),
+            Value::Integer(Formatted::new(1)),
         ),
         _ => (
             "version",
             "schema-version",
-            toml_string(schema_version.to_string()).into(),
+            toml_string(schema_version.to_string()),
         ),
     };
-    let old_prefix = raw
-        .key(old_key)
-        .and_then(|k| k.leaf_decor().prefix().cloned());
-    raw.remove(old_key);
-    raw.insert(new_key, new_value);
-    if let Some(prefix) = old_prefix
-        && let Some(mut key) = raw.key_mut(new_key)
-    {
-        key.leaf_decor_mut().set_prefix(prefix);
+
+    if let Some(existing) = raw.get_mut(new_key) {
+        // The key is already present: assign in place so that the `Key` and
+        // its decor are preserved.
+        if let Some(existing_value) = existing.as_value() {
+            *new_value.decor_mut() = existing_value.decor().clone();
+        }
+        *existing = Item::Value(new_value);
+        raw.remove(old_key);
+        return;
+    }
+
+    // Rename `old_key` to `new_key`, rescuing the decor of both the key and
+    // its value, and keeping the key where it was among the top-level values.
+    // Removing and re-inserting a key appends it, so the top-level values that
+    // followed it are re-appended behind it to restore their order.
+    let following_values: Vec<String> = raw
+        .iter()
+        .skip_while(|(key, _)| *key != old_key)
+        .skip(1)
+        .filter(|(_, item)| item.is_value())
+        .map(|(key, _)| key.to_string())
+        .collect();
+    let Some((old_key, old_item)) = raw.remove_entry(old_key) else {
+        raw.insert(new_key, Item::Value(new_value));
+        return;
+    };
+    if let Some(old_value) = old_item.as_value() {
+        *new_value.decor_mut() = old_value.decor().clone();
+    }
+    let new_key = Key::new(new_key).with_leaf_decor(old_key.leaf_decor().clone());
+    raw.insert_formatted(&new_key, Item::Value(new_value));
+    for key in following_values {
+        if let Some((key, item)) = raw.remove_entry(&key) {
+            raw.insert_formatted(&key, item);
+        }
     }
 }
 
@@ -3263,6 +3317,107 @@ curl.outputs = [\"bin\", \"man\"]
             hello.outputs = "all"
         "##]]
         .assert_eq(&output);
+    }
+
+    /// Round-trips a manifest the way `flox edit` and `flox install` write it
+    /// back: `migrate` updates the schema version once, and
+    /// `as_writable_maybe_in_original_schema_with_lockfile` updates it again
+    /// on an already-migrated document.
+    fn write_back_twice(toml_str: &str) -> String {
+        use crate::interfaces::WriteManifest;
+
+        let manifest = Manifest::parse_toml_typed(toml_str).unwrap();
+        let migrated = manifest.migrate(None).unwrap();
+        migrated
+            .as_writable_maybe_in_original_schema_with_lockfile(None)
+            .unwrap()
+            .to_string()
+    }
+
+    #[test]
+    fn header_comment_above_schema_version_survives_write_back() {
+        let toml_str = indoc! {r#"
+            # header comment
+            # spanning two lines
+            schema-version = "1.19.0" # trailing comment
+
+            [install]
+            hello.pkg-path = "hello"
+        "#};
+        let output = write_back_twice(toml_str);
+        expect![[r#"
+            # header comment
+            # spanning two lines
+            schema-version = "1.19.0" # trailing comment
+
+            [install]
+            hello.pkg-path = "hello"
+        "#]]
+        .assert_eq(&output);
+    }
+
+    #[test]
+    fn header_comment_above_version_survives_write_back() {
+        let toml_str = indoc! {r#"
+            # header comment
+            version = 1 # trailing comment
+
+            [install]
+            hello.pkg-path = "hello"
+        "#};
+        let output = write_back_twice(toml_str);
+        assert!(
+            output.starts_with("# header comment\n"),
+            "header comment lost:\n{output}"
+        );
+        assert!(
+            output.contains("# trailing comment\n"),
+            "trailing comment lost:\n{output}"
+        );
+    }
+
+    #[test]
+    fn update_schema_version_in_place_keeps_key_decor() {
+        let mut raw = indoc! {r#"
+            # header comment
+            schema-version = "1.18.0" # trailing comment
+            description = "an environment"
+        "#}
+        .parse::<DocumentMut>()
+        .unwrap();
+        update_schema_version(&mut raw, KnownSchemaVersion::V1_19_0);
+        expect![[r#"
+            # header comment
+            schema-version = "1.19.0" # trailing comment
+            description = "an environment"
+        "#]]
+        .assert_eq(&raw.to_string());
+    }
+
+    #[test]
+    fn update_schema_version_rename_keeps_key_decor_both_directions() {
+        let mut raw = indoc! {r#"
+            # header comment
+            version = 1 # trailing comment
+            description = "an environment"
+        "#}
+        .parse::<DocumentMut>()
+        .unwrap();
+        update_schema_version(&mut raw, KnownSchemaVersion::V1_19_0);
+        expect![[r#"
+            # header comment
+            schema-version = "1.19.0" # trailing comment
+            description = "an environment"
+        "#]]
+        .assert_eq(&raw.to_string());
+
+        update_schema_version(&mut raw, KnownSchemaVersion::V1);
+        expect![[r#"
+            # header comment
+            version = 1 # trailing comment
+            description = "an environment"
+        "#]]
+        .assert_eq(&raw.to_string());
     }
 
     fn assert_store_path_values(
