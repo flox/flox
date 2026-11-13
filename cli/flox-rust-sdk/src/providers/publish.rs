@@ -11,6 +11,7 @@ use floxhub_client::{
     BaseCatalogUrlError,
     BuildType,
     CatalogClientTrait,
+    CatalogFlakeFetcher,
     CatalogStoreConfig,
     CatalogStoreConfigNixCopy,
     DeepOverridesItemItem,
@@ -1053,6 +1054,7 @@ fn convert_build_result_to_build_metadata(
 pub fn check_build_metadata(
     flox: &Flox,
     base_nixpkgs_url: &BaseCatalogUrl,
+    fetcher: CatalogFlakeFetcher,
     system_override: Option<String>,
     env_metadata: &CheckedEnvironmentMetadata,
     pkg: &PackageTarget,
@@ -1078,7 +1080,7 @@ pub fn check_build_metadata(
     );
 
     let build_results = builder.build(
-        Some(&base_nixpkgs_url.as_flake_ref()?),
+        Some(&base_nixpkgs_url.as_flake_ref(fetcher)?),
         &built_environments.dev,
         &[pkg.name()],
         // The catalog lock the CLI created for this publish; its subset is
@@ -2165,6 +2167,7 @@ pub mod tests {
         let meta = check_build_metadata(
             &flox,
             env_metadata.toplevel_catalog_ref.as_ref().unwrap(),
+            CatalogFlakeFetcher::Git,
             None,
             &env_metadata,
             &EXAMPLE_MANIFEST_PACKAGE_TARGET,
@@ -2212,6 +2215,7 @@ pub mod tests {
         let meta = check_build_metadata(
             &flox,
             env_metadata.toplevel_catalog_ref.as_ref().unwrap(),
+            CatalogFlakeFetcher::Git,
             None,
             &env_metadata,
             &EXAMPLE_MANIFEST_PACKAGE_TARGET_MISSING_FIELDS,
@@ -2269,6 +2273,7 @@ pub mod tests {
         let meta = check_build_metadata(
             &flox,
             env_metadata.toplevel_catalog_ref.as_ref().unwrap(),
+            CatalogFlakeFetcher::Git,
             None,
             &env_metadata,
             &pure_pkg,
@@ -2322,6 +2327,7 @@ pub mod tests {
         let build_metadata = check_build_metadata(
             &flox,
             env_metadata.toplevel_catalog_ref.as_ref().unwrap(),
+            CatalogFlakeFetcher::Git,
             None,
             &env_metadata,
             &package_metadata.package,
@@ -2394,6 +2400,7 @@ pub mod tests {
         let build_metadata = check_build_metadata(
             &flox,
             env_metadata.toplevel_catalog_ref.as_ref().unwrap(),
+            CatalogFlakeFetcher::Git,
             None,
             &env_metadata,
             &package_metadata.package,
@@ -2461,6 +2468,7 @@ pub mod tests {
         let build_metadata = check_build_metadata(
             &flox,
             env_metadata.toplevel_catalog_ref.as_ref().unwrap(),
+            CatalogFlakeFetcher::Git,
             None,
             &env_metadata,
             &package_metadata.package,
@@ -2816,6 +2824,7 @@ pub mod tests {
         let build_metadata = check_build_metadata(
             &flox,
             env_metadata.toplevel_catalog_ref.as_ref().unwrap(),
+            CatalogFlakeFetcher::Git,
             None,
             &env_metadata,
             &package_metadata.package,
@@ -3983,6 +3992,7 @@ pub mod tests {
             let build_metadata = check_build_metadata(
                 &flox,
                 env_metadata.toplevel_catalog_ref.as_ref().unwrap(),
+                CatalogFlakeFetcher::Git,
                 None,
                 &env_metadata,
                 &package_metadata.package,

@@ -1677,6 +1677,7 @@ dependencies = [
  "anyhow",
  "config",
  "flox-core",
+ "floxhub-client",
  "glob",
  "indoc",
  "itertools 0.14.0",
