@@ -25,6 +25,7 @@ use flox_manifest::lockfile::{
 };
 use flox_manifest::parsed::common::{
     Allows,
+    DEFAULT_GROUP_NAME,
     DEFAULT_PRIORITY,
     IncludeDescriptor,
     KnownSchemaVersion,
@@ -1108,21 +1109,21 @@ impl LockManifest {
                     },
                     ResolutionMessage::AttrPathNotFoundNotInCatalog(inner) => {
                         tracing::debug!(kind = "attr_path_not_found.not_in_catalog",);
-                        let at_other_stability =
-                            inner
-                                .stability_availability
-                                .as_ref()
-                                .and_then(|availability| {
-                                    UnavailableAtStability::new(
-                                        &inner.install_id,
-                                        &inner.attr_path,
-                                        availability,
-                                        manifest,
-                                    )
-                                });
+                        ResolutionFailure::PackageNotFound(inner.clone())
+                    },
+                    ResolutionMessage::AttrPathNotFoundNotOnCurrentStability(inner) => {
+                        tracing::debug!(kind = "attr_path_not_found.not_on_current_stability",);
+                        let at_other_stability = UnavailableAtStability::new(
+                            &inner.install_id,
+                            &inner.attr_path,
+                            &inner.stability_availability,
+                            manifest,
+                        );
                         match at_other_stability {
                             Some(failure) => ResolutionFailure::UnavailableAtStability(failure),
-                            None => ResolutionFailure::PackageNotFound(inner.clone()),
+                            None => ResolutionFailure::FallbackMessage {
+                                msg: inner.msg.clone(),
+                            },
                         }
                     },
                     ResolutionMessage::VersionNotFound(inner) => {
@@ -1496,6 +1497,7 @@ pub enum ResolutionFailure {
 pub struct UnavailableAtStability {
     pub install_id: String,
     pub pkg_path: String,
+    pub pkg_group: String,
     /// The version constraint from the manifest
     pub version: Option<String>,
     /// The stability the pkg-group resolves at
@@ -1522,6 +1524,10 @@ impl UnavailableAtStability {
             pkg_path: descriptor
                 .as_ref()
                 .map_or_else(|| attr_path.to_string(), |d| d.pkg_path.clone()),
+            pkg_group: descriptor
+                .as_ref()
+                .and_then(|d| d.pkg_group.clone())
+                .unwrap_or_else(|| DEFAULT_GROUP_NAME.to_string()),
             version: descriptor.and_then(|d| d.version),
             stability: availability.stability.clone(),
             strictest_available: strictest_available.clone(),
@@ -1548,47 +1554,23 @@ impl UnavailableAtStability {
             stability = self.stability,
         }
     }
-
-    /// The error for `flox install`, which can suggest installing the package
-    /// into its own pkg-group at the strictest stability that has it.
-    pub fn install_message(&self) -> String {
-        let command = format!(
-            "flox install --pkg-group {} --stability {} {}",
-            quote_if_needed(&self.install_id),
-            self.strictest_available,
-            quote_if_needed(&self.pkg()),
-        );
-        formatdoc! {"
-            {summary}
-            To install it into its own pkg-group, run:
-              $ {command}",
-            summary = self.summary(),
-        }
-    }
-}
-
-/// Quote a command argument only if a shell would treat part of it specially,
-/// e.g. the `>` in `python3@>=3.12`, so common arguments read as typed.
-fn quote_if_needed(arg: &str) -> String {
-    let plain = arg
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || "@._/+:,=-".contains(c));
-    if plain {
-        arg.to_string()
-    } else {
-        shell_escape::escape(arg.into()).into_owned()
-    }
 }
 
 impl Display for UnavailableAtStability {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}\nUse 'flox edit' to move '{}' to a pkg-group with stability '{}'.",
-            self.summary(),
-            self.install_id,
-            self.strictest_available
-        )
+        // Stability is a pkg-group setting, so the edit also moves every
+        // other package in the group.
+        let guidance = formatdoc! {"
+            Use 'flox edit' to set a stability that has it:
+
+              [pkg-groups.{group}]
+              stability = \"{stability}\"
+
+            This applies to every package in pkg-group '{group}'.",
+            group = self.pkg_group,
+            stability = self.strictest_available,
+        };
+        write!(f, "{}\n{guidance}", self.summary())
     }
 }
 
@@ -1721,6 +1703,7 @@ mod tests {
         ApiErrorResponse,
         BaseCatalogInfo,
         CatalogPage,
+        MsgAttrPathNotFoundNotOnCurrentStability,
         MsgVersionNotFound,
         PackageDescriptor,
         PackageOutput,
@@ -4518,18 +4501,31 @@ mod tests {
         })
     }
 
-    /// The message the catalog sends when stability 'lts' has no build of
-    /// `install_id` at all.
-    fn not_in_catalog_at_lts(install_id: &str, available: &[&str]) -> ResolutionMessage {
+    /// The message the catalog sends when `install_id` has builds, but none
+    /// at stability 'lts'.
+    fn not_on_lts(install_id: &str, available: &[&str]) -> ResolutionMessage {
+        ResolutionMessage::AttrPathNotFoundNotOnCurrentStability(
+            MsgAttrPathNotFoundNotOnCurrentStability {
+                level: MessageLevel::Error,
+                msg: format!("The package '{install_id}' is not on stability 'lts'."),
+                attr_path: install_id.to_string(),
+                install_id: install_id.to_string(),
+                stability_availability: StabilityAvailability {
+                    stability: "lts".to_string(),
+                    available: available.iter().map(|s| s.to_string()).collect(),
+                },
+            },
+        )
+    }
+
+    /// The message the catalog sends when `install_id` has no build at any
+    /// stability.
+    fn not_in_catalog(install_id: &str) -> ResolutionMessage {
         ResolutionMessage::AttrPathNotFoundNotInCatalog(MsgAttrPathNotFoundNotInCatalog {
             level: MessageLevel::Error,
             msg: format!("The package '{install_id}' is not found in the catalog."),
             attr_path: install_id.to_string(),
             install_id: install_id.to_string(),
-            stability_availability: Some(StabilityAvailability {
-                stability: "lts".to_string(),
-                available: available.iter().map(|s| s.to_string()).collect(),
-            }),
         })
     }
 
@@ -4589,6 +4585,7 @@ mod tests {
             UnavailableAtStability {
                 install_id: "python3".to_string(),
                 pkg_path: "python3".to_string(),
+                pkg_group: DEFAULT_GROUP_NAME.to_string(),
                 version: Some("3.12".to_string()),
                 stability: "lts".to_string(),
                 strictest_available: "staging".to_string(),
@@ -4641,7 +4638,8 @@ mod tests {
 
     /// A package with builds only at other stabilities is reported as such,
     /// not as missing from the catalog, which would send `flox install` off
-    /// suggesting the same package again.
+    /// suggesting the same package again. A package with no build at any
+    /// stability stays "not found".
     #[tokio::test]
     async fn package_unavailable_at_stability_is_not_reported_as_missing() {
         let failures = resolution_failures(
@@ -4654,8 +4652,8 @@ mod tests {
                 stability = "lts"
             "#},
             vec![
-                not_in_catalog_at_lts("pnpm", &["stable", "staging", "unstable"]),
-                not_in_catalog_at_lts("nope", &[]),
+                not_on_lts("pnpm", &["stable", "staging", "unstable"]),
+                not_in_catalog("nope"),
             ],
         )
         .await;
@@ -4664,6 +4662,7 @@ mod tests {
             ResolutionFailure::UnavailableAtStability(UnavailableAtStability {
                 install_id: "pnpm".to_string(),
                 pkg_path: "pnpm".to_string(),
+                pkg_group: DEFAULT_GROUP_NAME.to_string(),
                 version: None,
                 stability: "lts".to_string(),
                 strictest_available: "stable".to_string(),
@@ -4674,33 +4673,63 @@ mod tests {
                 msg: "The package 'nope' is not found in the catalog.".to_string(),
                 attr_path: "nope".to_string(),
                 install_id: "nope".to_string(),
-                stability_availability: Some(StabilityAvailability {
-                    stability: "lts".to_string(),
-                    available: vec![],
-                }),
             }),
         ]);
     }
 
+    /// Stability is set per pkg-group, so the guidance names the group of the
+    /// package and the strictest stability that has it.
     #[test]
-    fn unavailable_at_stability_suggests_strictest_stability_that_has_it() {
+    fn unavailable_at_stability_suggests_editing_pkg_group_stability() {
         let failure = UnavailableAtStability {
             install_id: "python3".to_string(),
             pkg_path: "python3".to_string(),
+            pkg_group: "legacy".to_string(),
             version: Some(">=3.12".to_string()),
             stability: "lts".to_string(),
             strictest_available: "stable".to_string(),
             other_available: vec!["unstable".to_string()],
         };
 
-        assert_eq!(failure.install_message(), indoc! {"
+        assert_eq!(failure.to_string(), indoc! {r#"
             Package 'python3@>=3.12' has no build at stability 'lts'.
             It has builds at: stable, unstable.
-            To install it into its own pkg-group, run:
-              $ flox install --pkg-group python3 --stability stable 'python3@>=3.12'"});
-        assert_eq!(failure.to_string(), indoc! {"
-            Package 'python3@>=3.12' has no build at stability 'lts'.
-            It has builds at: stable, unstable.
-            Use 'flox edit' to move 'python3' to a pkg-group with stability 'stable'."});
+            Use 'flox edit' to set a stability that has it:
+
+              [pkg-groups.legacy]
+              stability = "stable"
+
+            This applies to every package in pkg-group 'legacy'."#});
+    }
+
+    /// The group in the guidance is the one the descriptor sets, and
+    /// `toplevel` when it sets none.
+    #[tokio::test]
+    async fn unavailable_at_stability_names_the_packages_pkg_group() {
+        let failures = resolution_failures(
+            indoc! {r#"
+                [install]
+                pnpm.pkg-path = "pnpm"
+                node.pkg-path = "nodejs"
+                node.pkg-group = "js"
+
+                [options]
+                stability = "lts"
+            "#},
+            vec![
+                not_on_lts("pnpm", &["stable"]),
+                not_on_lts("node", &["stable"]),
+            ],
+        )
+        .await;
+
+        let groups = failures
+            .iter()
+            .map(|failure| match failure {
+                ResolutionFailure::UnavailableAtStability(failure) => failure.pkg_group.as_str(),
+                other => panic!("unexpected failure: {other:?}"),
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(groups, vec![DEFAULT_GROUP_NAME, "js"]);
     }
 }

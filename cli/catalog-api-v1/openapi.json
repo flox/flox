@@ -207,7 +207,7 @@
           "catalog"
         ],
         "summary": "Shows available packages of a specific package",
-        "description": "Returns a list of versions for a given attr_path\n\nRequired Query Parameters:\n- **attr_path**: The attr_path, must be valid.\n\nOptional Query Parameters:\n- **page**: Optional page number for pagination (def = 0)\n- **pageSize**: Optional page size for pagination (def = 10)\n\nReturns:\n- **PackagesResult**: A list of PackageVersionInfo and the total result count",
+        "description": "Returns a list of versions for a given attr_path\n\nRequired Query Parameters:\n- **attr_path**: The attr_path, must be valid.\n\nOptional Query Parameters:\n- **page**: Optional page number for pagination (def = 0)\n- **pageSize**: Optional page size for pagination (def = 10)\n\nReturns:\n- **PackagesResult**: A list of PackageVersionInfo and the total result count.\n  Empty, with a total count of 0, when attr_path exists but none of its\n  builds have an accepted stability. Each item's `available_stabilities`\n  lists every stability with a build of that version for that system,\n  strictest first.",
         "operationId": "packages_api_v1_catalog_packages__attr_path__get",
         "security": [
           {
@@ -3383,6 +3383,7 @@
           "attr_path_not_found",
           "constraints_too_tight",
           "attr_path_not_found.not_in_catalog",
+          "attr_path_not_found.not_on_current_stability",
           "attr_path_not_found.systems_not_on_same_page",
           "attr_path_not_found.not_found_for_all_systems",
           "missing_builds",
