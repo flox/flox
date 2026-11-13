@@ -1,3 +1,8 @@
+---
+name: changing-package-builder
+description: Use when changing package-builder/flox-build.mk or the JSON build results it returns to the CLI.
+---
+
 ## Makefile conventions (`package-builder/flox-build.mk`)
 
 GNU make's dependency semantics express most lifecycle logic on their

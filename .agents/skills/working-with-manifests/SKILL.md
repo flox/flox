@@ -1,3 +1,8 @@
+---
+name: working-with-manifests
+description: Use when writing code that reads, writes or migrates a manifest or lockfile, in any crate, or when changing the manifest schema.
+---
+
 ## Manifest usage (`flox-manifest` crate)
 
 The `flox-manifest` crate uses a type-state pattern (`Manifest<S>`) to enforce

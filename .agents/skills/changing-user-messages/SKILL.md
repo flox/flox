@@ -1,4 +1,9 @@
-# User-facing message conventions
+---
+name: changing-user-messages
+description: Use when adding or changing user-facing errors, warnings, success or progress messages, CLI help, or man pages, including code that shows Nix or git output to the user.
+---
+
+## User-facing message conventions
 
 - **User-visible message syntax, structure, and content:**
   - Use complete sentences. Do not use "I", "we", or "flox"

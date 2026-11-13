@@ -100,7 +100,7 @@ pre-commit run -a              # Run all linters
 | `cli/tests/` | Integration tests (32 bats files) |
 | `nix-plugins/` | C++ Nix plugins (Meson build) |
 | `pkgs/` | Nix package definitions |
-| `assets/activation-scripts/` | Shell activation scripts |
+| `assets/environment-interpreter/` | Shell activation scripts |
 | `test_data/` | Mock responses and test fixtures |
 
 ## ld-floxlib
@@ -185,6 +185,11 @@ PR titles and descriptions, commit messages, code comments, branch
 names, test names, and test data. Refer to "a customer" and link the
 internal Linear issue instead.
 
+## Beta commands
+
+For new beta commands, use
+[adding-beta-subcommand](.agents/skills/adding-beta-subcommand/SKILL.md).
+
 ## Conventions
 
 - **Rust style:**
@@ -268,8 +273,8 @@ internal Linear issue instead.
     confirm behavior (paging base, defaults, error shapes) against
     the OpenAPI spec or schema before relying on it. Do not write
     doc comments asserting behavior you have not verified.
-  - **User-facing messages:** Follow the
-    [message conventions](.agents/skills/changing-user-messages/SKILL.md)
+  - **User-facing messages:** Use
+    [changing-user-messages](.agents/skills/changing-user-messages/SKILL.md)
     when changing messages, CLI help, or man pages.
   - **Naming new helpers:** Before introducing a helper
     function, search for the naming convention used by similar
@@ -289,12 +294,12 @@ internal Linear issue instead.
 
 ## Manifest usage
 
-Use [changing-manifest-schema](.agents/skills/changing-manifest-schema/SKILL.md)
+Use [working-with-manifests](.agents/skills/working-with-manifests/SKILL.md)
 when changing schemas, migration, or manifest read/write and lockfile paths.
 
 ## IDE Setup
 
-See [CONTRIBUTING.md](CONTRIBUTING.md#ide-setup) for rust-analyzer configuration.
+See [CONTRIBUTING.md](CONTRIBUTING.md#setting-up-rust-ide-support) for rust-analyzer configuration.
 
 ## Comments
 

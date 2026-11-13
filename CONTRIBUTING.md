@@ -593,14 +593,3 @@ sure to run all tests before creating a mergeable PR (See [above](#testing)).
 Because the merge commit takes its message from the pull request title, that
 title must follow the [conventional commits](#commits) format just like an
 individual commit — otherwise the merge fails validation.
-
-## IDE Setup
-
-For rust-analyzer, add to `.vscode/settings.json`:
-
-```json
-{
-  "rust-analyzer.linkedProjects": ["${workspaceFolder}/Cargo.toml"],
-  "rust-analyzer.cargo.features": ["extra-tests"]
-}
-```

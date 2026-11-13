@@ -1,3 +1,8 @@
+---
+name: changing-ld-floxlib
+description: Use when changing files in ld-floxlib/.
+---
+
 ## ld-floxlib (LD_AUDIT shared library)
 
 `ld-floxlib/ld-floxlib.c` is a C shared library loaded via

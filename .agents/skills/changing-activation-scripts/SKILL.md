@@ -1,3 +1,8 @@
+---
+name: changing-activation-scripts
+description: Use when changing `assets/environment-interpreter/`, `cli/flox-activations/src/gen_rc/` or `hook.rs`, or any shell code Flox generates for users to `eval` or source, including tcsh quoting and forked subshell behavior.
+---
+
 ## Debugging Activation Scripts
 
 Set `FLOX_ACTIVATE_TRACE=1` to trace activation script execution:
