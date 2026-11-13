@@ -16,7 +16,7 @@ use floxhub_client::{BuildResponse, BuildTrigger, EffectiveBuildStatus, FactoryC
 use indoc::indoc;
 use tracing::instrument;
 
-use crate::commands::display_help;
+use crate::commands::display_command_help;
 
 /// Compute the effective status label for a build from its server-computed
 /// `status`.
@@ -121,7 +121,7 @@ impl FactoryCommands {
         // factory-specific override is needed.
         match self {
             FactoryCommands::Help => {
-                display_help(Some("factory".to_string()));
+                display_command_help(Some("factory".to_string()));
                 Ok(())
             },
             FactoryCommands::Status(args) => args.handle(&flox.floxhub_client).await,

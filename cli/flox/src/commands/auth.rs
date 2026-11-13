@@ -36,6 +36,7 @@ use serde::Serialize;
 use tracing::{debug, instrument};
 use url::Url;
 
+use crate::commands::display_command_help;
 use crate::commands::general::update_config;
 use crate::utils::credential_store::{CredentialSource, CredentialStores, TokenStorage};
 use crate::utils::dialog::{Checkpoint, Dialog, WaitResult};
@@ -295,6 +296,10 @@ fn calculate_expiry(expires_in: i64) -> String {
 // FloxHub authentication commands
 #[derive(Clone, Debug, Bpaf)]
 pub enum Auth {
+    /// Print help information
+    #[bpaf(command, hide)]
+    Help,
+
     /// Login to FloxHub
     #[bpaf(command)]
     Login {
@@ -329,6 +334,10 @@ impl Auth {
         subcommand_metric!("auth2");
 
         match self {
+            Auth::Help => {
+                display_command_help(Some("auth".to_string()));
+                Ok(())
+            },
             Auth::Login {
                 token_file,
                 insecure_storage,

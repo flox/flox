@@ -12,7 +12,7 @@ pub enum BetaCommands {
     BetaEnabled(#[bpaf(external(beta_enabled::beta_enabled))] beta_enabled::BetaEnabled),
 
     /// Manage flox extensions
-    #[bpaf(command("extension"), hide)]
+    #[bpaf(command("extension"), hide, fallback_to_usage)]
     Extension(#[bpaf(external(extension::extension_commands))] extension::ExtensionCommands),
 }
 

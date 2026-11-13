@@ -185,6 +185,11 @@ PR titles and descriptions, commit messages, code comments, branch
 names, test names, and test data. Refer to "a customer" and link the
 internal Linear issue instead.
 
+## CLI parsing
+
+Use [bpaf](.agents/skills/bpaf/SKILL.md) when adding CLI subcommands or
+changing command argument parsing with bpaf.
+
 ## Beta commands
 
 For new beta commands, use
