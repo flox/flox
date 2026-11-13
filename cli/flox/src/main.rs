@@ -365,14 +365,16 @@ fn set_user() -> Result<()> {
     {
         let effective_uid = nix::unistd::geteuid();
         let user_var = env::var("USER").ok();
+        let home_var = env::var_os("HOME");
 
         if let Some(effective_user) = nix::unistd::User::from_uid(nix::unistd::geteuid())? {
             if user_var.as_deref() != Some(effective_user.name.as_str()) {
                 debug!(user_old = ?user_var, user = %effective_user.name, "Resetting USER environment variable");
                 unsafe {
                     env::set_var("USER", effective_user.name);
-                    // An unset USER does not imply that HOME is stale.
-                    if user_var.is_some() {
+                    // An unset USER does not imply that HOME is stale,
+                    // but make sure HOME is set if it is missing.
+                    if user_var.is_some() || home_var.is_none() {
                         env::set_var("HOME", effective_user.dir);
                     }
                 }
@@ -396,18 +398,17 @@ fn set_user() -> Result<()> {
 mod set_user_tests {
     use super::*;
 
-    fn check_user_home(user: Option<&str>, reset_home: bool) {
+    fn check_user_home(user: Option<&str>, home: Option<&str>, reset_home: bool) {
         let effective_user = nix::unistd::User::from_uid(nix::unistd::geteuid())
             .unwrap()
             .unwrap();
-        let home = env::temp_dir().join("flox-custom-home");
         let expected_home = if reset_home {
             effective_user.dir.into_os_string()
         } else {
-            home.clone().into_os_string()
+            home.expect("HOME must be set when it is preserved").into()
         };
 
-        temp_env::with_vars([("USER", user), ("HOME", home.to_str())], || {
+        temp_env::with_vars([("USER", user), ("HOME", home)], || {
             set_user().unwrap();
             assert_eq!(
                 (env::var("USER").unwrap(), env::var_os("HOME").unwrap()),
@@ -418,7 +419,7 @@ mod set_user_tests {
 
     #[test]
     fn unset_user_preserves_home() {
-        check_user_home(None, false);
+        check_user_home(None, Some("/flox-custom-home"), false);
     }
 
     #[test]
@@ -426,12 +427,17 @@ mod set_user_tests {
         let user = nix::unistd::User::from_uid(nix::unistd::geteuid())
             .unwrap()
             .unwrap();
-        check_user_home(Some(&user.name), false);
+        check_user_home(Some(&user.name), Some("/flox-custom-home"), false);
     }
 
     #[test]
     fn stale_user_resets_home() {
-        check_user_home(Some("flox-stale-user"), true);
+        check_user_home(Some("flox-stale-user"), Some("/flox-custom-home"), true);
+    }
+
+    #[test]
+    fn unset_user_and_home_sets_home() {
+        check_user_home(None, None, true);
     }
 }
 
