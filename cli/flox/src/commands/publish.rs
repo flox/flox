@@ -465,13 +465,11 @@ impl Publish {
             package,
         )?;
 
-        // The page the package is recorded against is the page it is built
-        // against, so there is one value rather than two to keep in step.
-        let selected_base_nixpkgs_url = package_metadata.base_catalog_ref.clone();
+        let nixpkgs_source = package_metadata.base_catalog_ref.clone();
 
         prefetch_expression_build_flake_ref(
             [&package_metadata.package],
-            &selected_base_nixpkgs_url.as_flake_ref()?,
+            &nixpkgs_source.as_flake_ref()?,
         )?;
 
         let auth = NixAuth::from_flox(&flox)?;
@@ -632,7 +630,7 @@ impl Publish {
 
         let build_metadata = check_build_metadata(
             &flox,
-            &selected_base_nixpkgs_url,
+            &nixpkgs_source,
             system_override_inner,
             &publish_provider.env_metadata,
             &publish_provider.package_metadata.package,

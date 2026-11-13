@@ -392,17 +392,28 @@ pub struct BaseCatalogUrl(String);
 
 impl BaseCatalogUrl {
     pub fn as_flake_ref(&self) -> Result<Url, BaseCatalogUrlError> {
+        let parsed = Url::parse(&self.0).map_err(BaseCatalogUrlError)?;
+        if !matches!(parsed.scheme(), "http" | "https" | "ssh" | "file") {
+            return Ok(parsed);
+        }
         let mut url = Url::parse(&format!("git+{}", self.0)).map_err(BaseCatalogUrlError)?;
         url.query_pairs_mut().append_pair("shallow", "1");
         Ok(url)
     }
 
     pub fn rev(&self) -> Option<String> {
-        Url::parse(&self.0)
-            .ok()?
-            .query_pairs()
+        let url = Url::parse(&self.0).ok()?;
+        url.query_pairs()
             .find(|(k, _)| k == "rev")
             .map(|(_, v)| v.into_owned())
+            .or_else(|| {
+                if !matches!(url.scheme(), "github" | "gitlab") {
+                    return None;
+                }
+                let rev = url.path().splitn(3, '/').nth(2)?;
+                (rev.len() == 40 && rev.bytes().all(|b| b.is_ascii_hexdigit()))
+                    .then(|| rev.to_owned())
+            })
     }
 }
 
@@ -436,13 +447,11 @@ impl BaseCatalogInfo {
                 .any(|page_stability| page_stability == stability)
         })?;
 
-        let url = BaseCatalogUrl::from(format!(
-            "{base_url}?rev={rev}",
-            base_url = self.0.base_url,
-            rev = page_info.rev
-        ));
+        Some(self.url_for_revision(&page_info.rev))
+    }
 
-        Some(url)
+    pub fn url_for_revision(&self, rev: &str) -> BaseCatalogUrl {
+        BaseCatalogUrl::from(format!("{}?rev={rev}", self.0.base_url))
     }
 
     /// Return a url for the "default" stability.
@@ -696,6 +705,18 @@ mod tests {
         assert_eq!(
             flake_ref.as_str(),
             "git+https://github.com/NixOS/nixpkgs?shallow=1"
+        );
+    }
+
+    #[test]
+    fn as_flake_ref_preserves_gitlab_host_and_revision() {
+        let reference = "gitlab:packages/nixpkgs?host=gitlab.example.org&rev=0123456789012345678901234567890123456789";
+        assert_eq!(
+            BaseCatalogUrl::from(reference)
+                .as_flake_ref()
+                .unwrap()
+                .as_str(),
+            reference
         );
     }
 
