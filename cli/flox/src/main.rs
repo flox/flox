@@ -394,48 +394,31 @@ fn set_user() -> Result<()> {
 
 #[cfg(test)]
 mod set_user_tests {
-    use std::process::Command;
-
     use super::*;
 
-    fn check_user_home(test_name: &str, user: Option<&str>, reset_home: bool) {
+    fn check_user_home(user: Option<&str>, reset_home: bool) {
         let effective_user = nix::unistd::User::from_uid(nix::unistd::geteuid())
             .unwrap()
             .unwrap();
         let home = env::temp_dir().join("flox-custom-home");
-        if env::var_os("FLOX_SET_USER_TEST_CHILD").is_some() {
+        let expected_home = if reset_home {
+            effective_user.dir.into_os_string()
+        } else {
+            home.clone().into_os_string()
+        };
+
+        temp_env::with_vars([("USER", user), ("HOME", home.to_str())], || {
             set_user().unwrap();
             assert_eq!(
                 (env::var("USER").unwrap(), env::var_os("HOME").unwrap()),
-                (
-                    effective_user.name,
-                    if reset_home {
-                        effective_user.dir.into_os_string()
-                    } else {
-                        home.into_os_string()
-                    }
-                )
+                (effective_user.name, expected_home)
             );
-            return;
-        }
-
-        // Isolate environment mutations from other tests and their threads.
-        let mut command = Command::new(env::current_exe().unwrap());
-        command
-            .args(["--exact", test_name, "--nocapture"])
-            .env("FLOX_SET_USER_TEST_CHILD", "1")
-            .env("HOME", home);
-        if let Some(user) = user {
-            command.env("USER", user);
-        } else {
-            command.env_remove("USER");
-        }
-        assert!(command.status().unwrap().success());
+        });
     }
 
     #[test]
     fn unset_user_preserves_home() {
-        check_user_home("set_user_tests::unset_user_preserves_home", None, false);
+        check_user_home(None, false);
     }
 
     #[test]
@@ -443,20 +426,12 @@ mod set_user_tests {
         let user = nix::unistd::User::from_uid(nix::unistd::geteuid())
             .unwrap()
             .unwrap();
-        check_user_home(
-            "set_user_tests::matching_user_preserves_home",
-            Some(&user.name),
-            false,
-        );
+        check_user_home(Some(&user.name), false);
     }
 
     #[test]
     fn stale_user_resets_home() {
-        check_user_home(
-            "set_user_tests::stale_user_resets_home",
-            Some("flox-stale-user"),
-            true,
-        );
+        check_user_home(Some("flox-stale-user"), true);
     }
 }
 
