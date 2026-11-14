@@ -115,9 +115,10 @@ impl Activate {
     /// the `activate::allow` / `activate::deny` form for the auto-activate
     /// permission-management sub-commands, preserving the join-key
     /// continuity the legacy `environment_subcommand_metric!` stream
-    /// already used.
+    /// already used, and `activate::hook-only` for `--hook-only`.
     pub fn subcommand_name(&self) -> &'static str {
         match self {
+            Self::HookOnly => "activate::hook-only",
             Self::Environment {
                 subcommand_or_options: ActivateSubcommandOrOptions::AutoActivate { auto_activate },
                 ..
