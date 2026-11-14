@@ -130,11 +130,11 @@ impl Activate {
         }
     }
 
+    /// Print the shell hook, or nothing when `disable_hook` is set, as
+    /// in-place activation skips the hook silently.
     pub fn print_hook(config: &Config) -> Result<()> {
         if config.flox.disable_hook.unwrap_or(false) {
-            bail!(indoc! {"
-                The shell hook is disabled ('disable_hook = true').
-                Re-enable it with 'flox config --delete disable_hook', then initialize again."});
+            return Ok(());
         }
         let prompt_hook_version = env::var(PROMPT_HOOK_VERSION_ENV).ok();
         if prompt_hook_version_mismatched(prompt_hook_version.as_deref()) {
