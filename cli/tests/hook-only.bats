@@ -41,12 +41,20 @@ hook_only_project_setup() {
   mkdir .flox
   echo 'invalid environment metadata' > .flox/env.json
   for shell in bash zsh fish tcsh; do
+    # Logged out: the dummy token from the suite setup must not be inherited.
     run --separate-stderr env FLOX_SHELL="$(command -v "$shell")" \
       FLOX_FLOXHUB_TOKEN= NIX_REMOTE=disabled \
       "$FLOX_BIN" activate --hook-only
     assert_success
     [ -n "$output" ]
+    # No logged-out reminder or any other startup output.
+    [ -z "$stderr" ]
   done
+  # Reading the configuration creates its directory and nothing else.
+  [ -d "$FLOX_CONFIG_DIR" ]
+  [ ! -e "$FLOX_DATA_DIR" ]
+  [ ! -e "$FLOX_CACHE_DIR" ]
+  [ ! -e "$FLOX_STATE_DIR" ]
 }
 
 @test "hook-only: noninteractive shells register hooks like in-place activation" {

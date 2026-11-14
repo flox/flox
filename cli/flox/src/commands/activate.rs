@@ -129,7 +129,7 @@ impl Activate {
         }
     }
 
-    fn print_hook(config: &Config) -> Result<()> {
+    pub fn print_hook(config: &Config) -> Result<()> {
         if config.flox.disable_hook.unwrap_or(false) {
             bail!(indoc! {"
                 The shell hook is disabled ('disable_hook = true').

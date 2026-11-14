@@ -136,6 +136,18 @@ fn main() -> ExitCode {
         return ExitCode::from(0);
     }
 
+    if let Ok(args) = &args
+        && let Some(result) = args.0.handle_hook_only(&config)
+    {
+        return match result {
+            Ok(()) => ExitCode::from(0),
+            Err(err) => {
+                message::error(format!("{err:#}"));
+                ExitCode::from(1)
+            },
+        };
+    }
+
     let metrics_uuid = if !config.flox.disable_metrics {
         init_telemetry_uuid(&config.flox.data_dir, &config.flox.cache_dir)
             .and_then(|_| read_metrics_uuid(&config))
