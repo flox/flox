@@ -613,6 +613,95 @@ EOF
 }
 
 # ---------------------------------------------------------------------------- #
+# PROMPT_COMMAND registration must keep the user's own prompt callbacks.
+# Bash 5.1+ runs every element of a PROMPT_COMMAND array; older Bash, such as
+# macOS's /bin/bash 3.2, runs only element zero.
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=hook:prompt-command:bash
+@test "bash 5.1+: repeated in-place activation keeps PROMPT_COMMAND array entries and registers once" {
+  if ! bash -c '(( BASH_VERSINFO[0] * 100 + BASH_VERSINFO[1] >= 501 ))'; then
+    skip "bash on PATH is older than 5.1"
+  fi
+  project_setup
+  project2_setup
+  export PROJECT_DIR PROJECT2_DIR
+
+  run --separate-stderr bash --noprofile --norc -c '
+    set -e
+    export FLOX_SHELL=$(command -v bash)
+    user_prompt() { :; }
+    user_tail() { :; }
+    other_hook() { :; }
+    PROMPT_COMMAND=(user_prompt user_tail)
+    eval "$("$FLOX_BIN" activate -d "$PROJECT_DIR")"
+    eval "$("$FLOX_BIN" activate -d "$PROJECT2_DIR")"
+    echo "count:${#PROMPT_COMMAND[@]} 0:${PROMPT_COMMAND[0]} 1:${PROMPT_COMMAND[1]} 2:${PROMPT_COMMAND[2]}"
+    # Another tool prepends its own element; Bash 5.1+ still runs the hook in
+    # element one, so registration must not add it again.
+    PROMPT_COMMAND=(other_hook "${PROMPT_COMMAND[@]}")
+    eval "$("$FLOX_BIN" activate -d "$PROJECT_DIR")"
+    echo "count:${#PROMPT_COMMAND[@]} 0:${PROMPT_COMMAND[0]} 1:${PROMPT_COMMAND[1]}"
+  '
+  assert_success
+  assert_line "count:3 0:_flox_hook 1:user_prompt 2:user_tail"
+  assert_line "count:4 0:other_hook 1:_flox_hook"
+}
+
+# Bash runs PROMPT_COMMAND only before an interactive prompt, so this test feeds
+# commands on stdin to an interactive /bin/bash. It must stay pinned to Bash 3:
+# when the suite has a controlling terminal, Bash 5 `-i` started from a
+# background process group stops it (see activate.bats); Bash 3.2 does not.
+# bats test_tags=hook:prompt-command:bash3
+@test "bash 3: in-place activation keeps the user's PROMPT_COMMAND callback running" {
+  if ! /bin/bash --version | grep -q "GNU bash, version 3"; then
+    skip "No bash 3 at /bin/bash"
+  fi
+  project_setup
+  export PROJECT_DIR
+
+  cat > "$BATS_TEST_TMPDIR/commands" <<'EOF'
+export FLOX_SHELL=/bin/bash
+user_prompt() { echo USER_PROMPT; }
+PROMPT_COMMAND=(user_prompt)
+eval "$("$FLOX_BIN" activate -d "$PROJECT_DIR")"
+echo after-registration
+echo "element0:${PROMPT_COMMAND[0]}"
+EOF
+  run --separate-stderr bash -c '/bin/bash --noprofile --norc -i < "$1"' _ "$BATS_TEST_TMPDIR/commands"
+  assert_success
+  assert_output --regexp "after-registration"$'\n'"USER_PROMPT"
+  assert_line "element0:_flox_hook;user_prompt"
+}
+
+# bats test_tags=hook:prompt-command:bash3
+@test "bash 3: repeated in-place activation registers once and re-registers when another element displaced the hook" {
+  if ! /bin/bash --version | grep -q "GNU bash, version 3"; then
+    skip "No bash 3 at /bin/bash"
+  fi
+  project_setup
+  project2_setup
+  export PROJECT_DIR PROJECT2_DIR
+
+  run --separate-stderr /bin/bash --noprofile --norc -c '
+    set -e
+    export FLOX_SHELL=/bin/bash
+    user_prompt() { :; }
+    other_hook() { :; }
+    PROMPT_COMMAND=(user_prompt)
+    eval "$("$FLOX_BIN" activate -d "$PROJECT_DIR")"
+    eval "$("$FLOX_BIN" activate -d "$PROJECT2_DIR")"
+    echo "count:${#PROMPT_COMMAND[@]} 0:${PROMPT_COMMAND[0]}"
+    PROMPT_COMMAND=(other_hook "${PROMPT_COMMAND[@]}")
+    eval "$("$FLOX_BIN" activate -d "$PROJECT2_DIR")"
+    echo "count:${#PROMPT_COMMAND[@]} 0:${PROMPT_COMMAND[0]}"
+  '
+  assert_success
+  assert_line "count:1 0:_flox_hook;user_prompt"
+  assert_line "count:2 0:_flox_hook;other_hook"
+}
+
+# ---------------------------------------------------------------------------- #
 # Forked subshells: zsh's chpwd functions and tcsh's cwdcmd alias also run when
 # a fork of the shell changes directory, and `$$` there is still the parent's
 # PID. The hook must do nothing in the fork, or it detaches the parent shell
