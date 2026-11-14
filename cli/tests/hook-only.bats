@@ -42,8 +42,10 @@ hook_only_project_setup() {
   echo 'invalid environment metadata' > .flox/env.json
   for shell in bash zsh fish tcsh; do
     # Logged out: the dummy token from the suite setup must not be inherited.
+    # Metrics are enabled, unlike the rest of the suite, so that telemetry
+    # startup would create the data and cache directories checked below.
     run --separate-stderr env FLOX_SHELL="$(command -v "$shell")" \
-      FLOX_FLOXHUB_TOKEN= NIX_REMOTE=disabled \
+      FLOX_FLOXHUB_TOKEN= NIX_REMOTE=disabled FLOX_DISABLE_METRICS=false \
       "$FLOX_BIN" activate --hook-only
     assert_success
     [ -n "$output" ]

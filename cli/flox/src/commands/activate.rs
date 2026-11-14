@@ -134,6 +134,7 @@ impl Activate {
     /// in-place activation skips the hook silently.
     pub fn print_hook(config: &Config) -> Result<()> {
         if config.flox.disable_hook.unwrap_or(false) {
+            debug!("not printing the shell hook because disable_hook is set");
             return Ok(());
         }
         let prompt_hook_version = env::var(PROMPT_HOOK_VERSION_ENV).ok();
