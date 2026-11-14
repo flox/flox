@@ -9,6 +9,7 @@
   gnugrep,
   gnused,
   gnutar,
+  inputs,
   jq,
   nix,
   shellcheck,
@@ -44,5 +45,10 @@ stdenv.mkDerivation {
   '';
   # install the packages to $out/libexec/*
   makeFlags = [ "PREFIX=$(out)" ];
+  postInstall = ''
+    mkdir -p "$out/libexec/nef/nixpkgs-lib"
+    cp "${inputs.nixpkgs}/COPYING" "$out/libexec/nef/nixpkgs-lib/"
+    cp -R "${inputs.nixpkgs}/lib/." "$out/libexec/nef/nixpkgs-lib/"
+  '';
   doCheck = true;
 }

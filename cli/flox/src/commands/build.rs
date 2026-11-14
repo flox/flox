@@ -339,9 +339,6 @@ impl Build {
 
         let lockfile: Lockfile = env.lockfile(&flox)?.into();
 
-        // Used for non building expressions and manifest builds
-        prefetch_flake_ref(&COMMON_NIXPKGS_URL)?;
-
         let lockfile_manifest = lockfile.migrated_manifest()?;
         let (packages_to_build, expression_ref, expression_path_ref) = {
             // TODO: decouple from env
@@ -378,6 +375,9 @@ impl Build {
         let has_manifest_build = packages_to_build
             .iter()
             .any(|target| target.kind().is_manifest_build());
+        if has_manifest_build {
+            prefetch_flake_ref(&COMMON_NIXPKGS_URL)?;
+        }
         subcommand_metric!(
             "build",
             "has_expression_build" = has_expression_build,
