@@ -426,12 +426,20 @@ mod tests {
               trap - SIGINT;
               return $_prev_exit;
             };
-            if [[ ";${PROMPT_COMMAND[*]:-};" != *";_flox_hook;"* ]]; then
-              if [[ "$(declare -p PROMPT_COMMAND 2>&1)" == "declare -a"* ]]; then
-                PROMPT_COMMAND=(_flox_hook "${PROMPT_COMMAND[@]}");
-              else
+            if [[ "$(declare -p PROMPT_COMMAND 2>&1)" == "declare -a"* ]]; then
+              _flox_hook_registered=;
+              for _flox_prompt_command in "${PROMPT_COMMAND[@]:-}"; do
+                if [[ ";$_flox_prompt_command;" == *";_flox_hook;"* ]]; then
+                  _flox_hook_registered=1;
+                  break;
+                fi;
+              done;
+              if [[ -z $_flox_hook_registered ]]; then
                 PROMPT_COMMAND="_flox_hook${PROMPT_COMMAND:+;$PROMPT_COMMAND}";
               fi;
+              unset _flox_hook_registered _flox_prompt_command;
+            elif [[ ";${PROMPT_COMMAND:-};" != *";_flox_hook;"* ]]; then
+              PROMPT_COMMAND="_flox_hook${PROMPT_COMMAND:+;$PROMPT_COMMAND}";
             fi;
         "#]].assert_eq(&output);
     }
@@ -475,12 +483,20 @@ mod tests {
               trap - SIGINT;
               return $_prev_exit;
             };
-            if [[ ";${PROMPT_COMMAND[*]:-};" != *";_flox_hook;"* ]]; then
-              if [[ "$(declare -p PROMPT_COMMAND 2>&1)" == "declare -a"* ]]; then
-                PROMPT_COMMAND=(_flox_hook "${PROMPT_COMMAND[@]}");
-              else
+            if [[ "$(declare -p PROMPT_COMMAND 2>&1)" == "declare -a"* ]]; then
+              _flox_hook_registered=;
+              for _flox_prompt_command in "${PROMPT_COMMAND[@]:-}"; do
+                if [[ ";$_flox_prompt_command;" == *";_flox_hook;"* ]]; then
+                  _flox_hook_registered=1;
+                  break;
+                fi;
+              done;
+              if [[ -z $_flox_hook_registered ]]; then
                 PROMPT_COMMAND="_flox_hook${PROMPT_COMMAND:+;$PROMPT_COMMAND}";
               fi;
+              unset _flox_hook_registered _flox_prompt_command;
+            elif [[ ";${PROMPT_COMMAND:-};" != *";_flox_hook;"* ]]; then
+              PROMPT_COMMAND="_flox_hook${PROMPT_COMMAND:+;$PROMPT_COMMAND}";
             fi;
         "#]].assert_eq(&output);
     }

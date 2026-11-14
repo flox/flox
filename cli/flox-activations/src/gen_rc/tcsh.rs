@@ -434,8 +434,26 @@ mod tests {
             unset verbose;
             /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
             setenv _FLOX_PROMPT_HOOK_VERSION 1:true;
-            alias precmd 'if ( ! $?_FLOX_INVOCATION_TYPES ) set _FLOX_INVOCATION_TYPES=""; setenv _FLOX_INVOCATION_TYPES_WIRE $_FLOX_INVOCATION_TYPES:q; eval "`exec /flox hook-env --shell tcsh --shell-pid $$ --invocation-types-from-env --skip-in-forked-subshell`"; unsetenv _FLOX_INVOCATION_TYPES_WIRE; if ( $?_flox_exit ) exit';
-            alias cwdcmd 'if ( ! $?_FLOX_INVOCATION_TYPES ) set _FLOX_INVOCATION_TYPES=""; setenv _FLOX_INVOCATION_TYPES_WIRE $_FLOX_INVOCATION_TYPES:q; eval "`exec /flox hook-env --shell tcsh --shell-pid $$ --invocation-types-from-env --skip-in-forked-subshell`"; unsetenv _FLOX_INVOCATION_TYPES_WIRE; if ( $?_flox_exit ) exit';
+            alias _flox_hook 'if ( ! $?_FLOX_INVOCATION_TYPES ) set _FLOX_INVOCATION_TYPES=""; setenv _FLOX_INVOCATION_TYPES_WIRE $_FLOX_INVOCATION_TYPES:q; eval "`exec /flox hook-env --shell tcsh --shell-pid $$ --invocation-types-from-env --skip-in-forked-subshell`"; unsetenv _FLOX_INVOCATION_TYPES_WIRE; if ( $?_flox_exit ) exit';
+            if ( ! $?_flox_hook_alias_generation ) set _flox_hook_alias_generation=0;
+            @ _flox_hook_alias_generation++;
+            set _flox_saved_precmd_name="_flox_saved_precmd_$_flox_hook_alias_generation";
+            set _flox_saved_cwdcmd_name="_flox_saved_cwdcmd_$_flox_hook_alias_generation";
+            set _flox_previous_precmd="`alias precmd`";
+            set _flox_previous_cwdcmd="`alias cwdcmd`";
+            setenv _FLOX_MIGRATION_CODE 'printf "%s" "${_FLOX_LEGACY_ALIAS#*; if ( \$\?_flox_exit ) exit}"';
+            alias _flox_migrate_precmd 'setenv _FLOX_LEGACY_ALIAS $_flox_previous_precmd:q; set _flox_previous_precmd="`/nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/printenv _FLOX_MIGRATION_CODE | /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-bash-interactive-5.3p9/bin/bash -p`"; unsetenv _FLOX_LEGACY_ALIAS';
+            if ( "$_flox_previous_precmd" =~ 'if ( ! $?_FLOX_INVOCATION_TYPES ) set _FLOX_INVOCATION_TYPES=*; if ( $?_flox_exit ) exit*' ) eval _flox_migrate_precmd;
+            unalias _flox_migrate_precmd;
+            alias _flox_migrate_cwdcmd 'setenv _FLOX_LEGACY_ALIAS $_flox_previous_cwdcmd:q; set _flox_previous_cwdcmd="`/nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/printenv _FLOX_MIGRATION_CODE | /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-bash-interactive-5.3p9/bin/bash -p`"; unsetenv _FLOX_LEGACY_ALIAS';
+            if ( "$_flox_previous_cwdcmd" =~ 'if ( ! $?_FLOX_INVOCATION_TYPES ) set _FLOX_INVOCATION_TYPES=*; if ( $?_flox_exit ) exit*' ) eval _flox_migrate_cwdcmd;
+            unalias _flox_migrate_cwdcmd;
+            if ( "$_flox_previous_precmd" !~ '*_flox_saved_precmd*; _flox_hook*' ) alias $_flox_saved_precmd_name "$_flox_previous_precmd";
+            if ( "$_flox_previous_cwdcmd" !~ '*_flox_saved_cwdcmd*; _flox_hook*' ) alias $_flox_saved_cwdcmd_name "$_flox_previous_cwdcmd";
+            if ( "$_flox_previous_precmd" !~ '*_flox_saved_precmd*; _flox_hook*' ) alias precmd "$_flox_saved_precmd_name; _flox_hook";
+            if ( "$_flox_previous_cwdcmd" !~ '*_flox_saved_cwdcmd*; _flox_hook*' ) alias cwdcmd "$_flox_saved_cwdcmd_name; _flox_hook";
+            unset _flox_previous_precmd _flox_previous_cwdcmd _flox_saved_precmd_name _flox_saved_cwdcmd_name;
+            unsetenv _FLOX_MIGRATION_CODE;
         "#]].assert_eq(&output);
     }
 
@@ -479,8 +497,26 @@ mod tests {
             unset verbose;
             /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
             setenv _FLOX_PROMPT_HOOK_VERSION 1:true;
-            alias precmd 'if ( ! $?_FLOX_INVOCATION_TYPES ) set _FLOX_INVOCATION_TYPES=""; setenv _FLOX_INVOCATION_TYPES_WIRE $_FLOX_INVOCATION_TYPES:q; eval "`exec /flox hook-env --shell tcsh --shell-pid $$ --invocation-types-from-env --skip-in-forked-subshell`"; unsetenv _FLOX_INVOCATION_TYPES_WIRE; if ( $?_flox_exit ) exit';
-            alias cwdcmd 'if ( ! $?_FLOX_INVOCATION_TYPES ) set _FLOX_INVOCATION_TYPES=""; setenv _FLOX_INVOCATION_TYPES_WIRE $_FLOX_INVOCATION_TYPES:q; eval "`exec /flox hook-env --shell tcsh --shell-pid $$ --invocation-types-from-env --skip-in-forked-subshell`"; unsetenv _FLOX_INVOCATION_TYPES_WIRE; if ( $?_flox_exit ) exit';
+            alias _flox_hook 'if ( ! $?_FLOX_INVOCATION_TYPES ) set _FLOX_INVOCATION_TYPES=""; setenv _FLOX_INVOCATION_TYPES_WIRE $_FLOX_INVOCATION_TYPES:q; eval "`exec /flox hook-env --shell tcsh --shell-pid $$ --invocation-types-from-env --skip-in-forked-subshell`"; unsetenv _FLOX_INVOCATION_TYPES_WIRE; if ( $?_flox_exit ) exit';
+            if ( ! $?_flox_hook_alias_generation ) set _flox_hook_alias_generation=0;
+            @ _flox_hook_alias_generation++;
+            set _flox_saved_precmd_name="_flox_saved_precmd_$_flox_hook_alias_generation";
+            set _flox_saved_cwdcmd_name="_flox_saved_cwdcmd_$_flox_hook_alias_generation";
+            set _flox_previous_precmd="`alias precmd`";
+            set _flox_previous_cwdcmd="`alias cwdcmd`";
+            setenv _FLOX_MIGRATION_CODE 'printf "%s" "${_FLOX_LEGACY_ALIAS#*; if ( \$\?_flox_exit ) exit}"';
+            alias _flox_migrate_precmd 'setenv _FLOX_LEGACY_ALIAS $_flox_previous_precmd:q; set _flox_previous_precmd="`/nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/printenv _FLOX_MIGRATION_CODE | /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-bash-interactive-5.3p9/bin/bash -p`"; unsetenv _FLOX_LEGACY_ALIAS';
+            if ( "$_flox_previous_precmd" =~ 'if ( ! $?_FLOX_INVOCATION_TYPES ) set _FLOX_INVOCATION_TYPES=*; if ( $?_flox_exit ) exit*' ) eval _flox_migrate_precmd;
+            unalias _flox_migrate_precmd;
+            alias _flox_migrate_cwdcmd 'setenv _FLOX_LEGACY_ALIAS $_flox_previous_cwdcmd:q; set _flox_previous_cwdcmd="`/nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/printenv _FLOX_MIGRATION_CODE | /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-bash-interactive-5.3p9/bin/bash -p`"; unsetenv _FLOX_LEGACY_ALIAS';
+            if ( "$_flox_previous_cwdcmd" =~ 'if ( ! $?_FLOX_INVOCATION_TYPES ) set _FLOX_INVOCATION_TYPES=*; if ( $?_flox_exit ) exit*' ) eval _flox_migrate_cwdcmd;
+            unalias _flox_migrate_cwdcmd;
+            if ( "$_flox_previous_precmd" !~ '*_flox_saved_precmd*; _flox_hook*' ) alias $_flox_saved_precmd_name "$_flox_previous_precmd";
+            if ( "$_flox_previous_cwdcmd" !~ '*_flox_saved_cwdcmd*; _flox_hook*' ) alias $_flox_saved_cwdcmd_name "$_flox_previous_cwdcmd";
+            if ( "$_flox_previous_precmd" !~ '*_flox_saved_precmd*; _flox_hook*' ) alias precmd "$_flox_saved_precmd_name; _flox_hook";
+            if ( "$_flox_previous_cwdcmd" !~ '*_flox_saved_cwdcmd*; _flox_hook*' ) alias cwdcmd "$_flox_saved_cwdcmd_name; _flox_hook";
+            unset _flox_previous_precmd _flox_previous_cwdcmd _flox_saved_precmd_name _flox_saved_cwdcmd_name;
+            unsetenv _FLOX_MIGRATION_CODE;
         "#]].assert_eq(&output);
     }
 
