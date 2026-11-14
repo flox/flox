@@ -227,6 +227,17 @@ pub struct FloxArgs {
 }
 
 impl FloxArgs {
+    /// Shell startup must not resolve credentials, send telemetry, or open an environment.
+    /// Returns `None` for every other command.
+    pub fn handle_hook_only(&self, config: &Config) -> Option<Result<()>> {
+        match &self.command {
+            Some(Commands::Use(UseCommands::Activate(activate::Activate::HookOnly))) => {
+                Some(activate::Activate::print_hook(config))
+            },
+            _ => None,
+        }
+    }
+
     /// The v2 wire subcommand name for this invocation; `"help"` when no
     /// subcommand was given.
     pub fn subcommand_name(&self) -> &'static str {
