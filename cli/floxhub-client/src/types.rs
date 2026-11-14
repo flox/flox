@@ -391,10 +391,26 @@ pub struct BaseCatalogUrlError(pub(crate) url::ParseError);
 pub struct BaseCatalogUrl(String);
 
 impl BaseCatalogUrl {
-    pub fn as_flake_ref(&self) -> Result<Url, BaseCatalogUrlError> {
-        let mut url = Url::parse(&format!("git+{}", self.0)).map_err(BaseCatalogUrlError)?;
-        url.query_pairs_mut().append_pair("shallow", "1");
-        Ok(url)
+    pub fn as_flake_ref(&self, fetcher: Option<&str>) -> Result<Url, BaseCatalogUrlError> {
+        let fetcher = fetcher.unwrap_or("git");
+        if fetcher == "git" {
+            let mut url = Url::parse(&format!("git+{}", self.0)).map_err(BaseCatalogUrlError)?;
+            url.query_pairs_mut().append_pair("shallow", "1");
+            return Ok(url);
+        }
+        let origin = Url::parse(&self.0).map_err(BaseCatalogUrlError)?;
+        let path = origin.path().trim_matches('/').trim_end_matches(".git");
+        let (namespace, repo) = path.rsplit_once('/').unwrap_or(("", path));
+        // Preserve GitLab subgroup separators through Nix's path decoding.
+        let namespace = namespace.replace('/', "%252F");
+        let mut flake_ref =
+            Url::parse(&format!("{fetcher}:{namespace}/{repo}")).map_err(BaseCatalogUrlError)?;
+        flake_ref.set_query(origin.query());
+        flake_ref.query_pairs_mut().append_pair(
+            "host",
+            &origin[url::Position::BeforeHost..url::Position::AfterPort],
+        );
+        Ok(flake_ref)
     }
 
     pub fn rev(&self) -> Option<String> {
@@ -682,7 +698,7 @@ mod tests {
     #[test]
     fn as_flake_ref_with_query_string_appends_ampersand() {
         let url = BaseCatalogUrl::from("https://github.com/flox/nixpkgs?rev=abc123");
-        let flake_ref = url.as_flake_ref().expect("should parse");
+        let flake_ref = url.as_flake_ref(None).expect("should parse");
         assert_eq!(
             flake_ref.as_str(),
             "git+https://github.com/flox/nixpkgs?rev=abc123&shallow=1"
@@ -692,10 +708,30 @@ mod tests {
     #[test]
     fn as_flake_ref_plain_https_no_query_appends_question_mark() {
         let url = BaseCatalogUrl::from("https://github.com/NixOS/nixpkgs");
-        let flake_ref = url.as_flake_ref().expect("should parse");
+        let flake_ref = url.as_flake_ref(None).expect("should parse");
         assert_eq!(
             flake_ref.as_str(),
             "git+https://github.com/NixOS/nixpkgs?shallow=1"
+        );
+    }
+
+    #[test]
+    fn as_flake_ref_uses_gitlab_subgroups() {
+        let url = BaseCatalogUrl::from(
+            "https://gitlab.example.org/group/subgroup/nixpkgs.git?rev=abc123",
+        );
+        assert_eq!(
+            url.as_flake_ref(Some("gitlab")).unwrap().as_str(),
+            "gitlab:group%252Fsubgroup/nixpkgs?rev=abc123&host=gitlab.example.org"
+        );
+    }
+
+    #[test]
+    fn as_flake_ref_preserves_the_forge_port() {
+        let url = BaseCatalogUrl::from("https://gitlab.example.org:8443/group/repo?rev=abc123");
+        assert_eq!(
+            url.as_flake_ref(Some("gitlab")).unwrap().as_str(),
+            "gitlab:group/repo?rev=abc123&host=gitlab.example.org%3A8443"
         );
     }
 
