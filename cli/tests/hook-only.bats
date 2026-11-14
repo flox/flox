@@ -239,8 +239,11 @@ send "exit\r"
 expect eof
 EOF
   # Bash 3 only evaluates array element zero; test it where the host provides it.
-  for shell in "$(command -v bash)" /bin/bash; do
-    [ -x "$shell" ] || continue
+  shells=("$(command -v bash)")
+  if /bin/bash --version | grep -q "GNU bash, version 3"; then
+    shells+=(/bin/bash)
+  fi
+  for shell in "${shells[@]}"; do
     export FLOX_SHELL="$shell"
     for mode in scalar array; do
       export HOOK_ONLY_PROMPT_MODE="$mode"
