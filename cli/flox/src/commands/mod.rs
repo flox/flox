@@ -618,7 +618,8 @@ impl FloxArgs {
     /// Remind a user who is not logged in — no credential, or one whose `exp`
     /// claim has passed — to run 'flox auth login'. The reminder is suppressed
     /// for `flox auth`, `push`, and `publish` subcommands, the prompt-hook
-    /// flow, invocations nested inside an activation, and when the
+    /// flow, activations the prompt hook launches, invocations nested inside
+    /// an activation, and when the
     /// `auth_notifications` config key is set to `false`.
     ///
     /// The credential is not consumed when the configured authn mode does not
@@ -656,8 +657,20 @@ impl FloxArgs {
             // shell, including in-place `eval "$(flox activate)"` ones, so
             // it is a reliable signal even across the parent shell.
             let nested = activated_environments().last_active().is_some();
+            // An activation the prompt hook launches on entering a directory
+            // stays quiet as well, whether or not an environment is already
+            // active, as in a shell set up with `flox activate --hook-only`.
+            let launched_by_hook = matches!(
+                &self.command,
+                Some(Commands::Use(UseCommands::Activate(activate))) if activate.launched_by_hook()
+            );
             let quieted = !config.flox.auth_notifications.unwrap_or(true);
-            if !reports_auth && !self.is_prompt_hook_flow() && !nested && !quieted {
+            if !reports_auth
+                && !self.is_prompt_hook_flow()
+                && !nested
+                && !launched_by_hook
+                && !quieted
+            {
                 message::warning(
                     "You are not logged in to FloxHub. Run 'flox auth login' to log in.",
                 );
