@@ -702,6 +702,356 @@ EOF
 }
 
 # ---------------------------------------------------------------------------- #
+# Prompt integrations rewrite PROMPT_COMMAND after the hook registers, and every
+# in-place activation registers again, including each one the hook performs on
+# entering a directory. Registration must still find the hook, or each
+# activation adds another `flox hook-env` call to every prompt; and it must not
+# mistake text that only looks like the hook for it, or the hook stops running.
+# hook/prompt-integrations.bash reduces bash-preexec and VS Code's shell
+# integration to their PROMPT_COMMAND handling.
+#
+# Each test writes one command per line to $BATS_TEST_TMPDIR/commands, and
+# `run_prompts` runs them with a prompt after each line. A `flox` wrapper,
+# which the hook embeds, logs every `hook-env` call, and `mark <label>` splits
+# the log. `prompt_calls` reports, for the prompt after each mark, the number
+# of `hook-env` calls and whether an environment was active afterwards.
+# ---------------------------------------------------------------------------- #
+
+# Usage: prompt_integration_setup
+prompt_integration_setup() {
+  project_setup
+  "$FLOX_BIN" activate allow -d "$PROJECT_DIR"
+  export OUTSIDE_DIR="$BATS_TEST_TMPDIR/outside"
+  export HOOK_LOG="$BATS_TEST_TMPDIR/hook.log"
+  export FLOX_WRAPPER="$BATS_TEST_TMPDIR/bin/flox"
+  export INTEGRATIONS="$TESTS_DIR/hook/prompt-integrations.bash"
+  export PROJECT_DIR
+  mkdir -p "$OUTSIDE_DIR" "${FLOX_WRAPPER%/*}"
+  cat > "$FLOX_WRAPPER" <<'EOF_WRAPPER'
+#!/usr/bin/env bash
+if [[ ${1-} == hook-env ]]; then echo hook-env >> "$HOOK_LOG"; fi
+exec -a "$0" "$FLOX_BIN" "$@"
+EOF_WRAPPER
+  chmod +x "$FLOX_WRAPPER"
+  # The mark comes first because the first prompt of an interactive shell runs
+  # before any line.
+  cat > "$BATS_TEST_TMPDIR/commands" <<'EOF_COMMANDS'
+mark() { if [[ -n ${FLOX_ENV_PROJECT:-} ]]; then echo "mark $1 active"; else echo "mark $1 inactive"; fi >> "$HOOK_LOG"; }; cd "$OUTSIDE_DIR"
+EOF_COMMANDS
+}
+
+# Usage: run_prompts <3|5>
+# Bash 3 is the interactive /bin/bash, which runs PROMPT_COMMAND before reading
+# each line. Interactive Bash 5 can be stopped by the suite's terminal (see
+# above), so for Bash 5.1+ a non-interactive bash runs every PROMPT_COMMAND
+# element after each line, as Bash does before a prompt.
+run_prompts() {
+  if [[ $1 == 3 ]]; then
+    run --separate-stderr bash -c '/bin/bash --noprofile --norc -i < "$1"' _ "$BATS_TEST_TMPDIR/commands"
+    return
+  fi
+  run --separate-stderr bash --noprofile --norc -c '
+    while IFS= read -r -u 3 _line; do
+      eval "$_line"
+      for _prompt_command in "${PROMPT_COMMAND[@]}"; do eval "$_prompt_command"; done
+    done 3< "$1"
+  ' _ "$BATS_TEST_TMPDIR/commands"
+}
+
+# Prints `<mark>=<hook-env calls>:<active|inactive>` for the prompt after each
+# mark but the last; a mark records the state the previous prompt left.
+prompt_calls() {
+  awk '/^mark /{if(l)out=out sprintf("%s=%d:%s ",l,n,$3); l=$2; n=0; next} /^hook-env/{n++} END{sub(/ $/,"",out); print out}' "$HOOK_LOG"
+}
+
+skip_unless_bash() {
+  if [[ $1 == 3 ]]; then
+    if ! /bin/bash --version | grep -q "GNU bash, version 3"; then
+      skip "No bash 3 at /bin/bash"
+    fi
+  elif ! bash -c '(( BASH_VERSINFO[0] * 100 + BASH_VERSINFO[1] >= 501 ))'; then
+    skip "bash on PATH is older than 5.1"
+  fi
+}
+
+# Registers again after the integration loaded, then enters, leaves,
+# deactivates and re-enters the project, each of which runs the hook.
+lifecycle_commands() {
+  cat >> "$BATS_TEST_TMPDIR/commands" <<'EOF_COMMANDS'
+eval "$("$FLOX_WRAPPER" activate --hook-only)"; mark registered-again
+cd "$PROJECT_DIR"; mark enter
+cd "$OUTSIDE_DIR"; mark leave
+cd "$PROJECT_DIR"; mark reenter
+"$FLOX_WRAPPER" deactivate; mark deactivate
+mark suppressed
+cd "$OUTSIDE_DIR"; mark leave-again
+cd "$PROJECT_DIR"; mark reenter-again
+mark end
+EOF_COMMANDS
+}
+
+LIFECYCLE_CALLS="installed=1:inactive registered-again=1:inactive enter=1:active leave=1:inactive reenter=1:active deactivate=1:inactive suppressed=1:inactive leave-again=1:inactive reenter-again=1:active"
+
+# bash-preexec rejoins PROMPT_COMMAND with newlines at every prompt.
+bash_preexec_commands() {
+  cat >> "$BATS_TEST_TMPDIR/commands" <<'EOF_COMMANDS'
+eval "$("$FLOX_WRAPPER" activate --hook-only)"; source "$INTEGRATIONS"; __bp_install; mark installed
+EOF_COMMANDS
+  lifecycle_commands
+}
+
+# bats test_tags=hook:prompt-command:bash
+@test "bash 5.1+: hook behind bash-preexec runs once per prompt across activations" {
+  skip_unless_bash 5
+  prompt_integration_setup
+  bash_preexec_commands
+  run_prompts 5
+  assert_success
+  assert_equal "$(prompt_calls)" "$LIFECYCLE_CALLS"
+}
+
+# bats test_tags=hook:prompt-command:bash3
+@test "bash 3: hook behind bash-preexec runs once per prompt across activations" {
+  skip_unless_bash 3
+  prompt_integration_setup
+  bash_preexec_commands
+  run_prompts 3
+  assert_success
+  assert_equal "$(prompt_calls)" "$LIFECYCLE_CALLS"
+}
+
+# VS Code moves PROMPT_COMMAND into __vsc_original_prompt_command and runs it
+# from its __vsc_prompt_cmd_original wrapper.
+vscode_commands() {
+  cat >> "$BATS_TEST_TMPDIR/commands" <<'EOF_COMMANDS'
+eval "$("$FLOX_WRAPPER" activate --hook-only)"; source "$INTEGRATIONS"; __vsc_install; mark installed
+EOF_COMMANDS
+  lifecycle_commands
+}
+
+# bats test_tags=hook:prompt-command:bash
+@test "bash 5.1+: hook behind VS Code's prompt wrapper runs once per prompt across activations" {
+  skip_unless_bash 5
+  prompt_integration_setup
+  vscode_commands
+  run_prompts 5
+  assert_success
+  assert_equal "$(prompt_calls)" "$LIFECYCLE_CALLS"
+}
+
+# bats test_tags=hook:prompt-command:bash3
+@test "bash 3: hook behind VS Code's prompt wrapper runs once per prompt across activations" {
+  skip_unless_bash 3
+  prompt_integration_setup
+  vscode_commands
+  run_prompts 3
+  assert_success
+  assert_equal "$(prompt_calls)" "$LIFECYCLE_CALLS"
+}
+
+# With bash-preexec loaded, VS Code leaves PROMPT_COMMAND to bash-preexec.
+# Sourcing bash-preexec sets `bash_preexec_imported` and defers its install to
+# the first prompt, after VS Code's script has run.
+vscode_and_bash_preexec_commands() {
+  cat >> "$BATS_TEST_TMPDIR/commands" <<'EOF_COMMANDS'
+eval "$("$FLOX_WRAPPER" activate --hook-only)"; source "$INTEGRATIONS"; bash_preexec_imported=defined; __vsc_install; __bp_install; mark installed
+EOF_COMMANDS
+  lifecycle_commands
+}
+
+# bats test_tags=hook:prompt-command:bash
+@test "bash 5.1+: hook behind VS Code and bash-preexec runs once per prompt across activations" {
+  skip_unless_bash 5
+  prompt_integration_setup
+  vscode_and_bash_preexec_commands
+  run_prompts 5
+  assert_success
+  assert_equal "$(prompt_calls)" "$LIFECYCLE_CALLS"
+}
+
+# bats test_tags=hook:prompt-command:bash3
+@test "bash 3: hook behind VS Code and bash-preexec runs once per prompt across activations" {
+  skip_unless_bash 3
+  prompt_integration_setup
+  vscode_and_bash_preexec_commands
+  run_prompts 3
+  assert_success
+  assert_equal "$(prompt_calls)" "$LIFECYCLE_CALLS"
+}
+
+# A startup file that assigns PROMPT_COMMAND before registering, sourced again,
+# drops the hook; registration must notice and add it back exactly once.
+rc_reset_commands() {
+  cat > "$BATS_TEST_TMPDIR/rc" <<'EOF_RC'
+user_prompt() { :; }
+PROMPT_COMMAND=user_prompt
+eval "$("$FLOX_WRAPPER" activate --hook-only)"
+EOF_RC
+  cat >> "$BATS_TEST_TMPDIR/commands" <<'EOF_COMMANDS'
+source "$BATS_TEST_TMPDIR/rc"; mark sourced
+source "$BATS_TEST_TMPDIR/rc"; mark sourced-again
+echo "element0:${PROMPT_COMMAND[0]}"; mark end
+EOF_COMMANDS
+}
+
+# bats test_tags=hook:prompt-command:bash
+@test "bash 5.1+: re-sourcing a startup file that resets PROMPT_COMMAND registers the hook once" {
+  skip_unless_bash 5
+  prompt_integration_setup
+  rc_reset_commands
+  run_prompts 5
+  assert_success
+  assert_line "element0:_flox_hook;user_prompt"
+  assert_equal "$(prompt_calls)" "sourced=1:inactive sourced-again=1:inactive"
+}
+
+# bats test_tags=hook:prompt-command:bash3
+@test "bash 3: re-sourcing a startup file that resets PROMPT_COMMAND registers the hook once" {
+  skip_unless_bash 3
+  prompt_integration_setup
+  rc_reset_commands
+  run_prompts 3
+  assert_success
+  assert_line "element0:_flox_hook;user_prompt"
+  assert_equal "$(prompt_calls)" "sourced=1:inactive sourced-again=1:inactive"
+}
+
+# Once PROMPT_COMMAND no longer runs VS Code's wrapper, the hook in
+# __vsc_original_prompt_command no longer runs either.
+vscode_reset_commands() {
+  cat >> "$BATS_TEST_TMPDIR/commands" <<'EOF_COMMANDS'
+eval "$("$FLOX_WRAPPER" activate --hook-only)"; source "$INTEGRATIONS"; __vsc_install; mark installed
+user_prompt() { :; }; PROMPT_COMMAND=user_prompt; mark reset
+eval "$("$FLOX_WRAPPER" activate --hook-only)"; mark registered-again
+cd "$PROJECT_DIR"; mark enter
+mark end
+EOF_COMMANDS
+}
+
+# bats test_tags=hook:prompt-command:bash
+@test "bash 5.1+: hook saved by VS Code registers again once PROMPT_COMMAND drops the wrapper" {
+  skip_unless_bash 5
+  prompt_integration_setup
+  vscode_reset_commands
+  run_prompts 5
+  assert_success
+  assert_equal "$(prompt_calls)" "installed=1:inactive reset=0:inactive registered-again=1:inactive enter=1:active"
+}
+
+# bats test_tags=hook:prompt-command:bash3
+@test "bash 3: hook saved by VS Code registers again once PROMPT_COMMAND drops the wrapper" {
+  skip_unless_bash 3
+  prompt_integration_setup
+  vscode_reset_commands
+  run_prompts 3
+  assert_success
+  assert_equal "$(prompt_calls)" "installed=1:inactive reset=0:inactive registered-again=1:inactive enter=1:active"
+}
+
+# `_flox_hook` on a line of its own inside a quoted argument, a here-doc or a
+# continued command is data, not a callback, so registration must add the hook.
+literal_commands() {
+  cat >> "$BATS_TEST_TMPDIR/commands" <<'EOF_COMMANDS'
+PROMPT_COMMAND=$'printf "%s\\n" "header\n_flox_hook\nfooter" > /dev/null'; eval "$("$FLOX_WRAPPER" activate --hook-only)"; mark quoted
+PROMPT_COMMAND=$'cat > /dev/null <<\'EOF\'\n_flox_hook\nEOF'; eval "$("$FLOX_WRAPPER" activate --hook-only)"; mark here-doc
+PROMPT_COMMAND=$': header \\\n_flox_hook'; eval "$("$FLOX_WRAPPER" activate --hook-only)"; mark continued
+cd "$PROJECT_DIR"; mark enter
+mark end
+EOF_COMMANDS
+}
+
+# bats test_tags=hook:prompt-command:bash
+@test "bash 5.1+: _flox_hook inside prompt-command data does not count as registered" {
+  skip_unless_bash 5
+  prompt_integration_setup
+  literal_commands
+  run_prompts 5
+  assert_success
+  assert_equal "$(prompt_calls)" "quoted=1:inactive here-doc=1:inactive continued=1:inactive enter=1:active"
+}
+
+# bats test_tags=hook:prompt-command:bash3
+@test "bash 3: _flox_hook inside prompt-command data does not count as registered" {
+  skip_unless_bash 3
+  prompt_integration_setup
+  literal_commands
+  run_prompts 3
+  assert_success
+  assert_equal "$(prompt_calls)" "quoted=1:inactive here-doc=1:inactive continued=1:inactive enter=1:active"
+}
+
+# VS Code's wrapper name that is not the whole value, as in a quoted or
+# escaped argument, a comment or a here-doc, does not run the saved copy, so
+# the hook saved there does not count.
+vscode_literal_commands() {
+  cat >> "$BATS_TEST_TMPDIR/commands" <<'EOF_COMMANDS'
+eval "$("$FLOX_WRAPPER" activate --hook-only)"; source "$INTEGRATIONS"; __vsc_install; mark installed
+PROMPT_COMMAND='printf "%s\n" "a;__vsc_prompt_cmd_original;b" > /dev/null'; eval "$("$FLOX_WRAPPER" activate --hook-only)"; mark quoted-wrapper
+PROMPT_COMMAND='printf "%s\n" "a;__vsc_prompt_cmd_original" > /dev/null'; eval "$("$FLOX_WRAPPER" activate --hook-only)"; mark quoted-wrapper-end
+PROMPT_COMMAND='printf %s x\;__vsc_prompt_cmd_original'; eval "$("$FLOX_WRAPPER" activate --hook-only)"; mark escaped-wrapper
+PROMPT_COMMAND=': # ;__vsc_prompt_cmd_original'; eval "$("$FLOX_WRAPPER" activate --hook-only)"; mark comment-wrapper
+PROMPT_COMMAND=$'cat >/dev/null <<\'EOF;__vsc_prompt_cmd_original\'\ndata\nEOF;__vsc_prompt_cmd_original'; eval "$("$FLOX_WRAPPER" activate --hook-only)"; mark here-doc-wrapper
+cd "$PROJECT_DIR"; mark enter
+mark end
+EOF_COMMANDS
+}
+
+# bats test_tags=hook:prompt-command:bash
+@test "bash 5.1+: VS Code's wrapper name inside prompt-command data does not count" {
+  skip_unless_bash 5
+  prompt_integration_setup
+  vscode_literal_commands
+  run_prompts 5
+  assert_success
+  assert_equal "$(prompt_calls)" "installed=1:inactive quoted-wrapper=1:inactive quoted-wrapper-end=1:inactive escaped-wrapper=1:inactive comment-wrapper=1:inactive here-doc-wrapper=1:inactive enter=1:active"
+}
+
+# bats test_tags=hook:prompt-command:bash3
+@test "bash 3: VS Code's wrapper name inside prompt-command data does not count" {
+  skip_unless_bash 3
+  prompt_integration_setup
+  vscode_literal_commands
+  run_prompts 3
+  assert_success
+  assert_equal "$(prompt_calls)" "installed=1:inactive quoted-wrapper=1:inactive quoted-wrapper-end=1:inactive escaped-wrapper=1:inactive comment-wrapper=1:inactive here-doc-wrapper=1:inactive enter=1:active"
+}
+
+# `nocasematch` makes `[[ == ]]` ignore case, so without care a user's
+# `__VSC_PROMPT_CMD_ORIGINAL` would count as VS Code's wrapper and a user's
+# `_FLOX_HOOK` as the hook. Registration must also leave the option as it was.
+nocasematch_commands() {
+  cat >> "$BATS_TEST_TMPDIR/commands" <<'EOF_COMMANDS'
+eval "$("$FLOX_WRAPPER" activate --hook-only)"; source "$INTEGRATIONS"; __vsc_install; mark installed
+shopt -s nocasematch; __VSC_PROMPT_CMD_ORIGINAL() { :; }; PROMPT_COMMAND=__VSC_PROMPT_CMD_ORIGINAL; eval "$("$FLOX_WRAPPER" activate --hook-only)"; mark upper-wrapper
+_FLOX_HOOK() { :; }; PROMPT_COMMAND=_FLOX_HOOK; eval "$("$FLOX_WRAPPER" activate --hook-only)"; mark user-flox-hook
+cd "$PROJECT_DIR"; if shopt -q nocasematch; then echo nocasematch:on; fi; mark enter
+mark end
+EOF_COMMANDS
+}
+
+# bats test_tags=hook:prompt-command:bash
+@test "bash 5.1+: registration matches names case-sensitively under nocasematch and keeps the option" {
+  skip_unless_bash 5
+  prompt_integration_setup
+  nocasematch_commands
+  run_prompts 5
+  assert_success
+  assert_line "nocasematch:on"
+  assert_equal "$(prompt_calls)" "installed=1:inactive upper-wrapper=1:inactive user-flox-hook=1:inactive enter=1:active"
+}
+
+# bats test_tags=hook:prompt-command:bash3
+@test "bash 3: registration matches names case-sensitively under nocasematch and keeps the option" {
+  skip_unless_bash 3
+  prompt_integration_setup
+  nocasematch_commands
+  run_prompts 3
+  assert_success
+  assert_line "nocasematch:on"
+  assert_equal "$(prompt_calls)" "installed=1:inactive upper-wrapper=1:inactive user-flox-hook=1:inactive enter=1:active"
+}
+
+# ---------------------------------------------------------------------------- #
 # Forked subshells: zsh's chpwd functions and tcsh's cwdcmd alias also run when
 # a fork of the shell changes directory, and `$$` there is still the parent's
 # PID. The hook must do nothing in the fork, or it detaches the parent shell

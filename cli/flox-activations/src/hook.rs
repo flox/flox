@@ -66,9 +66,38 @@ pub fn bash_hook(flox_bin: &str) -> String {
     // which keeps `$_` and PIPESTATUS intact for the user's callbacks. Older
     // Bash runs only element zero, so there the hook counts only in element
     // zero and is added by prefixing that element's text; a scalar assignment
-    // to an array replaces element zero and keeps the later elements. The
-    // helpers are unset before assigning so a readonly PROMPT_COMMAND, whose
-    // assignment error aborts the block, does not leave them behind.
+    // to an array replaces element zero and keeps the later elements.
+    //
+    // Prompt integrations rewrite PROMPT_COMMAND after the hook registers, and
+    // every in-place activation, including each one the hook itself performs,
+    // registers again, so the check must recognize the hook in their layouts:
+    //
+    // - bash-preexec rejoins the commands with newlines and puts its own
+    //   `__bp_precmd_invoke_cmd "$_"` line first. The hook is prepended, so it
+    //   is the first command of the text or the first one after that line.
+    //   Only those positions start a command whatever the text contains; a
+    //   `_flox_hook` line elsewhere may be inside a quoted string, a here-doc
+    //   or a continued line, and counting it would lose the hook.
+    // - VS Code moves the original text into `__vsc_original_prompt_command`
+    //   and runs it from `__vsc_prompt_cmd_original`, so that text counts only
+    //   while the wrapper is still in PROMPT_COMMAND; once something replaced
+    //   the wrapper, the saved copy no longer runs. VS Code assigns the
+    //   wrapper as the whole value, so only a whole value or array element
+    //   counts: anywhere else the name may be data (quoted, escaped, in a
+    //   comment or here-doc). If another tool added a command beside the
+    //   wrapper, the hook is added once more, which costs one extra call per
+    //   prompt instead of losing the hook. The hook's own prefix
+    //   (`_flox_hook;__vsc_prompt_cmd_original`) is found by the first rule
+    //   below.
+    //
+    // The names are matched case-sensitively whatever the user's options:
+    // under `nocasematch`, `__VSC_PROMPT_CMD_ORIGINAL` or a user's
+    // `_FLOX_HOOK` would count and the hook would be lost. The option is
+    // turned off for the block and restored before every exit.
+    //
+    // The helpers are unset, and the option restored, before assigning so a
+    // readonly PROMPT_COMMAND, whose assignment error aborts the block, leaves
+    // neither behind.
     formatdoc!(
         r#"
         export {PROMPT_HOOK_VERSION_ENV}={marker};
@@ -81,22 +110,41 @@ pub fn bash_hook(flox_bin: &str) -> String {
           trap - SIGINT;
           return $_prev_exit;
         }};
+        _flox_nocasematch=;
+        if shopt -q nocasematch; then _flox_nocasematch=1; shopt -u nocasematch; fi;
         if [[ "$(declare -p PROMPT_COMMAND 2>&1)" == "declare -a"* ]] && (( BASH_VERSINFO[0] * 100 + BASH_VERSINFO[1] >= 501 )); then
-          _flox_hook_registered=;
-          for _flox_prompt_command in "${{PROMPT_COMMAND[@]:-}}"; do
-            if [[ ";$_flox_prompt_command;" == *";_flox_hook;"* ]]; then
-              _flox_hook_registered=1;
-              break;
-            fi;
-          done;
-          if [[ -z $_flox_hook_registered ]]; then
-            unset _flox_hook_registered _flox_prompt_command;
-            PROMPT_COMMAND=(_flox_hook "${{PROMPT_COMMAND[@]}}");
-          fi;
-          unset _flox_hook_registered _flox_prompt_command;
-        elif [[ ";${{PROMPT_COMMAND:-}};" != *";_flox_hook;"* ]]; then
-          PROMPT_COMMAND="_flox_hook${{PROMPT_COMMAND:+;$PROMPT_COMMAND}}";
+          _flox_prompt_array=1;
+          _flox_prompt_commands=("${{PROMPT_COMMAND[@]:-}}");
+        else
+          _flox_prompt_array=;
+          _flox_prompt_commands=("${{PROMPT_COMMAND:-}}");
         fi;
+        for _flox_prompt_command in "${{_flox_prompt_commands[@]}}"; do
+          if [[ $_flox_prompt_command == __vsc_prompt_cmd_original ]]; then
+            _flox_prompt_commands+=("${{__vsc_original_prompt_command:-}}");
+            break;
+          fi;
+        done;
+        _flox_hook_registered=;
+        for _flox_prompt_command in "${{_flox_prompt_commands[@]}}"; do
+          if [[ ";$_flox_prompt_command;" == *";_flox_hook;"* || $_flox_prompt_command == _flox_hook$'\n'* || $_flox_prompt_command == '__bp_precmd_invoke_cmd "$_"'$'\n_flox_hook' || $_flox_prompt_command == '__bp_precmd_invoke_cmd "$_"'$'\n_flox_hook'[$';\n']* ]]; then
+            _flox_hook_registered=1;
+            break;
+          fi;
+        done;
+        if [[ -z $_flox_hook_registered ]]; then
+          if [[ -n $_flox_prompt_array ]]; then
+            if [[ -n ${{_flox_nocasematch:-}} ]]; then shopt -s nocasematch; fi;
+            unset _flox_prompt_array _flox_prompt_commands _flox_hook_registered _flox_prompt_command _flox_nocasematch;
+            PROMPT_COMMAND=(_flox_hook "${{PROMPT_COMMAND[@]}}");
+          else
+            if [[ -n ${{_flox_nocasematch:-}} ]]; then shopt -s nocasematch; fi;
+            unset _flox_prompt_array _flox_prompt_commands _flox_hook_registered _flox_prompt_command _flox_nocasematch;
+            PROMPT_COMMAND="_flox_hook${{PROMPT_COMMAND:+;$PROMPT_COMMAND}}";
+          fi;
+        fi;
+        if [[ -n ${{_flox_nocasematch:-}} ]]; then shopt -s nocasematch; fi;
+        unset _flox_prompt_array _flox_prompt_commands _flox_hook_registered _flox_prompt_command _flox_nocasematch;
         "#
     )
 }
