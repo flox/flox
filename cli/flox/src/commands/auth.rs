@@ -886,6 +886,11 @@ mod tests {
         }
     }
 
+    /// Any test touching the global hub, including every test that completes a
+    /// login, must be `#[serial(global_events_client)]` (the rule in
+    /// `cli/flox-events/README.md`). Tests in other modules that record events
+    /// do not all take that key, so observers count only `CliAuthenticated`
+    /// events, which only this module's serialized tests record.
     fn install_events_client(flox: &Flox) -> EventsClientReset {
         let client = EventsClient::new(
             Uuid::new_v4(),
@@ -1025,6 +1030,7 @@ mod tests {
     /// interactive one: with the OS keyring disabled it falls back to the
     /// plaintext config file rather than writing plain text unconditionally.
     #[tokio::test]
+    #[serial(global_events_client)]
     async fn login_with_token_file_stores_valid_token() {
         temp_env::async_with_vars([("_FLOX_DISABLE_KEYRING", Some("true"))], async {
             let (mut flox, _temp_dir) = flox_instance();
@@ -1061,7 +1067,7 @@ mod tests {
 
     #[test]
     #[serial(global_events_client)]
-    fn complete_login_records_fresh_auth0_subject_and_omits_pat_subject() {
+    fn complete_login_records_fresh_auth0_subject_and_omits_unresolved_pat_subject() {
         temp_env::with_var("_FLOX_DISABLE_KEYRING", Some("true"), || {
             let (mut flox, _temp_dir) = flox_instance();
             let _reset = install_events_client(&flox);
@@ -1079,7 +1085,10 @@ mod tests {
             .expect("Auth0 login completes");
             complete_login(
                 &mut flox,
-                AuthContext::new_from_token(Some("flox_pat_secret")),
+                // Identities resolved for opaque tokens are cached process-wide
+                // by secret, so a secret another test resolves would supply a
+                // subject here.
+                AuthContext::new_from_token(Some("flox_pat_unresolved-complete-login")),
                 "pat-user".to_string(),
                 false,
                 false,
@@ -1090,6 +1099,7 @@ mod tests {
             let buffer = EventsBuffer::read(&flox.data_dir).expect("read events");
             let recorded: Vec<_> = buffer
                 .iter()
+                .filter(|event| matches!(event.kind, EventKind::CliAuthenticated {}))
                 .map(|event| (event.auth_subject.as_deref(), &event.kind))
                 .collect();
             assert_eq!(recorded, vec![
@@ -1118,7 +1128,12 @@ mod tests {
         .expect_err("malformed token fails");
 
         let buffer = EventsBuffer::read(&flox.data_dir).expect("read events");
-        assert_eq!(buffer.iter().count(), 0);
+        let authenticated: Vec<_> = buffer
+            .iter()
+            .map(|event| &event.kind)
+            .filter(|kind| matches!(kind, EventKind::CliAuthenticated {}))
+            .collect();
+        assert_eq!(authenticated, Vec::<&EventKind>::new());
     }
 
     #[tokio::test]
@@ -1173,6 +1188,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    #[serial(global_events_client)]
     async fn login_with_token_file_stores_pat_and_resolves_handle() {
         temp_env::async_with_vars([("_FLOX_DISABLE_KEYRING", Some("true"))], async {
             let server = MockServer::start();
@@ -1220,6 +1236,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    #[serial(global_events_client)]
     async fn plaintext_logins_persist_resolved_identity() {
         temp_env::async_with_vars(
             [
@@ -1319,6 +1336,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    #[serial(global_events_client)]
     async fn login_with_token_file_refreshes_cached_identity() {
         temp_env::async_with_vars(
             [("_FLOX_DISABLE_KEYRING", Some("true")), (FLOXHUB_TOKEN_ENV_VAR, None)],
