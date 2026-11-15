@@ -159,7 +159,18 @@ _EXPECTED_LEAKS_FISH=''
 #   precmd / cwdcmd       — activate.tcsh registers these aliases to re-run
 #                           `flox hook-env`; not removed by deactivate.
 #   _already_sourced_args — activate-local helper var, not cleaned up.
-_EXPECTED_LEAKS_TCSH='_already_sourced_args cwdcmd precmd'
+#   _flox_hook            — alias holding the hook body that precmd and
+#                           cwdcmd call after the user's own callbacks.
+#   _flox_saved_precmd_1 / _flox_saved_cwdcmd_1
+#                         — the user's previous precmd and cwdcmd bodies.
+#                           Kept until shell exit, because a profile may
+#                           still hold a wrapper that calls them.
+#   _flox_hook_alias_generation
+#                         — counter that numbers those saved aliases.
+#   _flox_precmd_check / _flox_precmd_repair / _flox_saved_precmd_0
+#                         — restore the hook after a faulty user precmd
+#                           makes tcsh remove precmd; called from periodic.
+_EXPECTED_LEAKS_TCSH='_already_sourced_args _flox_hook _flox_hook_alias_generation _flox_precmd_check _flox_precmd_repair _flox_saved_cwdcmd_1 _flox_saved_precmd_0 _flox_saved_precmd_1 cwdcmd precmd'
 
 # Conditional (environment-dependent) leaks: allowed when present, but NOT
 # stale-checked. Their absence reflects the environment rather than a fix, so
