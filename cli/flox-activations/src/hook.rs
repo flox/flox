@@ -1,9 +1,14 @@
 //! Shell-specific hook registration code for auto-activation.
 //!
 //! The generated code registers a prompt hook that calls `flox hook-env`
-//! on every prompt, matching the behavior of direnv. The hook only
-//! fires in interactive shells (via PROMPT_COMMAND, precmd, fish_prompt),
-//! so it naturally does not trigger in non-interactive (e.g. `bash -c`) contexts.
+//! on every prompt, matching the behavior of direnv. zsh (`chpwd_functions`)
+//! and tcsh (`cwdcmd`) also call it on every directory change, and those
+//! callbacks run in noninteractive scripts too, so a script that sourced the
+//! hook can auto-activate an environment by changing directory. bash
+//! (`PROMPT_COMMAND`) calls it only before a prompt, and fish's PWD handler
+//! stays inert until the first prompt, so neither calls it in a script.
+//! Registration itself does not check for an interactive shell, so startup
+//! files must (see `flox-activate(1)`).
 //!
 //! Each hook passes the interactive shell's PID (`$$` / `$fish_pid`) so
 //! `hook-env` can find this shell's prompt-hook action file, plus the shell's
