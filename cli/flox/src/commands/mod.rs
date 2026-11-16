@@ -42,7 +42,7 @@ use std::path::PathBuf;
 use std::{env, fmt, mem};
 
 use anyhow::{Context, Result, bail};
-use bpaf::{Args, Bpaf, ParseFailure, Parser, ShellComp};
+use bpaf::{Args, Bpaf, Doc, ParseFailure, Parser, ShellComp};
 use flox_config::{Config, EnvironmentTrust, FLOX_DIR_NAME, TokenStorageMode};
 use flox_core::data::environment_ref::{self, DEFAULT_NAME, RemoteEnvironmentRef};
 use flox_core::floxhub::{DEFAULT_FLOXHUB_URL, Floxhub};
@@ -746,14 +746,8 @@ enum Commands {
     Beta(#[bpaf(external(beta::beta_commands))] beta::BetaCommands),
 
     /// Flox Factory operator commands (hidden; see operator runbook)
-    #[bpaf(command, hide)]
-    Factory(
-        #[bpaf(
-            external(factory::factory_commands),
-            fallback(factory::FactoryCommands::Help)
-        )]
-        factory::FactoryCommands,
-    ),
+    #[bpaf(command, hide, fallback_to_usage)]
+    Factory(#[bpaf(external(factory::factory_commands))] factory::FactoryCommands),
 }
 
 #[derive(Debug, Bpaf, Clone)]
@@ -763,8 +757,13 @@ struct Help {
     cmd: Option<String>,
 }
 
+/// Render generated help consistently for flags, bare groups, and help commands.
+pub fn display_help(doc: &Doc) {
+    print!("{doc:80}");
+}
+
 /// Force `--help` output for `flox` with a given command
-pub fn display_help(cmd: Option<String>) {
+pub fn display_command_help(cmd: Option<String>) {
     // `flox run` uses an unconditional catchall that consumes `--help`, so
     // running `flox_cli().run_inner(["run", "--help"])` would parse OK and
     // hit the `unreachable!()` arm below — a panic. Route to the hand-written
@@ -777,16 +776,16 @@ pub fn display_help(cmd: Option<String>) {
     let mut args = Vec::from_iter(cmd.as_deref());
     args.push("--help");
 
-    match flox_cli().run_inner(&*args) {
+    match flox_cli().run_inner(Args::from(&*args).set_name("flox")) {
         Ok(_) => unreachable!(),
         Err(ParseFailure::Completion(comp)) => print!("{comp:80}"),
-        Err(ParseFailure::Stdout(doc, _)) => message::plain(format!("{doc:80}")),
+        Err(ParseFailure::Stdout(doc, _)) => display_help(&doc),
         Err(ParseFailure::Stderr(err)) => message::error(err),
     }
 }
 impl Help {
     fn handle(self) {
-        display_help(self.cmd);
+        display_command_help(self.cmd);
     }
 }
 
@@ -862,14 +861,8 @@ enum UseCommands {
     Run(#[bpaf(external(run::run))] run::Run),
 
     /// Manage services in an environment
-    #[bpaf(command, long("service"))]
-    Services(
-        #[bpaf(
-            external(services::services_commands),
-            fallback(services::ServicesCommands::Help)
-        )]
-        services::ServicesCommands,
-    ),
+    #[bpaf(command, long("service"), fallback_to_usage)]
+    Services(#[bpaf(external(services::services_commands))] services::ServicesCommands),
 }
 
 impl UseCommands {
@@ -948,14 +941,8 @@ enum ModifyCommands {
     Edit(#[bpaf(external(edit::edit))] edit::Edit),
 
     /// Compose environments together
-    #[bpaf(command)]
-    Include(
-        #[bpaf(
-            external(include::include_commands),
-            fallback(include::IncludeCommands::Help)
-        )]
-        include::IncludeCommands,
-    ),
+    #[bpaf(command, fallback_to_usage)]
+    Include(#[bpaf(external(include::include_commands))] include::IncludeCommands),
 
     /// Upgrade packages in an environment
     #[bpaf(command, long("update"), footer("Run 'man flox-upgrade' for more details."), header(indoc! {"
@@ -985,13 +972,9 @@ enum ModifyCommands {
     Uninstall(#[bpaf(external(uninstall::uninstall))] uninstall::Uninstall),
 
     /// Version control for environments pushed to FloxHub
-    #[bpaf(command, long("generations"), long("generation"))]
+    #[bpaf(command, long("generations"), long("generation"), fallback_to_usage)]
     Generations(
-        #[bpaf(
-            external(generations::generations_commands),
-            fallback(generations::GenerationsCommands::Help)
-        )]
-        generations::GenerationsCommands,
+        #[bpaf(external(generations::generations_commands))] generations::GenerationsCommands,
     ),
 }
 
@@ -1085,7 +1068,11 @@ impl ShareCommands {
 #[derive(Bpaf, Clone)]
 enum AdminCommands {
     /// FloxHub authentication commands
-    #[bpaf(command, footer("Run 'man flox-auth' for more details."))]
+    #[bpaf(
+        command,
+        fallback_to_usage,
+        footer("Run 'man flox-auth' for more details.")
+    )]
     Auth(#[bpaf(external(auth::auth))] auth::Auth),
 
     /// View and set configuration options
