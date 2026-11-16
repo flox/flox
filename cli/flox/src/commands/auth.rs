@@ -106,6 +106,17 @@ impl LoginConfig {
     }
 }
 
+/// How `flox auth login` gets the user to approve the login.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LoginMode {
+    /// Offer to open the browser at a prompt, which needs a terminal.
+    Interactive,
+    /// Print the URL and wait for the approval, which needs no terminal but
+    /// does need a user. Only the caller knows whether one is there, so it
+    /// has to ask for this with `--wait`.
+    Wait,
+}
+
 /// Resolve each login value by precedence: an explicit `_FLOX_OAUTH_*`
 /// environment override, then the deployment's discovered document, then the
 /// compiled-in constants. Env vars on top preserves the debugging escape
@@ -155,10 +166,16 @@ fn merge_login_config(discovered: Option<DiscoveredLoginConfig>) -> Result<Login
     })
 }
 
+/// Run the device grant against `client`.
+///
+/// [LoginMode::Wait] never listens for the Enter key: the URL and code are
+/// printed and polled for until the code expires. That is what lets an agent
+/// run the login and relay the URL to its user, who approves it in a browser.
 pub async fn authorize(
     client: ConfiguredClient,
     audience: Option<&str>,
     floxhub_url: &Url,
+    mode: LoginMode,
 ) -> Result<Credential> {
     let http_client = reqwest::ClientBuilder::new()
         .redirect(redirect::Policy::none())
@@ -200,19 +217,19 @@ pub async fn authorize(
     );
     tokio::pin!(token_future);
 
+    let host = floxhub_url.host_str().unwrap_or(floxhub_url.as_str());
+
     let token_result = match opener {
-        Ok(opener) => {
+        Ok(opener) if mode == LoginMode::Interactive => {
             let message = formatdoc! {"
-            Logging in to {url}
+            Logging in to {host}
             Your one-time activation code is: {code}
 
             Open this URL in any browser:
             {verification_uri}
 
             Or press Enter to open your default browser...
-            ",
-                url = floxhub_url.host_str().unwrap_or(floxhub_url.as_str()),
-            };
+            "};
 
             debug!(
                 "Waiting for user to enter code (timeout: {}s)",
@@ -252,14 +269,36 @@ pub async fn authorize(
                 token_result = &mut token_future => token_result,
             }
         },
-        Err(e) => {
-            debug!("Unable to open browser: {e}");
+        opener => {
+            if let Err(e) = opener {
+                debug!("Unable to open browser: {e}");
+            }
 
+            // Say that the command keeps running: a caller that asked to
+            // wait may be an agent, which otherwise can't tell a login
+            // waiting for approval from a hung one.
+            //
+            // A rerun starts over with a new code, and approving the old code
+            // doesn't log in the new run, so the caller has to pass on the
+            // new URL. In the background the wait doesn't depend on what an
+            // agent's harness does with a command that outlasts its time
+            // limit.
+            let interrupted_hint = match mode {
+                LoginMode::Interactive => "",
+                LoginMode::Wait => {
+                    "If interrupted, run 'flox auth login --wait' in the background for a new code.\n"
+                },
+            };
             message::plain(formatdoc! {"
-            Go to {verification_uri} in your browser
-
+            Logging in to {host}
             Your one-time activation code is: {code}
-            "
+
+            Open this URL in any browser to approve the login:
+            {verification_uri}
+
+            Waiting for approval. The code expires in {expiry}.
+            {interrupted_hint}",
+                expiry = format_minutes(details.expires_in()),
             });
 
             token_future.await
@@ -270,10 +309,7 @@ pub async fn authorize(
         Err(RequestTokenError::ServerResponse(ref r))
             if r.error() == &DeviceCodeErrorResponseType::ExpiredToken =>
         {
-            bail!(
-                "failed to authenticate before the device code expired. \
-                 Please retry to get a new code."
-            );
+            bail!(expired_code_message(mode));
         },
         _ => token_result?,
     };
@@ -284,6 +320,28 @@ pub async fn authorize(
             .expires_in()
             .map(|expires_in| calculate_expiry(expires_in.as_secs() as i64)),
     })
+}
+
+/// What to say once the code has run out without an approval.
+fn expired_code_message(mode: LoginMode) -> &'static str {
+    match mode {
+        LoginMode::Interactive => indoc! {"
+            The activation code expired before the login was approved.
+            Run 'flox auth login' to get a new code."},
+        // A wait that nobody answered may have had no user to answer it.
+        LoginMode::Wait => indoc! {"
+            The activation code expired before the login was approved.
+            For CI and automation, see https://go.flox.dev/auth
+            Run 'flox auth login --wait' to get a new code."},
+    }
+}
+
+/// `duration` in whole minutes, rounded up, e.g. "15 minutes".
+fn format_minutes(duration: std::time::Duration) -> String {
+    match duration.as_secs().div_ceil(60) {
+        1 => "1 minute".to_string(),
+        minutes => format!("{minutes} minutes"),
+    }
 }
 
 fn calculate_expiry(expires_in: i64) -> String {
@@ -306,6 +364,9 @@ pub enum Auth {
         /// Read a FloxHub token from PATH instead of logging in interactively (use '-' for stdin)
         #[bpaf(long("token-file"), argument("PATH"))]
         token_file: Option<PathBuf>,
+        /// Print the login URL and wait for a user to approve it in a browser, without prompting
+        #[bpaf(long("wait"))]
+        wait: bool,
         /// Store the token in plain text in flox.toml instead of the OS keyring
         #[bpaf(long("insecure-storage"))]
         insecure_storage: bool,
@@ -340,6 +401,7 @@ impl Auth {
             },
             Auth::Login {
                 token_file,
+                wait,
                 insecure_storage,
                 once,
             } => {
@@ -352,6 +414,15 @@ impl Auth {
                 if once && !insecure_storage {
                     bail!("'--once' has no effect without '--insecure-storage'.");
                 }
+                // A token file logs in at once, with no approval to wait for.
+                if wait && token_file.is_some() {
+                    bail!("'--wait' has no effect with '--token-file'.");
+                }
+                let mode = if wait {
+                    LoginMode::Wait
+                } else {
+                    LoginMode::Interactive
+                };
                 match token_file {
                     Some(path) => {
                         login_with_token_file(
@@ -366,6 +437,7 @@ impl Auth {
                     None => {
                         login_flox(
                             &mut flox,
+                            mode,
                             insecure_storage,
                             once,
                             config.flox.floxhub_token_storage,
@@ -513,14 +585,22 @@ impl Auth {
 // `kinit`).
 pub async fn login_flox(
     flox: &mut Flox,
+    mode: LoginMode,
     insecure_storage: bool,
     once: bool,
     storage_pref: TokenStorageMode,
 ) -> Result<String> {
-    // Checked before discovery so a non-interactive invocation fails fast
-    // instead of probing the network first.
-    if !Dialog::can_prompt() {
-        bail!("Cannot prompt for user input")
+    // Without a terminal nobody can answer the prompt, and nothing says that
+    // a user is there to approve the login instead: CI jobs and scripts have
+    // none, and would wait until the code expires.
+    if mode == LoginMode::Interactive && !Dialog::can_prompt() {
+        bail!(indoc! {"
+            Cannot log in interactively without a terminal.
+            For CI and automation, use 'flox auth login --token-file <PATH>'.
+            See https://go.flox.dev/auth
+            To have a user approve the login in a browser, use 'flox auth login --wait'.
+            From an agent, run it in the background, because it waits for the approval."
+        });
     }
 
     let floxhub_url = flox.floxhub.base_url();
@@ -534,6 +614,7 @@ pub async fn login_flox(
         login_config.oauth_client(),
         login_config.audience.as_deref(),
         floxhub_url,
+        mode,
     )
     .await
     .context("Could not authorize via oauth")?;
