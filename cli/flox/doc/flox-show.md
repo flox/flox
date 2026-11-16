@@ -41,13 +41,11 @@ To install a version, its pkg-group must use one of those stabilities.
 ## Show Options
 
 `--all`
-:   Show the stabilities that have each version,
-    strictest first.
+:   Show additional metadata about each version, including stabilities that provide each version.
     Ignored with `--json`.
 
 `--json`
-:   Display available versions as a JSON array.
-    Each entry includes the build's `available_stabilities`.
+:   Display available versions as a JSON array with all available metadata about each version.
 
 `<pkg-path>`
 :   Package name to show details for.

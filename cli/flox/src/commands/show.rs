@@ -78,7 +78,7 @@ impl Show {
 }
 
 fn render_show_versions_json(writer: &mut impl Write, versions: &[PackageBuild]) -> Result<()> {
-    let json = serde_json::to_string(versions)?;
+    let json = serde_json::to_string_pretty(versions)?;
     writeln!(writer, "{json}")?;
     Ok(())
 }
@@ -508,7 +508,7 @@ mod test {
         render_show_versions_json(&mut buf, &results).unwrap();
         let json = String::from_utf8(buf).unwrap();
 
-        assert_eq!(json.lines().count(), 1);
+        assert!(json.trim().contains('\n'), "expected pretty-printed JSON");
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
         let entries = parsed.as_array().unwrap();
         assert_eq!(entries.len(), 1);
