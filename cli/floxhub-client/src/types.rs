@@ -132,7 +132,7 @@ impl From<PackageBuildResponse> for PublishReceipt {
 }
 
 /// The content of a generic message.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MsgGeneral {
     pub level: MessageLevel,
     pub msg: String,
@@ -222,7 +222,7 @@ pub struct MsgUnknown {
 ///
 /// Constructed from [`ResolutionMessageGeneral`] by matching on `type_` and
 /// interpreting the `context` field.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ResolutionMessage {
     General(MsgGeneral),
     AttrPathNotFoundNotInCatalog(MsgAttrPathNotFoundNotInCatalog),

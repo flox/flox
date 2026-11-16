@@ -1232,43 +1232,50 @@ pub mod tests {
             .await
             .unwrap();
 
-        let availabilities = res[0]
-            .msgs
-            .iter()
-            .map(|msg| match msg {
-                ResolutionMessage::VersionNotFound(msg) => {
-                    ("version_not_found", msg.stability_availability.clone())
-                },
-                ResolutionMessage::AttrPathNotFoundNotOnCurrentStability(msg) => (
-                    "not_on_current_stability",
-                    Some(msg.stability_availability.clone()),
-                ),
-                ResolutionMessage::AttrPathNotFoundNotInCatalog(_) => ("not_in_catalog", None),
-                other => panic!("unexpected message: {other:?}"),
-            })
-            .collect::<Vec<_>>();
-        assert_eq!(availabilities, vec![
-            (
-                "version_not_found",
-                Some(StabilityAvailability {
-                    stability: "lts".to_string(),
-                    available: vec![
-                        "stable".to_string(),
-                        "staging".to_string(),
-                        "unstable".to_string()
-                    ],
-                })
+        let lts = |available: &[&str]| StabilityAvailability {
+            stability: "lts".to_string(),
+            available: available.iter().map(|s| s.to_string()).collect(),
+        };
+        assert_eq!(res[0].msgs, vec![
+            ResolutionMessage::VersionNotFound(MsgVersionNotFound {
+                level: MessageLevel::Error,
+                msg: "no 3.12 at lts".to_string(),
+                attr_path: "python3".to_string(),
+                install_id: "python3".to_string(),
+                system: "x86_64-linux".to_string(),
+                stability_availability: Some(lts(&["stable", "staging", "unstable"])),
+            }),
+            ResolutionMessage::AttrPathNotFoundNotOnCurrentStability(
+                MsgAttrPathNotFoundNotOnCurrentStability {
+                    level: MessageLevel::Error,
+                    msg: "hello is not at lts".to_string(),
+                    attr_path: "hello".to_string(),
+                    install_id: "hello".to_string(),
+                    stability_availability: lts(&["unstable"]),
+                }
             ),
-            (
-                "not_on_current_stability",
-                Some(StabilityAvailability {
-                    stability: "lts".to_string(),
-                    available: vec!["unstable".to_string()],
-                })
-            ),
-            ("not_in_catalog", None),
-            ("not_in_catalog", None),
-            ("version_not_found", None),
+            // `not_on_current_stability` without stabilities is read as
+            // `not_in_catalog`, keeping the catalog's message.
+            ResolutionMessage::AttrPathNotFoundNotInCatalog(MsgAttrPathNotFoundNotInCatalog {
+                level: MessageLevel::Error,
+                msg: "no context".to_string(),
+                attr_path: "hello".to_string(),
+                install_id: "hello".to_string(),
+            }),
+            ResolutionMessage::AttrPathNotFoundNotInCatalog(MsgAttrPathNotFoundNotInCatalog {
+                level: MessageLevel::Error,
+                msg: "no nope".to_string(),
+                attr_path: "nope".to_string(),
+                install_id: "nope".to_string(),
+            }),
+            ResolutionMessage::VersionNotFound(MsgVersionNotFound {
+                level: MessageLevel::Error,
+                msg: "no 3.12".to_string(),
+                attr_path: "python3".to_string(),
+                install_id: "python3".to_string(),
+                system: "x86_64-linux".to_string(),
+                stability_availability: None,
+            }),
         ]);
         mock.assert();
     }
