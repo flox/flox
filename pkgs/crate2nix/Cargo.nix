@@ -5719,6 +5719,10 @@ rec {
             packageId = "flox-core";
           }
           {
+            name = "floxhub-client";
+            packageId = "floxhub-client";
+          }
+          {
             name = "glob";
             packageId = "glob";
           }

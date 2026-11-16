@@ -8,6 +8,7 @@ use flox_core::activate::context::AutoActivateFishMode;
 use flox_core::data::environment_ref::RemoteEnvironmentRef;
 use flox_core::features::Features;
 use flox_core::floxhub::Floxhub;
+use floxhub_client::CatalogFlakeFetcher;
 use glob::{MatchOptions, Pattern};
 use serde::{Deserialize, Serialize};
 use toml_edit::Key;
@@ -131,6 +132,10 @@ pub struct FloxConfig {
     // api/catalog urls should be derived from floxhub_url.
     // Manually setting derived urls should be an internal knob (see _FLOX_FLOXHUB_GIT_URL).
     pub catalog_url: Option<Url>,
+
+    /// Nixpkgs fetcher for build and publish: git (default), github, or gitlab.
+    #[serde(default)]
+    pub catalog_flake_fetcher: CatalogFlakeFetcher,
 
     /// Authentication mode for FloxHub.
     /// Unset means the consumer's compiled-in default.
