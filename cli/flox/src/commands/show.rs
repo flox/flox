@@ -16,11 +16,6 @@ use crate::utils::tracing::sentry_set_tag;
 // Show detailed package information
 #[derive(Debug, Bpaf, Clone)]
 pub struct Show {
-    /// The package to show detailed information about. Must be an exact match
-    /// for a pkg-path e.g. something copy-pasted from the output of `flox search`.
-    #[bpaf(positional("pkg-path"))]
-    pub pkg_path: String,
-
     /// Display available versions as a JSON array
     #[bpaf(long)]
     pub json: bool,
@@ -28,6 +23,12 @@ pub struct Show {
     /// Show the stabilities that have each version
     #[bpaf(short, long)]
     pub all: bool,
+
+    /// The package to show detailed information about. Must be an exact match
+    /// for a pkg-path e.g. something copy-pasted from the output of `flox search`.
+    // bpaf requires positionals to be the last field.
+    #[bpaf(positional("pkg-path"))]
+    pub pkg_path: String,
 }
 
 impl Show {
@@ -245,6 +246,7 @@ fn version_rows(
 
 #[cfg(test)]
 mod test {
+    use bpaf::Parser;
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::providers::catalog::test_helpers::auto_recording_catalog_client;
     use floxhub_client::client::test_helpers::client_config;
@@ -254,6 +256,13 @@ mod test {
     use pretty_assertions::assert_eq;
 
     use super::*;
+
+    /// bpaf only reports a misplaced positional while building usage, so
+    /// this fails if `pkg_path` stops being the last field of `Show`.
+    #[test]
+    fn show_parser_satisfies_bpaf_invariants() {
+        show().to_options().check_invariants(true);
+    }
 
     #[tokio::test]
     async fn show_handles_no_available_builds() {
