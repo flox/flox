@@ -12,7 +12,7 @@ flox-show - show detailed information about a single package
 # SYNOPSIS
 
 ```text
-flox [<general-options>] show <pkg-path>
+flox [<general-options>] show [--all] [--json] <pkg-path>
 ```
 
 # DESCRIPTION
@@ -24,7 +24,8 @@ Show detailed information about a single package.
 The default output includes the package description,
 available outputs (with defaults marked by `*`),
 and available versions.
-Each version lists the stabilities that have it, strictest first.
+With `--all`, each version also lists the stabilities that have it,
+strictest first.
 To install a version, its pkg-group must use one of those stabilities.
 
 ```{.include}
@@ -38,6 +39,15 @@ To install a version, its pkg-group must use one of those stabilities.
 ```
 
 ## Show Options
+
+`--all`
+:   Show the stabilities that have each version,
+    strictest first.
+    Ignored with `--json`.
+
+`--json`
+:   Display available versions as a JSON array.
+    Each entry includes the build's `available_stabilities`.
 
 `<pkg-path>`
 :   Package name to show details for.

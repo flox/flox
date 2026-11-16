@@ -20,6 +20,14 @@ pub struct Show {
     /// for a pkg-path e.g. something copy-pasted from the output of `flox search`.
     #[bpaf(positional("pkg-path"))]
     pub pkg_path: String,
+
+    /// Display available versions as a JSON array
+    #[bpaf(long)]
+    pub json: bool,
+
+    /// Show the stabilities that have each version
+    #[bpaf(short, long)]
+    pub all: bool,
 }
 
 impl Show {
@@ -27,6 +35,8 @@ impl Show {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("show");
         sentry_set_tag("pkg_path", &self.pkg_path);
+        sentry_set_tag("json", self.json);
+        sentry_set_tag("show_all", self.all);
 
         tracing::debug!("using catalog client for show");
         let results = match flox.floxhub_client.package_versions(&self.pkg_path).await {
@@ -51,16 +61,32 @@ impl Show {
         .iter()
         .map(|s| s.to_string())
         .collect::<HashSet<_>>();
-        render_show_catalog(&mut std::io::stdout(), &results.results, &expected_systems)?;
+        if self.json {
+            render_show_versions_json(&mut std::io::stdout(), &results.results)?;
+        } else {
+            render_show_catalog(
+                &mut std::io::stdout(),
+                &results.results,
+                &expected_systems,
+                self.all,
+            )?;
+        }
 
         Ok(())
     }
+}
+
+fn render_show_versions_json(writer: &mut impl Write, versions: &[PackageBuild]) -> Result<()> {
+    let json = serde_json::to_string(versions)?;
+    writeln!(writer, "{json}")?;
+    Ok(())
 }
 
 fn render_show_catalog(
     writer: &mut impl Write,
     search_results: &[PackageBuild],
     expected_systems: &HashSet<System>,
+    all: bool,
 ) -> Result<()> {
     if search_results.is_empty() {
         // This should never happen since we've already checked that the
@@ -127,10 +153,13 @@ fn render_show_catalog(
     let rows = version_rows(pkg_path.as_str(), search_results, expected_systems);
     let version_width = rows.iter().map(|row| row.version.len()).max().unwrap_or(0);
     // Catalogs that don't report stabilities get no stabilities column.
-    let stabilities_width = rows
-        .iter()
-        .filter_map(|row| row.stabilities.as_ref().map(String::len))
-        .max();
+    let stabilities_width = all
+        .then(|| {
+            rows.iter()
+                .filter_map(|row| row.stabilities.as_ref().map(String::len))
+                .max()
+        })
+        .flatten();
 
     for row in rows {
         let mut line = format!("{:<version_width$}", row.version);
@@ -242,6 +271,8 @@ mod test {
 
         let err = Show {
             pkg_path: "search_term".to_string(),
+            json: false,
+            all: false,
         }
         .handle(flox)
         .await
@@ -261,6 +292,8 @@ mod test {
         let search_term = "search_term";
         let err = Show {
             pkg_path: search_term.to_string(),
+            json: false,
+            all: false,
         }
         .handle(flox)
         .await
@@ -343,7 +376,7 @@ mod test {
         ];
 
         let mut buf = vec![];
-        render_show_catalog(&mut buf, &packages, &all_systems()).unwrap();
+        render_show_catalog(&mut buf, &packages, &all_systems(), false).unwrap();
         let output = String::from_utf8(buf).unwrap();
 
         // Verify that system restrictions are aligned despite different version lengths
@@ -361,8 +394,9 @@ mod test {
             "});
     }
 
-    /// Each version lists the stabilities that have it on every system it's
-    /// listed for, in an aligned column before any system restriction.
+    /// With `--all`, each version lists the stabilities that have it on every
+    /// system it's listed for, in an aligned column before any system
+    /// restriction.
     #[test]
     fn versions_list_their_stabilities() {
         let stable = ["stable", "staging", "unstable"];
@@ -382,7 +416,7 @@ mod test {
         }
 
         let mut buf = vec![];
-        render_show_catalog(&mut buf, &packages, &all_systems()).unwrap();
+        render_show_catalog(&mut buf, &packages, &all_systems(), true).unwrap();
         let output = String::from_utf8(buf).unwrap();
 
         assert_eq!(output, indoc! {"
@@ -398,5 +432,82 @@ mod test {
                     pkg@2.0     stable, staging, unstable
                     pkg@1.0     stable, staging, unstable
             "});
+    }
+
+    /// The default output has no stabilities column, even when the catalog
+    /// reports stabilities.
+    #[test]
+    fn default_output_omits_stabilities() {
+        let packages = vec![
+            mock_pkg_at("2.0", "aarch64-darwin", &["stable", "unstable"]),
+            mock_pkg_at("1.0", "aarch64-darwin", &["unstable"]),
+        ];
+
+        let mut buf = vec![];
+        render_show_catalog(&mut buf, &packages, &all_systems(), false).unwrap();
+        let output = String::from_utf8(buf).unwrap();
+
+        assert_eq!(output, indoc! {"
+                pkg - test
+                Catalog: nixpkgs
+                Latest:  pkg@2.0
+                License: MIT
+                Outputs: sub-pkg*, sub-pkg-other (* installed by default)
+                Systems: aarch64-darwin
+
+                Other versions:
+                    pkg@2.0 (aarch64-darwin only)
+                    pkg@1.0 (aarch64-darwin only)
+            "});
+    }
+
+    /// A catalog that doesn't report stabilities gets no column under `--all`.
+    #[test]
+    fn all_without_reported_stabilities_has_no_column() {
+        let packages = vec![
+            mock_pkg("1.0", "aarch64-darwin"),
+            mock_pkg("10.0.0", "aarch64-darwin"),
+        ];
+
+        let mut buf = vec![];
+        render_show_catalog(&mut buf, &packages, &all_systems(), true).unwrap();
+        let output = String::from_utf8(buf).unwrap();
+
+        assert_eq!(output, indoc! {"
+                pkg - test
+                Catalog: nixpkgs
+                Latest:  pkg@1.0
+                License: MIT
+                Outputs: sub-pkg*, sub-pkg-other (* installed by default)
+                Systems: aarch64-darwin
+
+                Other versions:
+                    pkg@1.0    (aarch64-darwin only)
+                    pkg@10.0.0 (aarch64-darwin only)
+            "});
+    }
+
+    /// `--json` serializes the version results, including each build's
+    /// stabilities, as a single-line array.
+    #[test]
+    fn json_serializes_version_results() {
+        let results = vec![mock_pkg_at("1.0", "aarch64-darwin", &[
+            "stable", "unstable",
+        ])];
+
+        let mut buf = vec![];
+        render_show_versions_json(&mut buf, &results).unwrap();
+        let json = String::from_utf8(buf).unwrap();
+
+        assert_eq!(json.lines().count(), 1);
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let entries = parsed.as_array().unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0]["version"], "1.0");
+        assert_eq!(entries[0]["system"], "aarch64-darwin");
+        assert_eq!(
+            entries[0]["available_stabilities"],
+            serde_json::json!(["stable", "unstable"])
+        );
     }
 }
