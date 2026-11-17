@@ -4934,6 +4934,36 @@ mod tests {
         assert_eq!(guidance, expected);
     }
 
+    /// Inside a `- ` bullet, the guidance's blank lines and `[table]` block
+    /// keep their indentation, so the whole block reads as one list item.
+    #[test]
+    fn unavailable_at_stability_renders_inside_multiple_failures_bullets() {
+        let failures = ResolutionFailures(vec![
+            ResolutionFailure::UnavailableAtStability(unavailable_at_stability(
+                "legacy",
+                StabilitySetting::PkgGroup("legacy".to_string()),
+                false,
+            )),
+            ResolutionFailure::FallbackMessage {
+                msg: "Something else failed.".to_string(),
+            },
+        ]);
+
+        let expected = indoc! {r#"
+            multiple resolution failures:
+            - Package 'python3@>=3.12' has no build at stability 'lts'.
+              It has builds at: stable, unstable.
+              Use 'flox edit' to set a stability that has it:
+
+                [pkg-groups.legacy]
+                stability = "stable"
+
+              This applies to every package in pkg-group 'legacy'.
+            - Something else failed."#};
+
+        assert_eq!(failures.to_string(), expected);
+    }
+
     /// The suggested table must parse as a manifest, which a bare dotted
     /// group name wouldn't.
     #[test]
