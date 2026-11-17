@@ -16,11 +16,13 @@ use crate::utils::tracing::sentry_set_tag;
 // Show detailed package information
 #[derive(Debug, Bpaf, Clone)]
 pub struct Show {
-    /// Display available versions as a JSON array
+    /// Display available versions as a JSON array with all available
+    /// metadata about each version.
     #[bpaf(long)]
     pub json: bool,
 
-    /// Show the stabilities that have each version
+    /// Show additional metadata about each version, including stabilities
+    /// that provide each version. Ignored with --json.
     #[bpaf(short, long)]
     pub all: bool,
 
