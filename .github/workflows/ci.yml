@@ -61,8 +61,8 @@ jobs:
   # of this repository. A job-level skip does not post the per-leg contexts the
   # branch protection requires: on fork PR #4488, skipping `nix-build` at the
   # job level produced exactly one check run named `Nix build`, with no matrix
-  # suffix and zero per-leg contexts; all four `Nix build (<system>)` contexts
-  # on that commit came from the separate community-ci run. 14 of the 16
+  # suffix and zero per-leg contexts; every `Nix build (<system>)` context
+  # on that commit came from the separate community-ci run. Most of the
   # contexts in the `Main ruleset` are matrix legs owned by the four jobs gated
   # here, so a job-level skip does not leave a required context pending — it
   # means the context is never *created*, and the merge queue ejects the pull
@@ -357,7 +357,6 @@ jobs:
       matrix:
         system:
           - "x86_64-linux"
-          - "x86_64-darwin"
           - "aarch64-linux"
           - "aarch64-darwin"
 
@@ -445,7 +444,6 @@ jobs:
       matrix:
         system:
           - "x86_64-linux"
-          - "x86_64-darwin"
           - "aarch64-linux"
           - "aarch64-darwin"
 
@@ -604,24 +602,11 @@ jobs:
       matrix:
         system:
           - "x86_64-linux"
-          - "x86_64-darwin"
           - "aarch64-linux"
           - "aarch64-darwin"
         test-tags:
           - "containerize"
           - "!containerize"
-        exclude:
-          # Skip containerize tests on x86_64-darwin (except the ones enabled in the include section below)
-          - system: "x86_64-darwin"
-        include:
-          # Disable containerize and activation tests on x86_64-darwin
-          # Containerize tests are run through rosetta, and thus are slow and dont necessarily represent real usage.
-          # Activation tests are taking the largest part of test runtime (up to ~10 minutes)
-          # we disable these in an effort to speed up CI.
-          # We assume that activation is sufficiently tested on macos through aarch64-darwin
-          # and on x86_64-darwin through the remaining integration tests
-          - system: "x86_64-darwin"
-            test-tags: "!containerize,!activate"
 
     steps:
       - name: "Checkout"
