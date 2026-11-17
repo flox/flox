@@ -25,6 +25,7 @@ use flox_manifest::lockfile::{
 };
 use flox_manifest::parsed::common::{
     Allows,
+    DEFAULT_GROUP_NAME,
     DEFAULT_PRIORITY,
     IncludeDescriptor,
     KnownSchemaVersion,
@@ -46,9 +47,11 @@ use floxhub_client::{
     MsgAttrPathNotFoundSystemsNotOnSamePage,
     MsgConstraintsTooTight,
     MsgUnknown,
+    MsgVersionNotFound,
     PackageGroup,
     ResolutionMessage,
     ResolvedPackageGroup,
+    StabilityAvailability,
 };
 use indent::{indent_all_by, indent_by};
 use indoc::formatdoc;
@@ -128,13 +131,56 @@ pub enum ResolveError {
 }
 
 /// Where a pkg-group's stability is set.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum StabilitySetting {
     /// `pkg-groups.<group>.stability`
     PkgGroup(String),
     /// `options.stability`, which applies to every pkg-group that doesn't
     /// set its own.
     Options,
+}
+
+impl StabilitySetting {
+    /// The setting that decides the stability of `group` in `manifest`.
+    fn for_group(manifest: &ManifestLatest, group: &str) -> Self {
+        if manifest.group_stability_override(group).is_some() {
+            Self::PkgGroup(group.to_string())
+        } else {
+            Self::Options
+        }
+    }
+
+    /// The table of the manifest that holds the setting, with the group name
+    /// quoted if it isn't a bare key, e.g. `pkg-groups."v1.2"`.
+    fn table(&self) -> String {
+        match self {
+            Self::PkgGroup(group) => PkgGroups::key_path(group),
+            Self::Options => "options".to_string(),
+        }
+    }
+
+    /// Whether an included environment, rather than `composer`, sets this
+    /// setting to `stability`. The composer's settings win over its
+    /// includes', so it sets the stability if it has any value for the
+    /// setting.
+    fn is_set_by_include(&self, stability: &str, composer: &ManifestLatest) -> bool {
+        let composer_stability = match self {
+            Self::PkgGroup(group) => composer.group_stability_override(group),
+            Self::Options => composer.options.stability.as_deref(),
+        };
+        composer_stability != Some(stability)
+    }
+}
+
+/// What to do about a stability that an included environment sets, ending
+/// without punctuation so that the caller can continue the sentence.
+///
+/// The composer's settings win over its includes', so it can override a
+/// stability that an include sets.
+fn included_stability_step(location: &str) -> String {
+    formatdoc! {"
+        An included environment sets {location}.
+        Change it in that environment, or override it with 'flox edit'"}
 }
 
 fn unknown_stability_message(
@@ -153,12 +199,8 @@ fn unknown_stability_message(
             "'options.stability'".to_string(),
         ),
     };
-    // The composer's settings win over its includes', so it can override a
-    // stability that an include sets.
     let next_step = if in_include {
-        formatdoc! {"
-            An included environment sets {location}.
-            Change it in that environment, or override it with 'flox edit'."}
+        format!("{}.", included_stability_step(&location))
     } else {
         format!("Change {location} with 'flox edit'.")
     };
@@ -750,12 +792,10 @@ impl LockManifest {
                 .iter()
                 .filter_map(|group| {
                     let stability = group.stability.clone()?;
-                    let setting = if manifest.group_stability_override(&group.name).is_some() {
-                        StabilitySetting::PkgGroup(group.name.clone())
-                    } else {
-                        StabilitySetting::Options
-                    };
-                    Some((setting, stability))
+                    Some((
+                        StabilitySetting::for_group(manifest, &group.name),
+                        stability,
+                    ))
                 })
                 .collect::<Vec<_>>();
             match client.resolve(groups_to_lock).await {
@@ -850,22 +890,27 @@ impl LockManifest {
             .unwrap_or(ResolveError::CatalogResolve(err))
     }
 
-    /// Mark an unknown stability that `composer` doesn't set as coming from
-    /// an included environment, so that the error points to the manifest
-    /// that sets it.
+    /// Mark a stability that `composer` doesn't set as coming from an
+    /// included environment, so that the error points to the manifest that
+    /// sets it.
     fn mark_included_stability(mut err: ResolveError, composer: &ManifestLatest) -> ResolveError {
-        if let ResolveError::UnknownStability {
-            setting,
-            stability,
-            in_include,
-            ..
-        } = &mut err
-        {
-            let composer_stability = match setting {
-                StabilitySetting::PkgGroup(group) => composer.group_stability_override(group),
-                StabilitySetting::Options => composer.options.stability.as_deref(),
-            };
-            *in_include = composer_stability != Some(stability.as_str());
+        match &mut err {
+            ResolveError::UnknownStability {
+                setting,
+                stability,
+                in_include,
+                ..
+            } => *in_include = setting.is_set_by_include(stability, composer),
+            ResolveError::ResolutionFailed(ResolutionFailures(failures)) => {
+                for failure in failures {
+                    if let ResolutionFailure::UnavailableAtStability(unavailable) = failure {
+                        unavailable.in_include = unavailable
+                            .setting
+                            .is_set_by_include(&unavailable.stability, composer);
+                    }
+                }
+            },
+            _ => {},
         }
         err
     }
@@ -1085,6 +1130,8 @@ impl LockManifest {
                 name = group.name,
                 "collecting failures from unresolved group"
             );
+            let versions_at_other_stabilities =
+                Self::versions_at_other_stabilities(&group.msgs, manifest);
             for res_msg in group.msgs.iter() {
                 tracing::debug!(
                     level = res_msg.level().to_string(),
@@ -1105,6 +1152,41 @@ impl LockManifest {
                     ResolutionMessage::AttrPathNotFoundNotInCatalog(inner) => {
                         tracing::debug!(kind = "attr_path_not_found.not_in_catalog",);
                         ResolutionFailure::PackageNotFound(inner.clone())
+                    },
+                    ResolutionMessage::AttrPathNotFoundNotOnCurrentStability(inner) => {
+                        tracing::debug!(kind = "attr_path_not_found.not_on_current_stability",);
+                        let at_other_stability = UnavailableAtStability::new(
+                            &inner.install_id,
+                            &inner.attr_path,
+                            &inner.stability_availability,
+                            manifest,
+                        );
+                        match at_other_stability {
+                            Some(failure) => ResolutionFailure::UnavailableAtStability(failure),
+                            None => ResolutionFailure::FallbackMessage {
+                                msg: inner.msg.clone(),
+                            },
+                        }
+                    },
+                    ResolutionMessage::VersionNotFound(inner) => {
+                        tracing::debug!(kind = "version_not_found");
+                        let Some(failure) = versions_at_other_stabilities.get(&inner.install_id)
+                        else {
+                            failures.push(ResolutionFailure::FallbackMessage {
+                                msg: inner.msg.clone(),
+                            });
+                            continue;
+                        };
+                        // The catalog sends one message per system; report
+                        // them once.
+                        let reported = failures.iter().any(|f| {
+                            matches!(f, ResolutionFailure::UnavailableAtStability(reported)
+                                if reported.install_id == failure.install_id)
+                        });
+                        if reported {
+                            continue;
+                        }
+                        ResolutionFailure::UnavailableAtStability(failure.clone())
                     },
                     ResolutionMessage::AttrPathNotFoundNotFoundForAllSystems(inner) => {
                         tracing::debug!(kind = "attr_path_not_found.not_found_for_all_systems",);
@@ -1138,6 +1220,57 @@ impl LockManifest {
             }
         }
         Ok(failures)
+    }
+
+    /// Versions that a group's stability lacks but another stability has,
+    /// keyed by install ID.
+    ///
+    /// The catalog reports a missing version once per system, so this keeps
+    /// the stabilities with a build on every system. A version that no
+    /// stability has on every system is left out, and its per-system messages
+    /// are reported as the catalog sent them. So is a version with a message
+    /// that doesn't name stabilities: stability advice would hide that
+    /// system's failure.
+    fn versions_at_other_stabilities(
+        msgs: &[ResolutionMessage],
+        manifest: &ManifestLatest,
+    ) -> HashMap<String, UnavailableAtStability> {
+        let mut merged: HashMap<&str, (&MsgVersionNotFound, StabilityAvailability)> =
+            HashMap::new();
+        let mut unannotated: HashSet<&str> = HashSet::new();
+        for msg in msgs {
+            let ResolutionMessage::VersionNotFound(inner) = msg else {
+                continue;
+            };
+            if inner.level != MessageLevel::Error {
+                continue;
+            }
+            let Some(availability) = &inner.stability_availability else {
+                unannotated.insert(inner.install_id.as_str());
+                continue;
+            };
+            merged
+                .entry(inner.install_id.as_str())
+                .and_modify(|(_, common)| {
+                    common
+                        .available
+                        .retain(|s| availability.available.contains(s))
+                })
+                .or_insert_with(|| (inner, availability.clone()));
+        }
+        merged
+            .into_values()
+            .filter(|(inner, _)| !unannotated.contains(inner.install_id.as_str()))
+            .filter_map(|(inner, availability)| {
+                UnavailableAtStability::new(
+                    &inner.install_id,
+                    &inner.attr_path,
+                    &availability,
+                    manifest,
+                )
+            })
+            .map(|failure| (failure.install_id.clone(), failure))
+            .collect()
     }
 
     /// Determines which systems a package was requested on that it is not
@@ -1389,6 +1522,7 @@ impl FromIterator<ResolutionFailure> for ResolutionFailures {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ResolutionFailure {
     PackageNotFound(MsgAttrPathNotFoundNotInCatalog),
+    UnavailableAtStability(UnavailableAtStability),
     PackageUnavailableOnSomeSystems {
         catalog_message: MsgAttrPathNotFoundNotFoundForAllSystems,
         invalid_systems: Vec<String>,
@@ -1402,6 +1536,114 @@ pub enum ResolutionFailure {
     FallbackMessage {
         msg: String,
     },
+}
+
+/// A package, or a version of one, that has no build at the stability its
+/// pkg-group resolves at, but does at another stability.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct UnavailableAtStability {
+    pub install_id: String,
+    pub pkg_path: String,
+    pub pkg_group: String,
+    /// The version constraint from the manifest
+    pub version: Option<String>,
+    /// The stability the pkg-group resolves at
+    pub stability: String,
+    /// Where `stability` is set
+    pub setting: StabilitySetting,
+    /// Whether an included environment, rather than the manifest being
+    /// locked, sets the stability.
+    pub in_include: bool,
+    /// The strictest stability with a build of the package
+    pub strictest_available: String,
+    /// The other stabilities with a build of the package, strictest first
+    pub other_available: Vec<String>,
+}
+
+impl UnavailableAtStability {
+    /// `None` when no stability has a build, since changing the stability
+    /// wouldn't help; the catalog's own message describes that better.
+    fn new(
+        install_id: &str,
+        attr_path: &str,
+        availability: &StabilityAvailability,
+        manifest: &ManifestLatest,
+    ) -> Option<Self> {
+        let (strictest_available, other_available) = availability.available.split_first()?;
+        let descriptor = manifest.catalog_descriptor_with_id(install_id);
+        let pkg_group = descriptor
+            .as_ref()
+            .and_then(|d| d.pkg_group.clone())
+            .unwrap_or_else(|| DEFAULT_GROUP_NAME.to_string());
+        Some(Self {
+            install_id: install_id.to_string(),
+            pkg_path: descriptor
+                .as_ref()
+                .map_or_else(|| attr_path.to_string(), |d| d.pkg_path.clone()),
+            setting: StabilitySetting::for_group(manifest, &pkg_group),
+            pkg_group,
+            version: descriptor.and_then(|d| d.version),
+            stability: availability.stability.clone(),
+            // Marked by `mark_included_stability`, which knows the composer.
+            in_include: false,
+            strictest_available: strictest_available.clone(),
+            other_available: other_available.to_vec(),
+        })
+    }
+
+    /// The package as `flox install` takes it, e.g. `python3@3.12`
+    fn pkg(&self) -> String {
+        match &self.version {
+            Some(version) => format!("{}@{version}", self.pkg_path),
+            None => self.pkg_path.clone(),
+        }
+    }
+
+    fn summary(&self) -> String {
+        let available = std::iter::once(&self.strictest_available)
+            .chain(&self.other_available)
+            .join(", ");
+        formatdoc! {"
+            Package '{pkg}' has no build at stability '{stability}'.
+            It has builds at: {available}.",
+            pkg = self.pkg(),
+            stability = self.stability,
+        }
+    }
+}
+
+impl Display for UnavailableAtStability {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let table = self.setting.table();
+        let next_step = if self.in_include {
+            format!(
+                "{}:",
+                included_stability_step(&format!("'{table}.stability'"))
+            )
+        } else {
+            "Use 'flox edit' to set a stability that has it:".to_string()
+        };
+        // The edit also moves every other package that resolves at the
+        // setting's stability.
+        let scope = match &self.setting {
+            StabilitySetting::PkgGroup(group) => {
+                format!("This applies to every package in pkg-group '{group}'.")
+            },
+            StabilitySetting::Options => {
+                "This applies to every pkg-group that doesn't set its own stability.".to_string()
+            },
+        };
+        let guidance = formatdoc! {"
+            {next_step}
+
+              [{table}]
+              stability = \"{stability}\"
+
+            {scope}",
+            stability = self.strictest_available,
+        };
+        write!(f, "{}\n{guidance}", self.summary())
+    }
 }
 
 // Convenience for when you just have a single message
@@ -1477,6 +1719,13 @@ fn format_single_resolution_failure(failure: &ResolutionFailure, is_one_of_many:
             or isolate dependencies in a new group with '<pkg>.pkg-group = \"newgroup\"'"};
             indent_by(extra_indent, msg)
         },
+        ResolutionFailure::UnavailableAtStability(failure) => {
+            if is_one_of_many {
+                indent_by(2, failure.to_string())
+            } else {
+                format!("\n{failure}")
+            }
+        },
         ResolutionFailure::SystemsNotOnSamePage(MsgAttrPathNotFoundSystemsNotOnSamePage {
             msg,
             ..
@@ -1526,6 +1775,8 @@ mod tests {
         ApiErrorResponse,
         BaseCatalogInfo,
         CatalogPage,
+        MsgAttrPathNotFoundNotOnCurrentStability,
+        MsgVersionNotFound,
         PackageDescriptor,
         PackageOutput,
         PackageOutputs,
@@ -4300,5 +4551,520 @@ mod tests {
             .as_typed_only(),
             "composer should include fields from both indirect child includes"
         )
+    }
+
+    /// The message the catalog sends when stability 'lts' has no build of
+    /// `install_id` on `system` that satisfies its version constraint.
+    fn version_not_found_at_lts(
+        install_id: &str,
+        system: &str,
+        available: &[&str],
+    ) -> ResolutionMessage {
+        ResolutionMessage::VersionNotFound(MsgVersionNotFound {
+            level: MessageLevel::Error,
+            msg: format!("No version of '{install_id}' found on '{system}'."),
+            attr_path: install_id.to_string(),
+            install_id: install_id.to_string(),
+            system: system.to_string(),
+            stability_availability: Some(StabilityAvailability {
+                stability: "lts".to_string(),
+                available: available.iter().map(|s| s.to_string()).collect(),
+            }),
+        })
+    }
+
+    /// The message the catalog sends when `install_id` has builds, but none
+    /// at stability 'lts'.
+    fn not_on_lts(install_id: &str, available: &[&str]) -> ResolutionMessage {
+        ResolutionMessage::AttrPathNotFoundNotOnCurrentStability(
+            MsgAttrPathNotFoundNotOnCurrentStability {
+                level: MessageLevel::Error,
+                msg: format!("The package '{install_id}' is not on stability 'lts'."),
+                attr_path: install_id.to_string(),
+                install_id: install_id.to_string(),
+                stability_availability: StabilityAvailability {
+                    stability: "lts".to_string(),
+                    available: available.iter().map(|s| s.to_string()).collect(),
+                },
+            },
+        )
+    }
+
+    /// The message the catalog sends when `install_id` has no build at any
+    /// stability.
+    fn not_in_catalog(install_id: &str) -> ResolutionMessage {
+        ResolutionMessage::AttrPathNotFoundNotInCatalog(MsgAttrPathNotFoundNotInCatalog {
+            level: MessageLevel::Error,
+            msg: format!("The package '{install_id}' is not found in the catalog."),
+            attr_path: install_id.to_string(),
+            install_id: install_id.to_string(),
+        })
+    }
+
+    /// Lock `manifest` against a catalog that fails its toplevel group with
+    /// `msgs`.
+    async fn resolution_failures(
+        manifest: &str,
+        msgs: Vec<ResolutionMessage>,
+    ) -> Vec<ResolutionFailure> {
+        let manifest = Manifest::parse_and_migrate(with_latest_schema(manifest), None).unwrap();
+        let mut client = MockClient::new();
+        reset_mocks(&mut client, vec![Response::Resolve(vec![
+            ResolvedPackageGroup {
+                msgs,
+                name: DEFAULT_GROUP_NAME.to_string(),
+                page: None,
+            },
+        ])]);
+        let err = LockManifest::resolve_manifest(
+            manifest.as_latest_schema(),
+            None,
+            &client,
+            &InstallableLockerMock::new(),
+        )
+        .await
+        .unwrap_err();
+        let ResolveError::ResolutionFailed(failures) = err else {
+            panic!("expected resolution failures, got: {err:?}");
+        };
+        failures.0
+    }
+
+    /// The catalog reports a missing version once per system. Those reports
+    /// become one failure, at the stabilities that have it on every system.
+    #[tokio::test]
+    async fn version_unavailable_at_stability_is_one_failure_across_systems() {
+        let failures = resolution_failures(
+            indoc! {r#"
+                [install]
+                python3.pkg-path = "python3"
+                python3.version = "3.12"
+
+                [options]
+                systems = ["aarch64-darwin", "x86_64-linux"]
+                stability = "lts"
+            "#},
+            vec![
+                version_not_found_at_lts("python3", "aarch64-darwin", &[
+                    "stable", "staging", "unstable",
+                ]),
+                version_not_found_at_lts("python3", "x86_64-linux", &["staging", "unstable"]),
+            ],
+        )
+        .await;
+
+        assert_eq!(failures, vec![ResolutionFailure::UnavailableAtStability(
+            UnavailableAtStability {
+                install_id: "python3".to_string(),
+                pkg_path: "python3".to_string(),
+                pkg_group: DEFAULT_GROUP_NAME.to_string(),
+                version: Some("3.12".to_string()),
+                stability: "lts".to_string(),
+                setting: StabilitySetting::Options,
+                in_include: false,
+                strictest_available: "staging".to_string(),
+                other_available: vec!["unstable".to_string()],
+            }
+        )]);
+    }
+
+    /// Changing stability wouldn't help a version that no stability has on
+    /// every system, so its errors don't mention stability.
+    #[tokio::test]
+    async fn version_unavailable_at_every_stability_keeps_catalog_messages() {
+        let failures = resolution_failures(
+            indoc! {r#"
+                [install]
+                python3.pkg-path = "python3"
+                python3.version = "3.13"
+                git.pkg-path = "git"
+                git.version = "2.46"
+
+                [options]
+                systems = ["aarch64-darwin", "x86_64-linux"]
+                stability = "lts"
+            "#},
+            vec![
+                version_not_found_at_lts("python3", "aarch64-darwin", &[]),
+                version_not_found_at_lts("python3", "x86_64-linux", &[]),
+                // Each system has git 2.46, but at no stability in common
+                version_not_found_at_lts("git", "aarch64-darwin", &["unstable"]),
+                version_not_found_at_lts("git", "x86_64-linux", &["staging"]),
+            ],
+        )
+        .await;
+
+        assert_eq!(failures, vec![
+            ResolutionFailure::FallbackMessage {
+                msg: "No version of 'python3' found on 'aarch64-darwin'.".to_string(),
+            },
+            ResolutionFailure::FallbackMessage {
+                msg: "No version of 'python3' found on 'x86_64-linux'.".to_string(),
+            },
+            ResolutionFailure::FallbackMessage {
+                msg: "No version of 'git' found on 'aarch64-darwin'.".to_string(),
+            },
+            ResolutionFailure::FallbackMessage {
+                msg: "No version of 'git' found on 'x86_64-linux'.".to_string(),
+            },
+        ]);
+    }
+
+    /// The message the catalog sends when `install_id` has no version on
+    /// `system` for a reason other than stability.
+    fn version_not_found_unannotated(install_id: &str, system: &str) -> ResolutionMessage {
+        ResolutionMessage::VersionNotFound(MsgVersionNotFound {
+            level: MessageLevel::Error,
+            msg: format!("No version of '{install_id}' found on '{system}'."),
+            attr_path: install_id.to_string(),
+            install_id: install_id.to_string(),
+            system: system.to_string(),
+            stability_availability: None,
+        })
+    }
+
+    /// Changing stability can't fix a system whose failure the catalog didn't
+    /// attribute to stability, and advice that only fixes the other systems
+    /// would hide that failure. So one unannotated message for a package
+    /// keeps every message for it as the catalog sent it.
+    #[tokio::test]
+    async fn version_unavailable_on_a_system_for_another_reason_is_not_hidden() {
+        let failures = resolution_failures(
+            indoc! {r#"
+                [install]
+                python3.pkg-path = "python3"
+                python3.version = "3.12"
+
+                [options]
+                systems = ["aarch64-darwin", "x86_64-linux"]
+                stability = "lts"
+            "#},
+            vec![
+                version_not_found_at_lts("python3", "aarch64-darwin", &[
+                    "stable", "staging", "unstable",
+                ]),
+                version_not_found_unannotated("python3", "x86_64-linux"),
+            ],
+        )
+        .await;
+
+        assert_eq!(failures, vec![
+            ResolutionFailure::FallbackMessage {
+                msg: "No version of 'python3' found on 'aarch64-darwin'.".to_string(),
+            },
+            ResolutionFailure::FallbackMessage {
+                msg: "No version of 'python3' found on 'x86_64-linux'.".to_string(),
+            },
+        ]);
+    }
+
+    /// A package with builds only at other stabilities is reported as such,
+    /// not as missing from the catalog, which would send `flox install` off
+    /// suggesting the same package again. A package with no build at any
+    /// stability stays "not found".
+    #[tokio::test]
+    async fn package_unavailable_at_stability_is_not_reported_as_missing() {
+        let failures = resolution_failures(
+            indoc! {r#"
+                [install]
+                pnpm.pkg-path = "pnpm"
+                nope.pkg-path = "nope"
+
+                [options]
+                stability = "lts"
+            "#},
+            vec![
+                not_on_lts("pnpm", &["stable", "staging", "unstable"]),
+                not_in_catalog("nope"),
+            ],
+        )
+        .await;
+
+        assert_eq!(failures, vec![
+            ResolutionFailure::UnavailableAtStability(UnavailableAtStability {
+                install_id: "pnpm".to_string(),
+                pkg_path: "pnpm".to_string(),
+                pkg_group: DEFAULT_GROUP_NAME.to_string(),
+                version: None,
+                stability: "lts".to_string(),
+                setting: StabilitySetting::Options,
+                in_include: false,
+                strictest_available: "stable".to_string(),
+                other_available: vec!["staging".to_string(), "unstable".to_string()],
+            }),
+            ResolutionFailure::PackageNotFound(MsgAttrPathNotFoundNotInCatalog {
+                level: MessageLevel::Error,
+                msg: "The package 'nope' is not found in the catalog.".to_string(),
+                attr_path: "nope".to_string(),
+                install_id: "nope".to_string(),
+            }),
+        ]);
+    }
+
+    fn unavailable_at_stability(
+        pkg_group: &str,
+        setting: StabilitySetting,
+        in_include: bool,
+    ) -> UnavailableAtStability {
+        UnavailableAtStability {
+            install_id: "python3".to_string(),
+            pkg_path: "python3".to_string(),
+            pkg_group: pkg_group.to_string(),
+            version: Some(">=3.12".to_string()),
+            stability: "lts".to_string(),
+            setting,
+            in_include,
+            strictest_available: "stable".to_string(),
+            other_available: vec!["unstable".to_string()],
+        }
+    }
+
+    /// The guidance names the setting that decides the stability, the way
+    /// the manifest writes it, so that the suggested edit is valid TOML and
+    /// lands where the manifest sets the stability.
+    #[test]
+    fn unavailable_at_stability_guidance_names_the_setting() {
+        let guidance = [
+            (
+                "pkg_group",
+                unavailable_at_stability(
+                    "legacy",
+                    StabilitySetting::PkgGroup("legacy".to_string()),
+                    false,
+                )
+                .to_string(),
+            ),
+            (
+                "dotted_pkg_group",
+                unavailable_at_stability(
+                    "v1.2",
+                    StabilitySetting::PkgGroup("v1.2".to_string()),
+                    false,
+                )
+                .to_string(),
+            ),
+            (
+                "options",
+                unavailable_at_stability("toplevel", StabilitySetting::Options, false).to_string(),
+            ),
+            (
+                "pkg_group_in_include",
+                unavailable_at_stability(
+                    "legacy",
+                    StabilitySetting::PkgGroup("legacy".to_string()),
+                    true,
+                )
+                .to_string(),
+            ),
+            (
+                "options_in_include",
+                unavailable_at_stability("toplevel", StabilitySetting::Options, true).to_string(),
+            ),
+        ];
+        let expected = [
+            (
+                "pkg_group",
+                indoc! {r#"
+            Package 'python3@>=3.12' has no build at stability 'lts'.
+            It has builds at: stable, unstable.
+            Use 'flox edit' to set a stability that has it:
+
+              [pkg-groups.legacy]
+              stability = "stable"
+
+            This applies to every package in pkg-group 'legacy'."#}
+                .to_string(),
+            ),
+            (
+                "dotted_pkg_group",
+                indoc! {r#"
+            Package 'python3@>=3.12' has no build at stability 'lts'.
+            It has builds at: stable, unstable.
+            Use 'flox edit' to set a stability that has it:
+
+              [pkg-groups."v1.2"]
+              stability = "stable"
+
+            This applies to every package in pkg-group 'v1.2'."#}
+                .to_string(),
+            ),
+            (
+                "options",
+                indoc! {r#"
+            Package 'python3@>=3.12' has no build at stability 'lts'.
+            It has builds at: stable, unstable.
+            Use 'flox edit' to set a stability that has it:
+
+              [options]
+              stability = "stable"
+
+            This applies to every pkg-group that doesn't set its own stability."#}
+                .to_string(),
+            ),
+            (
+                "pkg_group_in_include",
+                indoc! {r#"
+            Package 'python3@>=3.12' has no build at stability 'lts'.
+            It has builds at: stable, unstable.
+            An included environment sets 'pkg-groups.legacy.stability'.
+            Change it in that environment, or override it with 'flox edit':
+
+              [pkg-groups.legacy]
+              stability = "stable"
+
+            This applies to every package in pkg-group 'legacy'."#}
+                .to_string(),
+            ),
+            (
+                "options_in_include",
+                indoc! {r#"
+            Package 'python3@>=3.12' has no build at stability 'lts'.
+            It has builds at: stable, unstable.
+            An included environment sets 'options.stability'.
+            Change it in that environment, or override it with 'flox edit':
+
+              [options]
+              stability = "stable"
+
+            This applies to every pkg-group that doesn't set its own stability."#}
+                .to_string(),
+            ),
+        ];
+
+        assert_eq!(guidance, expected);
+    }
+
+    /// The suggested table must parse as a manifest, which a bare dotted
+    /// group name wouldn't.
+    #[test]
+    fn unavailable_at_stability_suggested_edit_for_dotted_group_parses() {
+        let failure = unavailable_at_stability(
+            "v1.2",
+            StabilitySetting::PkgGroup("v1.2".to_string()),
+            false,
+        );
+        let guidance = failure.to_string();
+        let snippet = guidance
+            .lines()
+            .filter(|line| line.starts_with("  "))
+            .map(str::trim)
+            .join("\n");
+
+        let manifest = Manifest::parse_and_migrate(with_latest_schema(&snippet), None).unwrap();
+
+        assert_eq!(
+            manifest.as_latest_schema().group_stability_override("v1.2"),
+            Some("stable")
+        );
+    }
+
+    /// The setting is `options.stability` unless the package's group sets
+    /// its own, and only the composer can tell whether an include set it.
+    #[test]
+    fn unavailable_at_stability_setting_follows_the_manifest() {
+        let manifest = Manifest::parse_and_migrate(
+            with_latest_schema(indoc! {r#"
+                [install]
+                pnpm.pkg-path = "pnpm"
+                node.pkg-path = "nodejs"
+                node.pkg-group = "js"
+
+                [pkg-groups]
+                js.stability = "lts"
+
+                [options]
+                stability = "lts"
+            "#}),
+            None,
+        )
+        .unwrap();
+        let manifest = manifest.as_latest_schema();
+        let availability = StabilityAvailability {
+            stability: "lts".to_string(),
+            available: vec!["stable".to_string()],
+        };
+
+        let settings = ["pnpm", "node"].map(|install_id| {
+            UnavailableAtStability::new(install_id, install_id, &availability, manifest)
+                .unwrap()
+                .setting
+        });
+        assert_eq!(settings, [
+            StabilitySetting::Options,
+            StabilitySetting::PkgGroup("js".to_string()),
+        ]);
+
+        let included = |setting, composer: &ManifestLatest| {
+            let failure = unavailable_at_stability("js", setting, false);
+            let err = ResolveError::ResolutionFailed(ResolutionFailures(vec![
+                ResolutionFailure::UnavailableAtStability(failure),
+            ]));
+            let ResolveError::ResolutionFailed(ResolutionFailures(failures)) =
+                LockManifest::mark_included_stability(err, composer)
+            else {
+                unreachable!();
+            };
+            let ResolutionFailure::UnavailableAtStability(failure) = &failures[0] else {
+                unreachable!();
+            };
+            failure.in_include
+        };
+        // The composer sets the same stability as the failure resolves at
+        // for `js`, but not for `options`.
+        let mut composer = ManifestLatest::default();
+        composer
+            .pkg_groups
+            .inner_mut()
+            .insert("js".to_string(), PkgGroup {
+                stability: Some("lts".to_string()),
+            });
+        assert_eq!(
+            [
+                included(StabilitySetting::PkgGroup("js".to_string()), &composer),
+                included(StabilitySetting::Options, &composer),
+            ],
+            [false, true]
+        );
+    }
+
+    /// The group in the guidance is the one the descriptor sets, and
+    /// `toplevel` when it sets none, with the package as its descriptor
+    /// names it.
+    #[tokio::test]
+    async fn unavailable_at_stability_names_the_packages_pkg_group() {
+        let failures = resolution_failures(
+            indoc! {r#"
+                [install]
+                pnpm.pkg-path = "pnpm"
+                node.pkg-path = "nodejs"
+                node.pkg-group = "js"
+
+                [options]
+                stability = "lts"
+            "#},
+            vec![
+                not_on_lts("pnpm", &["stable"]),
+                not_on_lts("node", &["stable"]),
+            ],
+        )
+        .await;
+
+        let unavailable = |install_id: &str, pkg_path: &str, pkg_group: &str| {
+            ResolutionFailure::UnavailableAtStability(UnavailableAtStability {
+                install_id: install_id.to_string(),
+                pkg_path: pkg_path.to_string(),
+                pkg_group: pkg_group.to_string(),
+                version: None,
+                stability: "lts".to_string(),
+                setting: StabilitySetting::Options,
+                in_include: false,
+                strictest_available: "stable".to_string(),
+                other_available: vec![],
+            })
+        };
+        assert_eq!(failures, vec![
+            unavailable("pnpm", "pnpm", DEFAULT_GROUP_NAME),
+            unavailable("node", "nodejs", "js"),
+        ]);
     }
 }

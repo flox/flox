@@ -1,5 +1,4 @@
-use std::cmp::max;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::io::Write;
 
 use anyhow::{Result, bail};
@@ -7,6 +6,7 @@ use bpaf::Bpaf;
 use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
 use floxhub_client::{CatalogClientTrait, PackageBuild, VersionsError};
+use itertools::Itertools;
 use tracing::instrument;
 
 use crate::subcommand_metric;
@@ -16,8 +16,17 @@ use crate::utils::tracing::sentry_set_tag;
 // Show detailed package information
 #[derive(Debug, Bpaf, Clone)]
 pub struct Show {
+    /// Display available versions as a JSON array
+    #[bpaf(long)]
+    pub json: bool,
+
+    /// Show the stabilities that have each version
+    #[bpaf(short, long)]
+    pub all: bool,
+
     /// The package to show detailed information about. Must be an exact match
     /// for a pkg-path e.g. something copy-pasted from the output of `flox search`.
+    // bpaf requires positionals to be the last field.
     #[bpaf(positional("pkg-path"))]
     pub pkg_path: String,
 }
@@ -27,6 +36,8 @@ impl Show {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("show");
         sentry_set_tag("pkg_path", &self.pkg_path);
+        sentry_set_tag("json", self.json);
+        sentry_set_tag("show_all", self.all);
 
         tracing::debug!("using catalog client for show");
         let results = match flox.floxhub_client.package_versions(&self.pkg_path).await {
@@ -51,16 +62,32 @@ impl Show {
         .iter()
         .map(|s| s.to_string())
         .collect::<HashSet<_>>();
-        render_show_catalog(&mut std::io::stdout(), &results.results, &expected_systems)?;
+        if self.json {
+            render_show_versions_json(&mut std::io::stdout(), &results.results)?;
+        } else {
+            render_show_catalog(
+                &mut std::io::stdout(),
+                &results.results,
+                &expected_systems,
+                self.all,
+            )?;
+        }
 
         Ok(())
     }
+}
+
+fn render_show_versions_json(writer: &mut impl Write, versions: &[PackageBuild]) -> Result<()> {
+    let json = serde_json::to_string_pretty(versions)?;
+    writeln!(writer, "{json}")?;
+    Ok(())
 }
 
 fn render_show_catalog(
     writer: &mut impl Write,
     search_results: &[PackageBuild],
     expected_systems: &HashSet<System>,
+    all: bool,
 ) -> Result<()> {
     if search_results.is_empty() {
         // This should never happen since we've already checked that the
@@ -124,73 +151,102 @@ fn render_show_catalog(
     writeln!(writer)?; // Empty line before versions list
     writeln!(writer, "Other versions:")?;
 
-    // Organize the versions to be queried and printed
-    let version_to_systems = {
-        let mut map = BTreeMap::new();
-        for pkg in search_results.iter() {
-            map.entry(pkg.version.clone())
-                .or_insert(HashSet::new())
-                .insert(pkg.system.to_string());
-        }
-        map
-    };
-    // calculating the maximum width needed for the version column
-    let version_column_width = {
-        let mut seen_versions = HashSet::new();
-        let mut max_width = 0;
-        for pkg in search_results {
-            if !seen_versions.contains(&pkg.version) {
-                let version_str = format!("    {pkg_path}@{}", pkg.version);
-                max_width = max(max_width, version_str.len());
-                seen_versions.insert(&pkg.version);
-            }
-        }
-        max_width
-    };
+    let rows = version_rows(pkg_path.as_str(), search_results, expected_systems);
+    let version_width = rows.iter().map(|row| row.version.len()).max().unwrap_or(0);
+    // Catalogs that don't report stabilities get no stabilities column.
+    let stabilities_width = all
+        .then(|| {
+            rows.iter()
+                .filter_map(|row| row.stabilities.as_ref().map(String::len))
+                .max()
+        })
+        .flatten();
 
-    let mut seen_versions = HashSet::new();
-    // We iterate over the search results again instead of just the `version_to_systems` map since
-    // although the keys (and therefore the versions) in the map are sorted (BTreeMap is a sorted map),
-    // they are sorted lexically. This may be a different order than how the versions *should* be sorted,
-    // so we defer to the order in which the server returns results to us.
-    for pkg in search_results {
-        if seen_versions.contains(&pkg.version) {
-            // We print everything in one go for each version, so if we've seen it once
-            // we don't need to do anything else.
-            continue;
+    for row in rows {
+        let mut line = format!("{:<version_width$}", row.version);
+        if let Some(width) = stabilities_width {
+            let stabilities = row.stabilities.unwrap_or_default();
+            line.push_str(&format!("  {stabilities:<width$}"));
         }
-        let Some(systems) = version_to_systems.get(&pkg.version) else {
-            // This should be unreachable since we've already iterated over the search results.
-            continue;
-        };
-        let available_systems = {
-            let mut intersection = expected_systems
-                .intersection(systems)
-                .cloned()
-                .collect::<Vec<_>>();
-            intersection.sort();
-            intersection
-        };
-
-        let version_str = format!("    {pkg_path}@{}", pkg.version);
-
-        if available_systems.len() != expected_systems.len() {
-            writeln!(
-                writer,
-                "{:<version_column_width$} ({} only)",
-                version_str,
-                available_systems.join(", ")
-            )?;
-        } else {
-            writeln!(writer, "{version_str}")?;
+        if let Some(systems) = row.systems {
+            line.push_str(&format!(" ({systems} only)"));
         }
-        seen_versions.insert(&pkg.version);
+        writeln!(writer, "{}", line.trim_end())?;
     }
     Ok(())
 }
 
+/// One line of the "Other versions" list.
+#[derive(Clone, Debug)]
+struct VersionRow {
+    version: String,
+    /// The stabilities that have the version on every system it's listed for,
+    /// strictest first, or `None` if the catalog doesn't report them
+    stabilities: Option<String>,
+    /// The systems the version is limited to, if not all expected ones
+    systems: Option<String>,
+}
+
+/// Collapse the per-system builds into one row per version, in the order the
+/// catalog returns them, which is newest first rather than lexical.
+fn version_rows(
+    pkg_path: &str,
+    search_results: &[PackageBuild],
+    expected_systems: &HashSet<System>,
+) -> Vec<VersionRow> {
+    let mut versions: Vec<&str> = Vec::new();
+    let mut builds_by_version: HashMap<&str, Vec<&PackageBuild>> = HashMap::new();
+    for pkg in search_results {
+        let builds = builds_by_version.entry(pkg.version.as_str()).or_default();
+        if builds.is_empty() {
+            versions.push(pkg.version.as_str());
+        }
+        builds.push(pkg);
+    }
+
+    versions
+        .into_iter()
+        .map(|version| {
+            let builds = &builds_by_version[version];
+
+            let systems = builds
+                .iter()
+                .map(|pkg| pkg.system.to_string())
+                .collect::<HashSet<_>>();
+            let mut available_systems = expected_systems
+                .intersection(&systems)
+                .cloned()
+                .collect::<Vec<_>>();
+            available_systems.sort();
+
+            // Intersecting keeps the catalog's strictest-first order.
+            let stabilities = builds
+                .iter()
+                .map(|pkg| pkg.available_stabilities.as_ref())
+                .collect::<Option<Vec<_>>>()
+                .and_then(|per_system| {
+                    let (first, rest) = per_system.split_first()?;
+                    Some(
+                        first
+                            .iter()
+                            .filter(|s| rest.iter().all(|other| other.contains(s)))
+                            .join(", "),
+                    )
+                });
+
+            VersionRow {
+                version: format!("    {pkg_path}@{version}"),
+                stabilities,
+                systems: (available_systems.len() != expected_systems.len())
+                    .then(|| available_systems.join(", ")),
+            }
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod test {
+    use bpaf::Parser;
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::providers::catalog::test_helpers::auto_recording_catalog_client;
     use floxhub_client::client::test_helpers::client_config;
@@ -200,6 +256,13 @@ mod test {
     use pretty_assertions::assert_eq;
 
     use super::*;
+
+    /// bpaf only reports a misplaced positional while building usage, so
+    /// this fails if `pkg_path` stops being the last field of `Show`.
+    #[test]
+    fn show_parser_satisfies_bpaf_invariants() {
+        show().to_options().check_invariants(true);
+    }
 
     #[tokio::test]
     async fn show_handles_no_available_builds() {
@@ -217,6 +280,8 @@ mod test {
 
         let err = Show {
             pkg_path: "search_term".to_string(),
+            json: false,
+            all: false,
         }
         .handle(flox)
         .await
@@ -236,6 +301,8 @@ mod test {
         let search_term = "search_term";
         let err = Show {
             pkg_path: search_term.to_string(),
+            json: false,
+            all: false,
         }
         .handle(flox)
         .await
@@ -247,15 +314,15 @@ mod test {
         );
     }
 
-    #[test]
-    fn test_column_alignment_for_system_restrictions() {
+    fn mock_pkg(version: &str, system: &str) -> PackageBuild {
         use chrono::TimeZone;
 
         let rev_date = chrono::Utc
             .with_ymd_and_hms(2025, 5, 31, 12, 5, 15)
             .unwrap();
 
-        let mock_pkg = |version: &str, system: &str| PackageBuild {
+        PackageBuild {
+            available_stabilities: None,
             pkg_path: "pkg".to_string(),
             version: version.to_string(),
             description: Some("test".to_string()),
@@ -288,14 +355,18 @@ mod test {
             scrape_date: None,
             stabilities: None,
             unfree: None,
-        };
+        }
+    }
 
-        let packages = vec![
-            mock_pkg("1.0", "aarch64-darwin"),
-            mock_pkg("10.0.0", "aarch64-darwin"),
-        ];
+    fn mock_pkg_at(version: &str, system: &str, stabilities: &[&str]) -> PackageBuild {
+        PackageBuild {
+            available_stabilities: Some(stabilities.iter().map(|s| s.to_string()).collect()),
+            ..mock_pkg(version, system)
+        }
+    }
 
-        let expected_systems = [
+    fn all_systems() -> HashSet<System> {
+        [
             "aarch64-darwin",
             "aarch64-linux",
             "x86_64-darwin",
@@ -303,10 +374,18 @@ mod test {
         ]
         .iter()
         .map(|s| s.to_string())
-        .collect::<HashSet<_>>();
+        .collect()
+    }
+
+    #[test]
+    fn column_alignment_for_system_restrictions() {
+        let packages = vec![
+            mock_pkg("1.0", "aarch64-darwin"),
+            mock_pkg("10.0.0", "aarch64-darwin"),
+        ];
 
         let mut buf = vec![];
-        render_show_catalog(&mut buf, &packages, &expected_systems).unwrap();
+        render_show_catalog(&mut buf, &packages, &all_systems(), false).unwrap();
         let output = String::from_utf8(buf).unwrap();
 
         // Verify that system restrictions are aligned despite different version lengths
@@ -322,5 +401,122 @@ mod test {
                     pkg@1.0    (aarch64-darwin only)
                     pkg@10.0.0 (aarch64-darwin only)
             "});
+    }
+
+    /// With `--all`, each version lists the stabilities that have it on every
+    /// system it's listed for, in an aligned column before any system
+    /// restriction.
+    #[test]
+    fn versions_list_their_stabilities() {
+        let stable = ["stable", "staging", "unstable"];
+        let lts = ["lts", "stable", "staging", "unstable"];
+        let mut packages = vec![mock_pkg_at("10.0.0", "aarch64-darwin", &["unstable"])];
+        for system in all_systems() {
+            packages.push(mock_pkg_at("2.0", &system, &stable));
+        }
+        for system in all_systems() {
+            // One system has the version at lts too.
+            let stabilities = if system == "x86_64-linux" {
+                &lts[..]
+            } else {
+                &stable[..]
+            };
+            packages.push(mock_pkg_at("1.0", &system, stabilities));
+        }
+
+        let mut buf = vec![];
+        render_show_catalog(&mut buf, &packages, &all_systems(), true).unwrap();
+        let output = String::from_utf8(buf).unwrap();
+
+        assert_eq!(output, indoc! {"
+                pkg - test
+                Catalog: nixpkgs
+                Latest:  pkg@10.0.0
+                License: MIT
+                Outputs: sub-pkg*, sub-pkg-other (* installed by default)
+                Systems: aarch64-darwin
+
+                Other versions:
+                    pkg@10.0.0  unstable                  (aarch64-darwin only)
+                    pkg@2.0     stable, staging, unstable
+                    pkg@1.0     stable, staging, unstable
+            "});
+    }
+
+    /// The default output has no stabilities column, even when the catalog
+    /// reports stabilities.
+    #[test]
+    fn default_output_omits_stabilities() {
+        let packages = vec![
+            mock_pkg_at("2.0", "aarch64-darwin", &["stable", "unstable"]),
+            mock_pkg_at("1.0", "aarch64-darwin", &["unstable"]),
+        ];
+
+        let mut buf = vec![];
+        render_show_catalog(&mut buf, &packages, &all_systems(), false).unwrap();
+        let output = String::from_utf8(buf).unwrap();
+
+        assert_eq!(output, indoc! {"
+                pkg - test
+                Catalog: nixpkgs
+                Latest:  pkg@2.0
+                License: MIT
+                Outputs: sub-pkg*, sub-pkg-other (* installed by default)
+                Systems: aarch64-darwin
+
+                Other versions:
+                    pkg@2.0 (aarch64-darwin only)
+                    pkg@1.0 (aarch64-darwin only)
+            "});
+    }
+
+    /// A catalog that doesn't report stabilities gets no column under `--all`.
+    #[test]
+    fn all_without_reported_stabilities_has_no_column() {
+        let packages = vec![
+            mock_pkg("1.0", "aarch64-darwin"),
+            mock_pkg("10.0.0", "aarch64-darwin"),
+        ];
+
+        let mut buf = vec![];
+        render_show_catalog(&mut buf, &packages, &all_systems(), true).unwrap();
+        let output = String::from_utf8(buf).unwrap();
+
+        assert_eq!(output, indoc! {"
+                pkg - test
+                Catalog: nixpkgs
+                Latest:  pkg@1.0
+                License: MIT
+                Outputs: sub-pkg*, sub-pkg-other (* installed by default)
+                Systems: aarch64-darwin
+
+                Other versions:
+                    pkg@1.0    (aarch64-darwin only)
+                    pkg@10.0.0 (aarch64-darwin only)
+            "});
+    }
+
+    /// `--json` serializes the version results, including each build's
+    /// stabilities, as a single-line array.
+    #[test]
+    fn json_serializes_version_results() {
+        let results = vec![mock_pkg_at("1.0", "aarch64-darwin", &[
+            "stable", "unstable",
+        ])];
+
+        let mut buf = vec![];
+        render_show_versions_json(&mut buf, &results).unwrap();
+        let json = String::from_utf8(buf).unwrap();
+
+        assert!(json.trim().contains('\n'), "expected pretty-printed JSON");
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let entries = parsed.as_array().unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0]["version"], "1.0");
+        assert_eq!(entries[0]["system"], "aarch64-darwin");
+        assert_eq!(
+            entries[0]["available_stabilities"],
+            serde_json::json!(["stable", "unstable"])
+        );
     }
 }

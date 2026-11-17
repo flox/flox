@@ -1154,6 +1154,132 @@ pub mod tests {
         mock.assert();
     }
 
+    /// A catalog that reports where a package is available adds `stability`
+    /// and `available_stabilities` to a message's context; one that doesn't
+    /// leaves them out. `not_on_current_stability` is only meaningful with
+    /// them, and reads as `not_in_catalog` without.
+    #[tokio::test]
+    async fn resolve_response_reads_stability_availability() {
+        let json_response = json!({ "items": [{
+            "name": "group",
+            "page": null,
+            "messages": [
+                {
+                    "type": "version_not_found",
+                    "level": "error",
+                    "message": "no 3.12 at lts",
+                    "context": {
+                        "attr_path": "python3",
+                        "install_id": "python3",
+                        "system": "x86_64-linux",
+                        "stability": "lts",
+                        "available_stabilities": "stable,staging,unstable",
+                    },
+                },
+                {
+                    "type": "attr_path_not_found.not_on_current_stability",
+                    "level": "error",
+                    "message": "hello is not at lts",
+                    "context": {
+                        "attr_path": "hello",
+                        "install_id": "hello",
+                        "stability": "lts",
+                        "available_stabilities": "unstable",
+                    },
+                },
+                {
+                    "type": "attr_path_not_found.not_on_current_stability",
+                    "level": "error",
+                    "message": "no context",
+                    "context": {
+                        "attr_path": "hello",
+                        "install_id": "hello",
+                    },
+                },
+                {
+                    "type": "attr_path_not_found.not_in_catalog",
+                    "level": "error",
+                    "message": "no nope",
+                    "context": {
+                        "attr_path": "nope",
+                        "install_id": "nope",
+                    },
+                },
+                {
+                    "type": "version_not_found",
+                    "level": "error",
+                    "message": "no 3.12",
+                    "context": {
+                        "attr_path": "python3",
+                        "install_id": "python3",
+                        "system": "x86_64-linux",
+                    },
+                },
+            ],
+        }]});
+        let server = MockServer::start_async().await;
+        let mock = server.mock(|_when, then| {
+            then.status(200).json_body(json_response);
+        });
+        let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
+
+        let res = client
+            .resolve(vec![PackageGroup {
+                name: "group".to_string(),
+                descriptors: vec![],
+                stability: None,
+            }])
+            .await
+            .unwrap();
+
+        let lts = |available: &[&str]| StabilityAvailability {
+            stability: "lts".to_string(),
+            available: available.iter().map(|s| s.to_string()).collect(),
+        };
+        assert_eq!(res[0].msgs, vec![
+            ResolutionMessage::VersionNotFound(MsgVersionNotFound {
+                level: MessageLevel::Error,
+                msg: "no 3.12 at lts".to_string(),
+                attr_path: "python3".to_string(),
+                install_id: "python3".to_string(),
+                system: "x86_64-linux".to_string(),
+                stability_availability: Some(lts(&["stable", "staging", "unstable"])),
+            }),
+            ResolutionMessage::AttrPathNotFoundNotOnCurrentStability(
+                MsgAttrPathNotFoundNotOnCurrentStability {
+                    level: MessageLevel::Error,
+                    msg: "hello is not at lts".to_string(),
+                    attr_path: "hello".to_string(),
+                    install_id: "hello".to_string(),
+                    stability_availability: lts(&["unstable"]),
+                }
+            ),
+            // `not_on_current_stability` without stabilities is read as
+            // `not_in_catalog`, keeping the catalog's message.
+            ResolutionMessage::AttrPathNotFoundNotInCatalog(MsgAttrPathNotFoundNotInCatalog {
+                level: MessageLevel::Error,
+                msg: "no context".to_string(),
+                attr_path: "hello".to_string(),
+                install_id: "hello".to_string(),
+            }),
+            ResolutionMessage::AttrPathNotFoundNotInCatalog(MsgAttrPathNotFoundNotInCatalog {
+                level: MessageLevel::Error,
+                msg: "no nope".to_string(),
+                attr_path: "nope".to_string(),
+                install_id: "nope".to_string(),
+            }),
+            ResolutionMessage::VersionNotFound(MsgVersionNotFound {
+                level: MessageLevel::Error,
+                msg: "no 3.12".to_string(),
+                attr_path: "python3".to_string(),
+                install_id: "python3".to_string(),
+                system: "x86_64-linux".to_string(),
+                stability_availability: None,
+            }),
+        ]);
+        mock.assert();
+    }
+
     #[tokio::test]
     async fn resolve_response_with_new_message_type() {
         let user_message = "User consumable Message";
