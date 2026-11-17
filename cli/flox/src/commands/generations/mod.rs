@@ -4,7 +4,7 @@ use flox_config::Config;
 use flox_rust_sdk::flox::Flox;
 use tracing::instrument;
 
-use super::display_help;
+use super::display_command_help;
 
 mod history;
 mod list;
@@ -40,7 +40,7 @@ impl GenerationsCommands {
     pub async fn handle(self, _config: Config, flox: Flox) -> Result<()> {
         match self {
             GenerationsCommands::Help => {
-                display_help(Some("generations".to_string()));
+                display_command_help(Some("generations".to_string()));
             },
             GenerationsCommands::List(args) => args.handle(flox).await?,
             GenerationsCommands::History(args) => args.handle(flox).await?,

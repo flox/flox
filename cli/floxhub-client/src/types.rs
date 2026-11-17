@@ -32,7 +32,7 @@ pub struct ResultsPage<T> {
 pub use api_types::PackageInfoSearch as SearchResult;
 pub type SearchResults = ResultsPage<SearchResult>;
 
-pub use api_types::{PackageOutput, PackageOutputs, PackageResolutionInfo as PackageBuild};
+pub use api_types::{PackageOutput, PackageOutputs, PackageVersionInfo as PackageBuild};
 pub type PackageDetails = ResultsPage<PackageBuild>;
 
 // Build-inputs lookup (lockless catalog locking, ECO-93). Re-exported so
@@ -132,19 +132,53 @@ impl From<PackageBuildResponse> for PublishReceipt {
 }
 
 /// The content of a generic message.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MsgGeneral {
     pub level: MessageLevel,
     pub msg: String,
 }
 
-/// A message indicating a package attr_path is not present in the catalog.
+/// The stability a pkg-group resolved at, and the stabilities that have a
+/// build the package would accept.
+///
+/// Catalogs that don't report this leave it out of a message.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct StabilityAvailability {
+    pub stability: String,
+    /// Strictest first. Empty when no stability has such a build.
+    pub available: Vec<String>,
+}
+
+/// A message indicating a package attr_path has no build at any stability.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MsgAttrPathNotFoundNotInCatalog {
     pub level: MessageLevel,
     pub msg: String,
     pub attr_path: String,
     pub install_id: String,
+}
+
+/// A message indicating a package attr_path has builds, but only at
+/// stabilities other than the one its pkg-group resolved at.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MsgAttrPathNotFoundNotOnCurrentStability {
+    pub level: MessageLevel,
+    pub msg: String,
+    pub attr_path: String,
+    pub install_id: String,
+    pub stability_availability: StabilityAvailability,
+}
+
+/// A message indicating no build of a package on `system` satisfies its
+/// version constraint.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MsgVersionNotFound {
+    pub level: MessageLevel,
+    pub msg: String,
+    pub attr_path: String,
+    pub install_id: String,
+    pub system: String,
+    pub stability_availability: Option<StabilityAvailability>,
 }
 
 /// A message indicating no single page contains a package for all requested
@@ -188,12 +222,14 @@ pub struct MsgUnknown {
 ///
 /// Constructed from [`ResolutionMessageGeneral`] by matching on `type_` and
 /// interpreting the `context` field.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ResolutionMessage {
     General(MsgGeneral),
     AttrPathNotFoundNotInCatalog(MsgAttrPathNotFoundNotInCatalog),
+    AttrPathNotFoundNotOnCurrentStability(MsgAttrPathNotFoundNotOnCurrentStability),
     AttrPathNotFoundSystemsNotOnSamePage(MsgAttrPathNotFoundSystemsNotOnSamePage),
     AttrPathNotFoundNotFoundForAllSystems(MsgAttrPathNotFoundNotFoundForAllSystems),
+    VersionNotFound(MsgVersionNotFound),
     ConstraintsTooTight(MsgConstraintsTooTight),
     Unknown(MsgUnknown),
 }
@@ -203,8 +239,10 @@ impl ResolutionMessage {
         match self {
             ResolutionMessage::General(msg) => &msg.msg,
             ResolutionMessage::AttrPathNotFoundNotInCatalog(msg) => &msg.msg,
+            ResolutionMessage::AttrPathNotFoundNotOnCurrentStability(msg) => &msg.msg,
             ResolutionMessage::AttrPathNotFoundSystemsNotOnSamePage(msg) => &msg.msg,
             ResolutionMessage::AttrPathNotFoundNotFoundForAllSystems(msg) => &msg.msg,
+            ResolutionMessage::VersionNotFound(msg) => &msg.msg,
             ResolutionMessage::ConstraintsTooTight(msg) => &msg.msg,
             ResolutionMessage::Unknown(msg) => &msg.msg,
         }
@@ -214,8 +252,10 @@ impl ResolutionMessage {
         match self {
             ResolutionMessage::General(msg) => msg.level,
             ResolutionMessage::AttrPathNotFoundNotInCatalog(msg) => msg.level,
+            ResolutionMessage::AttrPathNotFoundNotOnCurrentStability(msg) => msg.level,
             ResolutionMessage::AttrPathNotFoundSystemsNotOnSamePage(msg) => msg.level,
             ResolutionMessage::AttrPathNotFoundNotFoundForAllSystems(msg) => msg.level,
+            ResolutionMessage::VersionNotFound(msg) => msg.level,
             ResolutionMessage::ConstraintsTooTight(msg) => msg.level,
             ResolutionMessage::Unknown(msg) => msg.level,
         }
@@ -237,6 +277,23 @@ impl ResolutionMessage {
             .filter(|s| !s.is_empty())
             .map(|s| s.to_string())
             .collect()
+    }
+
+    /// Present only when the catalog sent both `stability` and
+    /// `available_stabilities`, the latter comma-separated.
+    fn stability_availability_from_context(
+        context: &HashMap<String, String>,
+    ) -> Option<StabilityAvailability> {
+        let stability = context.get("stability")?;
+        let available = context.get("available_stabilities")?;
+        Some(StabilityAvailability {
+            stability: stability.clone(),
+            available: available
+                .split(',')
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string())
+                .collect(),
+        })
     }
 
     fn install_id_from_context(context: &HashMap<String, String>) -> String {
@@ -264,6 +321,45 @@ impl From<api_types::ResolutionMessageGeneral> for ResolutionMessage {
                     msg: r_msg.message,
                     attr_path: Self::attr_path_from_context(&r_msg.context),
                     install_id: Self::install_id_from_context(&r_msg.context),
+                })
+            },
+            api_types::MessageType::AttrPathNotFoundNotOnCurrentStability => {
+                let attr_path = Self::attr_path_from_context(&r_msg.context);
+                let install_id = Self::install_id_from_context(&r_msg.context);
+                match Self::stability_availability_from_context(&r_msg.context) {
+                    Some(stability_availability) => {
+                        ResolutionMessage::AttrPathNotFoundNotOnCurrentStability(
+                            MsgAttrPathNotFoundNotOnCurrentStability {
+                                level: r_msg.level,
+                                msg: r_msg.message,
+                                attr_path,
+                                install_id,
+                                stability_availability,
+                            },
+                        )
+                    },
+                    // Without the stabilities there's nothing to suggest, so
+                    // treat it as the package not being found.
+                    None => ResolutionMessage::AttrPathNotFoundNotInCatalog(
+                        MsgAttrPathNotFoundNotInCatalog {
+                            level: r_msg.level,
+                            msg: r_msg.message,
+                            attr_path,
+                            install_id,
+                        },
+                    ),
+                }
+            },
+            api_types::MessageType::VersionNotFound => {
+                ResolutionMessage::VersionNotFound(MsgVersionNotFound {
+                    level: r_msg.level,
+                    msg: r_msg.message,
+                    attr_path: Self::attr_path_from_context(&r_msg.context),
+                    install_id: Self::install_id_from_context(&r_msg.context),
+                    system: r_msg.context.get("system").cloned().unwrap_or_default(),
+                    stability_availability: Self::stability_availability_from_context(
+                        &r_msg.context,
+                    ),
                 })
             },
             api_types::MessageType::AttrPathNotFoundSystemsNotOnSamePage => {
@@ -382,6 +478,16 @@ pub use api_types::{PageInfo, StabilityInfo};
 #[error(transparent)]
 pub struct BaseCatalogUrlError(pub(crate) url::ParseError);
 
+/// Fetchers supported for catalog nixpkgs sources.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum CatalogFlakeFetcher {
+    #[default]
+    Git,
+    Github,
+    Gitlab,
+}
+
 /// A base catalog url as tracked by the catalog server.
 ///
 /// Used to associate expression builds with a catalog page and derive a nix
@@ -391,10 +497,40 @@ pub struct BaseCatalogUrlError(pub(crate) url::ParseError);
 pub struct BaseCatalogUrl(String);
 
 impl BaseCatalogUrl {
-    pub fn as_flake_ref(&self) -> Result<Url, BaseCatalogUrlError> {
-        let mut url = Url::parse(&format!("git+{}", self.0)).map_err(BaseCatalogUrlError)?;
-        url.query_pairs_mut().append_pair("shallow", "1");
-        Ok(url)
+    pub fn as_flake_ref(&self, fetcher: CatalogFlakeFetcher) -> Result<Url, BaseCatalogUrlError> {
+        let scheme = match fetcher {
+            CatalogFlakeFetcher::Git => {
+                let mut url =
+                    Url::parse(&format!("git+{}", self.0)).map_err(BaseCatalogUrlError)?;
+                url.query_pairs_mut().append_pair("shallow", "1");
+                return Ok(url);
+            },
+            CatalogFlakeFetcher::Github => "github",
+            CatalogFlakeFetcher::Gitlab => "gitlab",
+        };
+        let origin = Url::parse(&self.0).map_err(BaseCatalogUrlError)?;
+        let path = origin.path().trim_matches('/').trim_end_matches(".git");
+        let (namespace, repo) = path.rsplit_once('/').unwrap_or(("", path));
+        // Nix decodes the URL path before splitting owner/repo. Encode subgroup
+        // slashes twice so the first decode leaves %2F inside the owner component.
+        // https://github.com/NixOS/nix/issues/6435
+        let namespace = namespace.replace('/', "%252F");
+        let mut flake_ref =
+            Url::parse(&format!("{scheme}:{namespace}/{repo}")).map_err(BaseCatalogUrlError)?;
+        // Native forge fetchers accept either rev or ref. Prefer the pinned revision.
+        let has_revision = origin.query_pairs().any(|(key, _)| key == "rev");
+        // Carry only query parameters shared with native forge references.
+        flake_ref
+            .query_pairs_mut()
+            .extend_pairs(origin.query_pairs().filter(|(key, _)| {
+                matches!(key.as_ref(), "rev" | "dir" | "narHash") || (key == "ref" && !has_revision)
+            }));
+        // host()/host_str() omit an explicit port.
+        flake_ref.query_pairs_mut().append_pair(
+            "host",
+            &origin[url::Position::BeforeHost..url::Position::AfterPort],
+        );
+        Ok(flake_ref)
     }
 
     pub fn rev(&self) -> Option<String> {
@@ -682,7 +818,9 @@ mod tests {
     #[test]
     fn as_flake_ref_with_query_string_appends_ampersand() {
         let url = BaseCatalogUrl::from("https://github.com/flox/nixpkgs?rev=abc123");
-        let flake_ref = url.as_flake_ref().expect("should parse");
+        let flake_ref = url
+            .as_flake_ref(CatalogFlakeFetcher::Git)
+            .expect("should parse");
         assert_eq!(
             flake_ref.as_str(),
             "git+https://github.com/flox/nixpkgs?rev=abc123&shallow=1"
@@ -692,10 +830,49 @@ mod tests {
     #[test]
     fn as_flake_ref_plain_https_no_query_appends_question_mark() {
         let url = BaseCatalogUrl::from("https://github.com/NixOS/nixpkgs");
-        let flake_ref = url.as_flake_ref().expect("should parse");
+        let flake_ref = url
+            .as_flake_ref(CatalogFlakeFetcher::Git)
+            .expect("should parse");
         assert_eq!(
             flake_ref.as_str(),
             "git+https://github.com/NixOS/nixpkgs?shallow=1"
+        );
+    }
+
+    #[test]
+    fn as_flake_ref_uses_gitlab_subgroups() {
+        let url = BaseCatalogUrl::from(
+            "https://gitlab.example.org/group/subgroup/nixpkgs.git?rev=abc123",
+        );
+        assert_eq!(
+            url.as_flake_ref(CatalogFlakeFetcher::Gitlab)
+                .unwrap()
+                .as_str(),
+            "gitlab:group%252Fsubgroup/nixpkgs?rev=abc123&host=gitlab.example.org"
+        );
+    }
+
+    #[test]
+    fn as_flake_ref_preserves_the_forge_port() {
+        let url = BaseCatalogUrl::from("https://gitlab.example.org:8443/group/repo?rev=abc123");
+        assert_eq!(
+            url.as_flake_ref(CatalogFlakeFetcher::Gitlab)
+                .unwrap()
+                .as_str(),
+            "gitlab:group/repo?rev=abc123&host=gitlab.example.org%3A8443"
+        );
+    }
+
+    #[test]
+    fn as_flake_ref_drops_git_only_query_parameters() {
+        let url = BaseCatalogUrl::from(
+            "https://gitlab.example.org/group/repo?rev=abc123&ref=stable&shallow=1&submodules=1&allRefs=1&dir=pkgs&narHash=sha256-example",
+        );
+        assert_eq!(
+            url.as_flake_ref(CatalogFlakeFetcher::Gitlab)
+                .unwrap()
+                .as_str(),
+            "gitlab:group/repo?rev=abc123&dir=pkgs&narHash=sha256-example&host=gitlab.example.org"
         );
     }
 

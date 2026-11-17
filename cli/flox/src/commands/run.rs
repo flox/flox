@@ -57,6 +57,7 @@ use crate::commands::ensure_auth;
 use crate::commands::general::{remove_config_key_with_query, update_config_with_query};
 use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Select};
+use crate::utils::errors::format_resolve_auth_error;
 use crate::utils::message;
 
 // ---------------------------------------------------------------------------
@@ -148,8 +149,8 @@ pub enum RunError {
     ResolutionMessage(String, String),
 
     /// Resolution requires a valid FloxHub login.
-    #[error(transparent)]
-    Auth(#[from] ResolveAuthError),
+    #[error("{}", format_resolve_auth_error(.0))]
+    Auth(ResolveAuthError),
 
     /// No valid FloxHub login to disambiguate between packages at the prompt.
     /// Carries the message from [`ensure_auth`], which names `flox auth login`.
@@ -815,7 +816,7 @@ async fn exec_run(run_args: RunArgs, flox: &Flox) -> Result<()> {
         .resolve(vec![package_group])
         .await
         .map_err(|err| match err {
-            ResolveError::Auth(err) => RunError::from(err),
+            ResolveError::Auth(err) => RunError::Auth(err),
             ResolveError::FloxhubClientError(_) => RunError::CatalogError(pkg_spec.clone()),
         })?;
 

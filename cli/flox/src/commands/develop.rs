@@ -19,6 +19,7 @@ use flox_rust_sdk::providers::build::{
     PackageTargetKind,
 };
 use flox_rust_sdk::providers::nix;
+use floxhub_client::CatalogFlakeFetcher;
 use indoc::{formatdoc, indoc};
 use nef_lock_catalog::NixFlakeref;
 use tempfile::{NamedTempFile, TempDir};
@@ -178,7 +179,7 @@ impl Develop {
 
         let expression_nixpkgs =
             base_nixpkgs_url_from_url_select(&flox, base_catalog_url_select).await?;
-        let base_nixpkgs_url = expression_nixpkgs.as_flake_ref()?;
+        let base_nixpkgs_url = expression_nixpkgs.as_flake_ref(CatalogFlakeFetcher::Git)?;
 
         message::plain(format!(
             "Nix expression builds use nixpkgs {}.",
