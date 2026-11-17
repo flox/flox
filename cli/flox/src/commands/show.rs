@@ -3,6 +3,7 @@ use std::io::Write;
 
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
+use flox_manifest::raw::DEFAULT_SYSTEMS_STR;
 use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
 use floxhub_client::{CatalogClientTrait, PackageBuild, VersionsError};
@@ -55,15 +56,9 @@ impl Show {
                 self.pkg_path
             );
         }
-        let expected_systems = [
-            "aarch64-darwin",
-            "aarch64-linux",
-            "x86_64-darwin",
-            "x86_64-linux",
-        ]
-        .iter()
-        .map(|s| s.to_string())
-        .collect::<HashSet<_>>();
+        // A version is only worth flagging when an environment locked for the
+        // default systems couldn't install it.
+        let expected_systems = DEFAULT_SYSTEMS_STR.iter().cloned().collect::<HashSet<_>>();
         if self.json {
             render_show_versions_json(&mut std::io::stdout(), &results.results)?;
         } else {
@@ -179,13 +174,14 @@ fn render_show_catalog(
 }
 
 /// One line of the "Other versions" list.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 struct VersionRow {
     version: String,
     /// The stabilities that have the version on every system it's listed for,
     /// strictest first, or `None` if the catalog doesn't report them
     stabilities: Option<String>,
-    /// The systems the version is limited to, if not all expected ones
+    /// Every system the version is available on, if that misses any expected
+    /// system
     systems: Option<String>,
 }
 
@@ -215,11 +211,6 @@ fn version_rows(
                 .iter()
                 .map(|pkg| pkg.system.to_string())
                 .collect::<HashSet<_>>();
-            let mut available_systems = expected_systems
-                .intersection(&systems)
-                .cloned()
-                .collect::<Vec<_>>();
-            available_systems.sort();
 
             // Intersecting keeps the catalog's strictest-first order.
             let stabilities = builds
@@ -239,8 +230,11 @@ fn version_rows(
             VersionRow {
                 version: format!("    {pkg_path}@{version}"),
                 stabilities,
-                systems: (available_systems.len() != expected_systems.len())
-                    .then(|| available_systems.join(", ")),
+                // A build for a system outside the defaults, such as a
+                // retired one, neither triggers the annotation nor is hidden
+                // from it.
+                systems: (!expected_systems.is_subset(&systems))
+                    .then(|| systems.iter().sorted().join(", ")),
             }
         })
         .collect()
@@ -367,16 +361,8 @@ mod test {
         }
     }
 
-    fn all_systems() -> HashSet<System> {
-        [
-            "aarch64-darwin",
-            "aarch64-linux",
-            "x86_64-darwin",
-            "x86_64-linux",
-        ]
-        .iter()
-        .map(|s| s.to_string())
-        .collect()
+    fn default_systems() -> HashSet<System> {
+        DEFAULT_SYSTEMS_STR.iter().cloned().collect()
     }
 
     #[test]
@@ -387,7 +373,7 @@ mod test {
         ];
 
         let mut buf = vec![];
-        render_show_catalog(&mut buf, &packages, &all_systems(), false).unwrap();
+        render_show_catalog(&mut buf, &packages, &default_systems(), false).unwrap();
         let output = String::from_utf8(buf).unwrap();
 
         // Verify that system restrictions are aligned despite different version lengths
@@ -413,10 +399,10 @@ mod test {
         let stable = ["stable", "staging", "unstable"];
         let lts = ["lts", "stable", "staging", "unstable"];
         let mut packages = vec![mock_pkg_at("10.0.0", "aarch64-darwin", &["unstable"])];
-        for system in all_systems() {
+        for system in default_systems() {
             packages.push(mock_pkg_at("2.0", &system, &stable));
         }
-        for system in all_systems() {
+        for system in default_systems() {
             // One system has the version at lts too.
             let stabilities = if system == "x86_64-linux" {
                 &lts[..]
@@ -427,7 +413,7 @@ mod test {
         }
 
         let mut buf = vec![];
-        render_show_catalog(&mut buf, &packages, &all_systems(), true).unwrap();
+        render_show_catalog(&mut buf, &packages, &default_systems(), true).unwrap();
         let output = String::from_utf8(buf).unwrap();
 
         assert_eq!(output, indoc! {"
@@ -455,7 +441,7 @@ mod test {
         ];
 
         let mut buf = vec![];
-        render_show_catalog(&mut buf, &packages, &all_systems(), false).unwrap();
+        render_show_catalog(&mut buf, &packages, &default_systems(), false).unwrap();
         let output = String::from_utf8(buf).unwrap();
 
         assert_eq!(output, indoc! {"
@@ -481,7 +467,7 @@ mod test {
         ];
 
         let mut buf = vec![];
-        render_show_catalog(&mut buf, &packages, &all_systems(), true).unwrap();
+        render_show_catalog(&mut buf, &packages, &default_systems(), true).unwrap();
         let output = String::from_utf8(buf).unwrap();
 
         assert_eq!(output, indoc! {"
@@ -496,6 +482,74 @@ mod test {
                     pkg@1.0    (aarch64-darwin only)
                     pkg@10.0.0 (aarch64-darwin only)
             "});
+    }
+
+    fn systems(systems: &[&str]) -> HashSet<System> {
+        systems.iter().map(|s| s.to_string()).collect()
+    }
+
+    fn version_row(version: &str, systems: Option<&str>) -> VersionRow {
+        VersionRow {
+            version: format!("    pkg@{version}"),
+            stabilities: None,
+            systems: systems.map(str::to_string),
+        }
+    }
+
+    /// A version is annotated only when it's missing an expected system, and
+    /// the annotation lists every system it has, including unexpected ones.
+    #[test]
+    fn versions_are_annotated_when_missing_an_expected_system() {
+        let expected = systems(&["aarch64-darwin", "aarch64-linux", "x86_64-linux"]);
+        let builds = [
+            (
+                "4.0",
+                &["aarch64-darwin", "aarch64-linux", "x86_64-linux"][..],
+            ),
+            ("3.0", &[
+                "aarch64-darwin",
+                "aarch64-linux",
+                "x86_64-darwin",
+                "x86_64-linux",
+            ]),
+            ("2.0", &["aarch64-darwin", "x86_64-darwin"]),
+            ("1.0", &["x86_64-darwin"]),
+        ];
+        let packages = builds
+            .iter()
+            .flat_map(|(version, systems)| systems.iter().map(|system| mock_pkg(version, system)))
+            .collect::<Vec<_>>();
+
+        assert_eq!(version_rows("pkg", &packages, &expected), vec![
+            version_row("4.0", None),
+            version_row("3.0", None),
+            version_row("2.0", Some("aarch64-darwin, x86_64-darwin")),
+            version_row("1.0", Some("x86_64-darwin")),
+        ]);
+    }
+
+    /// When the host system is outside the supported set, it's expected too,
+    /// so a version without a build for it is annotated.
+    #[test]
+    fn versions_missing_an_expected_host_system_are_annotated() {
+        let expected = systems(&[
+            "aarch64-darwin",
+            "aarch64-linux",
+            "x86_64-darwin",
+            "x86_64-linux",
+        ]);
+        let mut packages = Vec::new();
+        for system in &expected {
+            packages.push(mock_pkg("2.0", system));
+        }
+        for system in ["aarch64-darwin", "aarch64-linux", "x86_64-linux"] {
+            packages.push(mock_pkg("1.0", system));
+        }
+
+        assert_eq!(version_rows("pkg", &packages, &expected), vec![
+            version_row("2.0", None),
+            version_row("1.0", Some("aarch64-darwin, aarch64-linux, x86_64-linux")),
+        ]);
     }
 
     /// `--json` serializes the version results, including each build's
