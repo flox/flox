@@ -72,9 +72,7 @@ function old_hello_response_version() {
 }
 
 @test "upgrade warns when implicit default systems change on re-lock" {
-  if [ "$NIX_SYSTEM" == "x86_64-darwin" ]; then
-    skip "implicit default systems are unchanged on x86_64-darwin"
-  fi
+  skip_x86_64_darwin_replay
 
   "$FLOX_BIN" init
   cp "$GENERATED_DATA"/envs/hello_before_three_system_relock/manifest.{toml,lock} \

@@ -1002,8 +1002,8 @@ Semver ::= {
 :   The allowlist of systems that this environment supports.
     Valid values are `x86_64-linux`, `aarch64-linux`,
     `x86_64-darwin`, and `aarch64-darwin`.
-    [`flox init`](./flox-init.md) automatically populates this list with the
-    current system type.
+    When omitted, the environment supports `aarch64-darwin`, `aarch64-linux`,
+    and `x86_64-linux`, whichever system Flox runs on.
     A user that attempts to pull an environment from FloxHub when their environment
     isn't explicitly supported will be prompted whether to automatically add their
     system to this list.

@@ -417,11 +417,10 @@ with_latest_schema() {
   fi
 }
 
-# The catalog recordings in "$GENERATED_DATA" were made without x86_64-darwin,
-# which is no longer one of the implicit default systems. On an x86_64-darwin
-# host the implicit default set adds it back, so the resolve request an
-# environment sends no longer matches any recording and the mock server answers
-# 404. Tests that replay a recording can't run there.
+# The catalog recordings in "$GENERATED_DATA" were made for the implicit default
+# systems, which don't include x86_64-darwin. An environment locked from them has
+# nothing locked for an x86_64-darwin host, so tests that replay a recording and
+# then build or activate can't run there.
 #
 # Coverage for resolving explicitly requested non-default systems lives in the
 # tests that call `pin_all_systems` instead of this.

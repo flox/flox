@@ -6375,9 +6375,7 @@ success"
 }
 
 @test "activate warns when implicit default systems change on re-lock" {
-  if [ "$NIX_SYSTEM" == "x86_64-darwin" ]; then
-    skip "implicit default systems are unchanged on x86_64-darwin"
-  fi
+  skip_x86_64_darwin_replay
 
   project_setup_common
   "$FLOX_BIN" init

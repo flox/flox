@@ -42,22 +42,17 @@ pub const MANIFEST_BUILD_KEY: &str = "build";
 /// Represents the top-level `description` key in manifest.toml
 pub const MANIFEST_DESCRIPTION_KEY: &str = "description";
 
-/// The systems assumed when a manifest has no `options.systems`.
+/// The systems assumed when a manifest has no `options.systems`, sorted.
 ///
-/// The current system is always included so that environments initialized on
-/// a system outside the base set (e.g. `x86_64-darwin`) keep working there.
-/// The list is sorted and deduplicated so generated output stays
-/// deterministic for a given host.
+/// The set is the same on every host: an environment that doesn't set
+/// `options.systems` doesn't support a host outside it, such as
+/// `x86_64-darwin`, even when this CLI was built for that host.
 pub static DEFAULT_SYSTEMS_STR: LazyLock<Vec<String>> = LazyLock::new(|| {
-    let mut systems = vec![
+    vec![
         "aarch64-darwin".to_string(),
         "aarch64-linux".to_string(),
         "x86_64-linux".to_string(),
-        env!("NIX_TARGET_SYSTEM").to_string(),
-    ];
-    systems.sort();
-    systems.dedup();
-    systems
+    ]
 });
 
 pub(crate) fn get_schema_version_kind(toml: &DocumentMut) -> Result<VersionKind, ManifestError> {

@@ -1063,9 +1063,8 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn warns_when_default_systems_changed_on_relock() {
         let (mut flox, _tempdir) = flox_instance();
-        // On x86_64-darwin the implicit default set still contains all four
-        // systems, so there is no transition to warn about (and the replayed
-        // request below would not match).
+        // The relock leaves nothing locked for an x86_64-darwin host, so the
+        // build that completes the install fails there.
         if flox.system == "x86_64-darwin" {
             return;
         }
