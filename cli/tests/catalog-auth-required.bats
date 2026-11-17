@@ -55,6 +55,14 @@ Log in again with 'flox auth login'.
 EOF
 }
 
+assert_agent_login_hint() {
+  assert_output --partial - << 'EOF'
+An agent with a user present can log in with 'flox auth login --wait'.
+Run it in the background and give the user the URL that it prints.
+It exits once the user approves the login.
+EOF
+}
+
 project_setup() {
   export PROJECT_NAME="test"
   export PROJECT_DIR="${BATS_TEST_TMPDIR?}/$PROJECT_NAME"
@@ -93,6 +101,21 @@ teardown() {
   run "$FLOX_BIN" install hello
   assert_failure
   assert_auth_required_error
+}
+
+# An agent's tool calls hold back output until the command exits, so the agent
+# is told to run the login in the background.
+# Only an agent with a user can use that, and an agent in CI has none, so the
+# hint says who it is for.
+@test "resolving while logged out tells an agent how to log in" {
+  unset FLOX_FLOXHUB_TOKEN
+  export FLOX_INVOCATION_SOURCE="agentic.test"
+  "$FLOX_BIN" init
+  export _FLOX_USE_CATALOG_MOCK="$UNAUTHORIZED_MOCK"
+  run "$FLOX_BIN" install hello
+  assert_failure
+  assert_auth_required_error
+  assert_agent_login_hint
 }
 
 # The catalog treats an expired token as no token at all; the CLI knows the
@@ -136,6 +159,17 @@ hello.pkg-path = "hello"' > .flox/env/manifest.toml
   refute_output --partial "Check your network connection"
 }
 
+# 'flox run' reports the login message through its own error type.
+@test "'flox run' tells an agent how to log in" {
+  unset FLOX_FLOXHUB_TOKEN
+  export FLOX_INVOCATION_SOURCE="agentic.test"
+  export _FLOX_USE_CATALOG_MOCK="$UNAUTHORIZED_MOCK"
+  run "$FLOX_BIN" run --package hello hello
+  assert_failure
+  assert_auth_required_error
+  assert_agent_login_hint
+}
+
 # When a custom-catalog package is not in the local Nix store, activate must
 # call the catalog for download locations. The store-info endpoint returns an
 # empty 200 (not 401) when unauthenticated; the CLI detects the logged-out
@@ -150,6 +184,19 @@ hello.pkg-path = "hello"' > .flox/env/manifest.toml
   assert_failure
   assert_output --partial "flox auth login"
   refute_output --partial "Unexpected error calling the catalog client"
+}
+
+# A download reports the login message as a failure to build the environment.
+@test "'flox activate' with custom catalog package tells an agent how to log in" {
+  unset FLOX_FLOXHUB_TOKEN
+  export FLOX_INVOCATION_SOURCE="agentic.test"
+  "$FLOX_BIN" init
+  cp "$CUSTOM_CATALOG_HELLO_DIR/manifest.toml" .flox/env/manifest.toml
+  cp "$CUSTOM_CATALOG_HELLO_DIR/manifest.lock" .flox/env/manifest.lock
+  export _FLOX_USE_CATALOG_MOCK="$STORE_EMPTY_MOCK"
+  run "$FLOX_BIN" activate -- true
+  assert_failure
+  assert_agent_login_hint
 }
 
 # ---------------------------------------------------------------------------- #

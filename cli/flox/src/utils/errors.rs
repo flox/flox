@@ -21,9 +21,12 @@ use flox_rust_sdk::models::environment::{
     EnvironmentError,
     UpgradeError,
 };
+use flox_rust_sdk::providers::buildenv::BuildEnvError;
 use flox_rust_sdk::providers::git::GitRemoteCommandError;
 use flox_rust_sdk::providers::lock_manifest::ResolveError;
 use flox_rust_sdk::providers::services::process_compose::{LoggedError, ServiceError};
+use flox_rust_sdk::utils::invoked_by_agent;
+use floxhub_client::{ResolveAuthError, ResolveError as CatalogResolveError};
 use indent::indent_by;
 use indoc::{formatdoc, indoc};
 use tracing::trace;
@@ -288,6 +291,11 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
         "},
         // internal error, a bug if this happens to users!
         CoreEnvironmentError::BadLockfilePath(_) => display_chain(err),
+        CoreEnvironmentError::BuildEnv(BuildEnvError::DownloadAuth(err)) => formatdoc! {"
+            Failed to build environment:
+
+            {err}
+        ", err = format_resolve_auth_error(err)},
         CoreEnvironmentError::BuildEnv(err) => formatdoc! {"
             Failed to build environment:
 
@@ -689,6 +697,9 @@ pub fn format_environment_select_error(err: &EnvironmentSelectError) -> String {
 pub fn format_resolve_error(err: &ResolveError) -> String {
     trace!("formatting locked_manifest_error: {err:?}");
     match err {
+        ResolveError::CatalogResolve(CatalogResolveError::Auth(err)) => {
+            format_resolve_auth_error(err)
+        },
         ResolveError::CatalogResolve(err) => display_chain(err),
         ResolveError::UnrecognizedSystem(system) => formatdoc! {"
             Unrecognized system in manifest: {system}
@@ -705,6 +716,30 @@ pub fn format_resolve_error(err: &ResolveError) -> String {
         ResolveError::LockFlakeNixError(_) => display_chain(err),
         ResolveError::InstallIdNotInManifest(_) => display_chain(err),
         ResolveError::Manifest(manifest_err) => format_manifest_error(manifest_err),
+    }
+}
+
+/// The catalog's request to log in, plus how to do that from an agent.
+///
+/// An agent's tool calls hold back output until the command exits, so a
+/// 'flox auth login' run in the foreground would keep the URL from the user
+/// until the call times out.
+///
+/// The hint doesn't depend on a missing terminal: some agent harnesses run
+/// commands in a pty, and those agents need it as much as the others.
+///
+/// An agent can also run unattended, in CI for one, where nobody can approve
+/// a login. Nothing in its environment says so reliably, so the hint names
+/// the condition and leaves the judgment to the agent.
+pub fn format_resolve_auth_error(err: &ResolveAuthError) -> String {
+    if !invoked_by_agent() {
+        return err.to_string();
+    }
+    formatdoc! {"
+        {err}
+        An agent with a user present can log in with 'flox auth login --wait'.
+        Run it in the background and give the user the URL that it prints.
+        It exits once the user approves the login."
     }
 }
 

@@ -1886,7 +1886,14 @@ pub(super) async fn ensure_auth(flox: &mut Flox) -> Result<String> {
             // `plaintext` preference; an explicit `flox auth login` does. This is
             // an accepted limitation; see
             // docs/superpowers/specs/2026-06-22-implicit-reauth-token-storage-followup.md.
-            auth::login_flox(flox, false, false, TokenStorageMode::Keyring).await
+            auth::login_flox(
+                flox,
+                auth::LoginMode::Interactive,
+                false,
+                false,
+                TokenStorageMode::Keyring,
+            )
+            .await
         },
         Err(failure) => {
             let message = match failure {
