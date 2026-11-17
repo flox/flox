@@ -180,7 +180,6 @@ Reference passing-test medians, for orientation only:
 | Job | Tests | Median passing test |
 |---|---|---|
 | `remote (aarch64-darwin, !containerize)` | ~750 | ~505 ms |
-| `remote (x86_64-darwin, !containerize,!activate)` | ~435 | ~1200 ms |
 
 **Action when it is a tight wait:** make the wait poll a condition with a
 generous ceiling rather than sleep a fixed budget. Do not "fix" the behaviour
