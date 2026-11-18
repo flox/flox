@@ -1002,7 +1002,7 @@ Semver ::= {
 :   The allowlist of systems that this environment supports.
     Valid values are `x86_64-linux`, `aarch64-linux`, and `aarch64-darwin`.
     When omitted, the environment supports `aarch64-darwin`, `aarch64-linux`,
-    and `x86_64-linux`, whichever system Flox runs on.
+    and `x86_64-linux`, whatever system it is locked on.
 
     Flox no longer supports `x86_64-darwin`.
     Locking an environment whose `options.systems` or package `systems`

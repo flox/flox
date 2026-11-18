@@ -898,4 +898,38 @@ mod tests {
             });
         });
     }
+
+    /// A catalog message of type `attr_path_not_found.systems_not_on_same_page`
+    /// parses to [ResolutionMessage::AttrPathNotFoundSystemsNotOnSamePage],
+    /// carrying the system groupings from its context.
+    #[test]
+    fn systems_not_on_same_page_message_parses() {
+        let message: api_types::ResolutionMessageGeneral = serde_json::from_str(
+            r#"{
+                "level": "error",
+                "type": "attr_path_not_found.systems_not_on_same_page",
+                "message": "The package 'python311Packages.torchvision-bin' is not found for all requested systems on the same page, consider package groups with the following system groupings: (aarch64-linux), (x86_64-darwin), (aarch64-linux,x86_64-darwin), (aarch64-darwin,aarch64-linux,x86_64-darwin).",
+                "context": {
+                    "attr_path": "python311Packages.torchvision-bin",
+                    "install_id": "torchvision-bin",
+                    "system_groupings": "(aarch64-linux), (x86_64-darwin), (aarch64-linux,x86_64-darwin), (aarch64-darwin,aarch64-linux,x86_64-darwin)"
+                }
+            }"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            ResolutionMessage::from(message),
+            ResolutionMessage::AttrPathNotFoundSystemsNotOnSamePage(
+                MsgAttrPathNotFoundSystemsNotOnSamePage {
+                    level: MessageLevel::Error,
+                    msg: "The package 'python311Packages.torchvision-bin' is not found for all requested systems on the same page, consider package groups with the following system groupings: (aarch64-linux), (x86_64-darwin), (aarch64-linux,x86_64-darwin), (aarch64-darwin,aarch64-linux,x86_64-darwin).".to_string(),
+                    attr_path: "python311Packages.torchvision-bin".to_string(),
+                    install_id: "torchvision-bin".to_string(),
+                    system_groupings: "(aarch64-linux), (x86_64-darwin), (aarch64-linux,x86_64-darwin), (aarch64-darwin,aarch64-linux,x86_64-darwin)"
+                        .to_string(),
+                }
+            )
+        );
+    }
 }

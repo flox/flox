@@ -100,8 +100,6 @@ pub enum ResolveError {
         in_include: bool,
     },
 
-    // todo: this should probably part of some validation logic of the manifest file
-    //       rather than occurring during the locking process creation
     #[error("{}", retired_system_message(setting, include.as_deref()))]
     RetiredSystem {
         setting: RetiredSystemSetting,
@@ -112,6 +110,8 @@ pub enum ResolveError {
 
     /// Never raised for [RETIRED_SYSTEM], which [ResolveError::RetiredSystem]
     /// reports before resolution, so this never advises adding it.
+    // todo: this should probably part of some validation logic of the manifest file
+    //       rather than occurring during the locking process creation
     #[error(
         "'{install_id}' specifies disabled or unknown system '{system}' (enabled systems: {enabled_systems}).\n\nAdd '{system}' to 'options.systems' in manifest.toml",
         enabled_systems=enabled_systems.join(", ")
@@ -300,12 +300,12 @@ fn retired_system_message(setting: &RetiredSystemSetting, include: Option<&str>)
     }
 }
 
-/// `manifest` with `options.systems` removed if they are the systems `flox
-/// init` used to write into every manifest.
+/// An included environment's `manifest` with `options.systems` removed if they
+/// are the systems `flox init` used to write into every manifest.
 ///
-/// An included environment's manifest can't be rewritten by the composer, so
-/// its former default systems are dropped only for the merge.
-fn without_former_default_systems(mut manifest: ManifestLatest) -> ManifestLatest {
+/// The composer can't rewrite an included environment's manifest, so its
+/// former default systems are dropped only for the merge, with no message.
+fn include_without_former_default_systems(mut manifest: ManifestLatest) -> ManifestLatest {
     if is_former_default_systems(manifest.options.systems.as_deref()) {
         manifest.options.systems = None;
     }
@@ -773,7 +773,7 @@ impl LockManifest {
             .map(|include| {
                 include.manifest.migrate_typed_only(None).map(|manifest| {
                     let manifest =
-                        without_former_default_systems(manifest.as_latest_schema().clone());
+                        include_without_former_default_systems(manifest.as_latest_schema().clone());
                     (include.name.clone(), manifest)
                 })
             })
@@ -829,8 +829,9 @@ impl LockManifest {
                     .manifest
                     .migrate_typed_only(None)
                     .is_ok_and(|manifest| {
-                        let manifest =
-                            without_former_default_systems(manifest.as_latest_schema().clone());
+                        let manifest = include_without_former_default_systems(
+                            manifest.as_latest_schema().clone(),
+                        );
                         setting.is_set_by(&manifest, merged)
                     })
             })

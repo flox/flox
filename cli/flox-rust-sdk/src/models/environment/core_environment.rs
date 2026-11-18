@@ -2103,6 +2103,10 @@ mod tests {
     /// The up-to-date predicate must accept a plain (single, uncomposed)
     /// prior-release lockfile paired with its manifest, without forcing a
     /// re-lock.
+    ///
+    /// The fixture keeps the `options.systems` that `flox init` wrote before
+    /// x86_64-darwin was retired, so this also covers such an environment
+    /// activating without its manifest being rewritten.
     #[test]
     fn lockfile_if_up_to_date_accepts_prior_release_plain() {
         let (flox, _temp) = flox_instance();
@@ -2167,25 +2171,27 @@ mod tests {
         );
     }
 
-    /// Re-locking the plain manifest under the current release must reproduce
+    /// Re-locking a plain manifest under the current release must reproduce
     /// the prior-release lockfile byte-for-byte (lockfile serialization
     /// stability).
     ///
-    /// The plain fixture installs no packages, so locking makes no catalog
-    /// requests and runs offline; no replay client is needed.
-    #[ignore = "the plain fixture's 'options.systems' are the former default systems, which locking now removes; drop them from its manifest.toml and re-capture it with 'just regen-prior-release-fixtures'"]
+    /// This uses the plain shape without `options.systems`: the `plain`
+    /// fixture has the former default systems, which locking now removes.
+    /// The fixture installs no packages, so locking makes no catalog requests
+    /// and runs offline; no replay client is needed.
     #[tokio::test(flavor = "multi_thread")]
     async fn locking_matches_prior_release_plain() {
         let (flox, _temp) = flox_instance();
 
         let base = MANUALLY_GENERATED
             .join("prior_release_baselines")
-            .join("plain");
+            .join("plain_default_systems");
 
-        let manifest_contents =
-            fs::read_to_string(base.join("manifest.toml")).expect("plain manifest.toml must exist");
-        let expected_lockfile_bytes = fs::read(base.join("manifest.lock"))
-            .expect("plain manifest.lock must exist; run 'just regen-prior-release-fixtures'");
+        let manifest_contents = fs::read_to_string(base.join("manifest.toml"))
+            .expect("plain_default_systems manifest.toml must exist");
+        let expected_lockfile_bytes = fs::read(base.join("manifest.lock")).expect(
+            "plain_default_systems manifest.lock must exist; run 'just regen-prior-release-fixtures'",
+        );
 
         // Create an env with only the manifest (no lockfile) so lock() runs.
         let mut env = new_core_environment(&flox, &manifest_contents);
@@ -2384,6 +2390,16 @@ mod tests {
                     Flox no longer supports 'x86_64-darwin', but 'install.hello.systems' includes it.
                     Remove 'x86_64-darwin' from 'install.hello.systems' with 'flox edit'."},
             ),
+            (
+                indoc! {r#"
+                    [install]
+                    hello.flake = "github:NixOS/nixpkgs#hello"
+                    hello.systems = ["aarch64-darwin", "x86_64-darwin"]
+                "#},
+                indoc! {"
+                    Flox no longer supports 'x86_64-darwin', but 'install.hello.systems' includes it.
+                    Remove 'x86_64-darwin' from 'install.hello.systems' with 'flox edit'."},
+            ),
         ];
         for (manifest_body, expected_message) in cases {
             let (flox, _tempdir) = flox_instance();
@@ -2521,19 +2537,37 @@ mod tests {
     /// lock the composer, naming the included environment.
     #[test]
     fn lock_rejects_retired_system_of_include() {
-        let (flox, _tempdir) = flox_instance();
-        let workdir = tempdir_in(&flox.temp_dir).unwrap();
-        let included_manifest = with_latest_schema(indoc! {r#"
-            [options]
-            systems = ["aarch64-darwin", "x86_64-darwin"]
-        "#});
-        included_locked_before_retirement(&flox, workdir.path(), &included_manifest);
-        let mut composer = composer_of_included(&flox, workdir.path());
+        let cases = [
+            (
+                indoc! {r#"
+                    [options]
+                    systems = ["aarch64-darwin", "x86_64-darwin"]
+                "#},
+                indoc! {"
+                    Flox no longer supports 'x86_64-darwin', but 'options.systems' of included environment 'included' includes it.
+                    Change it in that environment, or override it with 'flox edit'."},
+            ),
+            (
+                indoc! {r#"
+                    [install]
+                    hello.pkg-path = "hello"
+                    hello.systems = ["x86_64-darwin"]
+                "#},
+                indoc! {"
+                    Flox no longer supports 'x86_64-darwin', but 'install.hello.systems' of included environment 'included' includes it.
+                    Change it in that environment, or override it with 'flox edit'."},
+            ),
+        ];
+        for (included_body, expected_message) in cases {
+            let (flox, _tempdir) = flox_instance();
+            let workdir = tempdir_in(&flox.temp_dir).unwrap();
+            let included_manifest = with_latest_schema(included_body);
+            included_locked_before_retirement(&flox, workdir.path(), &included_manifest);
+            let mut composer = composer_of_included(&flox, workdir.path());
 
-        let err = composer.lockfile(&flox).unwrap_err();
+            let err = composer.lockfile(&flox).unwrap_err();
 
-        assert_eq!(resolve_error_message(err), indoc! {"
-            Flox no longer supports 'x86_64-darwin', but 'options.systems' of included environment 'included' includes it.
-            Change it in that environment, or override it with 'flox edit'."});
+            assert_eq!(resolve_error_message(err), expected_message);
+        }
     }
 }

@@ -597,6 +597,17 @@ regen-prior-release-fixtures version="auto":
     cp "$BASELINES/plain/manifest.toml" "$PLAIN/.flox/env/manifest.toml"
     capture "$PLAIN" "$BASELINES/plain"
 
+    # --- plain shape without 'options.systems' ------------------------------
+    # 'plain' keeps the 'options.systems' that 'flox init' wrote before
+    # x86_64-darwin was retired, which the current release accepts as locked
+    # but removes when it locks, so re-locking is compared on this one.
+    PLAIN_DEFAULT="$WORKROOT/plain_default_systems"
+    mkdir -p "$PLAIN_DEFAULT"
+    "$PRIOR_FLOX" init --dir "$PLAIN_DEFAULT"
+    cp "$BASELINES/plain_default_systems/manifest.toml" \
+       "$PLAIN_DEFAULT/.flox/env/manifest.toml"
+    capture "$PLAIN_DEFAULT" "$BASELINES/plain_default_systems"
+
     # --- with_include shape (parent includes ../included) ------------------
     INC="$WORKROOT/with_include"
     mkdir -p "$INC/parent" "$INC/included"
@@ -618,6 +629,7 @@ regen-prior-release-fixtures version="auto":
       --arg on  "$(date -u +%Y-%m-%d)" \
       --arg by  "$CAPTURED_BY" \
       --arg pl  "$(sha "$BASELINES/plain/manifest.lock")" \
+      --arg dl  "$(sha "$BASELINES/plain_default_systems/manifest.lock")" \
       --arg ql  "$(sha "$BASELINES/with_include/parent/manifest.lock")" \
       '{
         captured_with_flox_version: $ver,
@@ -626,6 +638,7 @@ regen-prior-release-fixtures version="auto":
         note: "Captured via '\''just regen-prior-release-fixtures'\''.",
         fixtures: {
           plain: { manifest_lock_sha256: $pl },
+          plain_default_systems: { manifest_lock_sha256: $dl },
           with_include: {
             parent: { manifest_lock_sha256: $ql },
             included: { manifest_lock_sha256: null }
