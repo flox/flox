@@ -157,7 +157,11 @@ macro_rules! impl_pkg_lookup {
                 &self,
                 id: impl AsRef<str>,
             ) -> Option<ManifestPackageDescriptor> {
-                self.install.0.get(id.as_ref()).cloned()
+                self.install
+                    .0
+                    .get(id.as_ref())
+                    .filter(|desc| desc.as_flake_descriptor_ref().is_some())
+                    .cloned()
             }
 
             /// Get the package descriptors in the "toplevel" group.

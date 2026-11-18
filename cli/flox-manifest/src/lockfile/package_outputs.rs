@@ -35,8 +35,10 @@ pub trait PackageOutputs {
         self.deduped_outputs_to_install().map(|outputs_to_install| {
             let mut sorted_oti = outputs_to_install.clone();
             sorted_oti.sort();
+            sorted_oti.dedup();
             let mut sorted_all_outputs = self.all_outputs();
             sorted_all_outputs.sort();
+            sorted_all_outputs.dedup();
             sorted_oti == sorted_all_outputs
         })
     }
