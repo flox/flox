@@ -41,11 +41,13 @@ fn parse_uninitialized_environment_json<T: DeserializeOwned>() -> impl Parser<T>
         .parse(|string: String| serde_json::from_str::<T>(&string))
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 enum ExitBranch {
     LockTaken,
     AlreadyChecked,
     Checked,
+    /// The dry upgrade failed and the failure was recorded.
+    CheckFailed(EnvironmentError),
 }
 
 impl CheckForUpgrades {
@@ -73,23 +75,35 @@ impl CheckForUpgrades {
 
         let mut environment = self.environment.into_concrete_environment(&flox, None)?;
 
-        let check_exit_branch = check_for_package_upgrades(
+        check_for_upgrades_and_remote_state(
             &flox,
             &mut environment,
             Duration::seconds(self.check_timeout),
-        )?;
-        match check_exit_branch {
-            ExitBranch::Checked => update_remote_environment_state(&flox, &environment)?,
-            // `check_exit_branch` determined,
-            // that we are already concurrently checking for updates (LockTaken)
-            // or we have `AlreadyChecked` for updates recently (within self.check_timeout)
-            // and there have been no local changes (to the lockfile).
-            //
-            // Use either case, use this to throttle environment fetches.
-            ExitBranch::LockTaken | ExitBranch::AlreadyChecked => {},
-        }
+        )
+    }
+}
 
-        Ok(())
+/// Check for package upgrades and, unless the check was skipped, fetch the
+/// environment's remote state.
+///
+/// The remote fetch is throttled by the upgrade check's cooldown,
+/// so it runs whenever the check runs, including when the check fails.
+/// A failed check's error is returned after the fetch, so it reaches the
+/// check's log file; a fetch error in that case is only logged.
+fn check_for_upgrades_and_remote_state(
+    flox: &Flox,
+    environment: &mut ConcreteEnvironment,
+    timeout: Duration,
+) -> Result<()> {
+    match check_for_package_upgrades(flox, environment, timeout)? {
+        ExitBranch::LockTaken | ExitBranch::AlreadyChecked => Ok(()),
+        ExitBranch::Checked => Ok(update_remote_environment_state(flox, environment)?),
+        ExitBranch::CheckFailed(check_error) => {
+            if let Err(fetch_error) = update_remote_environment_state(flox, environment) {
+                debug!(error = ?fetch_error, "Failed to fetch remote environment state");
+            }
+            Err(check_error.into())
+        },
     }
 }
 
@@ -147,18 +161,18 @@ fn check_for_package_upgrades(
     // A failure is recorded too, so that a check that keeps failing, such as
     // a resolve the catalog refuses, reruns once per `timeout` rather than on
     // every activation.
-    let (new_info, check_error) = match upgrade_result {
+    let (new_info, exit_branch) = match upgrade_result {
         Ok(upgrade_result) => (
             UpgradeInformation {
                 last_checked: OffsetDateTime::now_utc(),
                 upgrade_result,
                 check_failed: false,
             },
-            None,
+            ExitBranch::Checked,
         ),
         Err(err) => (
             UpgradeInformation::failed_check(current_lockfile),
-            Some(err),
+            ExitBranch::CheckFailed(err),
         ),
     };
 
@@ -166,12 +180,7 @@ fn check_for_package_upgrades(
 
     locked.commit()?;
 
-    // Still fail the command, so the error reaches the check's log file.
-    if let Some(err) = check_error {
-        return Err(err.into());
-    }
-
-    Ok(ExitBranch::Checked)
+    Ok(exit_branch)
 }
 
 /// Fetch remote state for FloxHub environments,
@@ -235,8 +244,17 @@ pub fn spawn_detached_check_for_upgrades_process(
 #[cfg(test)]
 mod tests {
 
-    use flox_rust_sdk::flox::test_helpers::{flox_instance, set_test_auth};
+    use flox_core::data::environment_ref::EnvironmentOwner;
+    use flox_rust_sdk::flox::test_helpers::{
+        flox_instance,
+        flox_instance_with_optional_floxhub,
+        set_test_auth,
+    };
     use flox_rust_sdk::models::environment::UpgradeResult;
+    use flox_rust_sdk::models::environment::floxmeta_branch::BranchOrd;
+    use flox_rust_sdk::models::environment::generations::GenerationsExt;
+    use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
+    use flox_rust_sdk::models::environment::managed_environment::test_helpers::mock_managed_environment_from_env_files;
     use flox_rust_sdk::models::environment::path_environment::PathEnvironment;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::{
         new_path_environment,
@@ -247,7 +265,7 @@ mod tests {
     use flox_test_utils::manifests::HELLO;
     use floxhub_client::FloxhubClient;
     use floxhub_client::client::test_helpers::client_config;
-    use httpmock::MockServer;
+    use httpmock::{Mock, MockServer};
 
     use super::*;
 
@@ -278,7 +296,10 @@ mod tests {
         let exit_branch =
             check_for_package_upgrades(&flox, &mut environment.into(), Duration::MAX).unwrap();
 
-        assert_eq!(exit_branch, ExitBranch::AlreadyChecked);
+        assert!(
+            matches!(exit_branch, ExitBranch::AlreadyChecked),
+            "{exit_branch:?}"
+        );
     }
 
     #[test]
@@ -298,7 +319,10 @@ mod tests {
         let exit_branch =
             check_for_package_upgrades(&flox, &mut environment.into(), Duration::MIN).unwrap();
 
-        assert_eq!(exit_branch, ExitBranch::LockTaken);
+        assert!(
+            matches!(exit_branch, ExitBranch::LockTaken),
+            "{exit_branch:?}"
+        );
     }
 
     #[cfg_attr(
@@ -333,7 +357,10 @@ mod tests {
         let exit_branch =
             check_for_package_upgrades(&flox, &mut environment.into(), Duration::MIN).unwrap();
 
-        assert_eq!(exit_branch, ExitBranch::Checked);
+        assert!(
+            matches!(exit_branch, ExitBranch::Checked),
+            "{exit_branch:?}"
+        );
 
         // assert that the upgrade information was stored
         let upgrade_information = UpgradeInformationGuard::read_in(cache_path).unwrap();
@@ -348,8 +375,18 @@ mod tests {
         );
     }
 
-    /// A check whose resolve is refused must still start the cooldown, so the
-    /// next activation does not rerun the dry upgrade.
+    /// Refuse every resolve, as the catalog does for callers it does not accept.
+    fn refuse_resolves(server: &MockServer) -> Mock<'_> {
+        server.mock(|when, then| {
+            when.method("POST").path("/api/v1/catalog/resolve");
+            then.status(401)
+                .json_body(serde_json::json!({"detail": "Log in to FloxHub"}));
+        })
+    }
+
+    /// A failed check replaces the previous result and starts the cooldown,
+    /// so activations neither report the earlier upgrades nor rerun the dry
+    /// upgrade.
     #[cfg_attr(
         all(target_os = "macos", target_arch = "x86_64"),
         ignore = "catalog recordings don't cover x86_64-darwin"
@@ -363,41 +400,99 @@ mod tests {
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
         environment.lockfile(&flox).unwrap();
         let cache_path = environment.cache_path().unwrap();
-        let dot_flox_path = environment.path.clone();
-        let pointer = environment.pointer.clone();
+        let open = |flox: &Flox| -> ConcreteEnvironment {
+            PathEnvironment::open(flox, environment.pointer.clone(), environment.path.clone())
+                .unwrap()
+                .into()
+        };
 
         set_test_auth(&mut flox, "test");
 
-        // The catalog refuses the resolve, as it does for callers it does not
-        // accept.
+        // A successful check that finds upgrades, for the failure to replace.
+        flox.floxhub_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/old_hello.yaml")).await;
+        let exit_branch =
+            check_for_package_upgrades(&flox, &mut open(&flox), Duration::ZERO).unwrap();
+        assert!(
+            matches!(exit_branch, ExitBranch::Checked),
+            "{exit_branch:?}"
+        );
+        let guard = UpgradeInformationGuard::read_in(&cache_path).unwrap();
+        let upgrades_available = guard.info().clone().unwrap();
+        assert!(!upgrades_available.upgrade_result.diff().is_empty());
+
         let server = MockServer::start_async().await;
-        let resolve = server.mock(|when, then| {
-            when.method("POST").path("/api/v1/catalog/resolve");
-            then.status(401)
-                .json_body(serde_json::json!({"detail": "Log in to FloxHub"}));
-        });
+        let resolve = refuse_resolves(&server);
         flox.floxhub_client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
 
-        let result = check_for_package_upgrades(&flox, &mut environment.into(), Duration::MAX);
-        assert!(result.is_err(), "the failure is still reported: {result:?}");
+        let exit_branch =
+            check_for_package_upgrades(&flox, &mut open(&flox), Duration::ZERO).unwrap();
+        assert!(
+            matches!(exit_branch, ExitBranch::CheckFailed(_)),
+            "{exit_branch:?}"
+        );
         resolve.assert_calls(1);
 
-        // The lockfile as a later activation reads it, which is what the
-        // throttle compares the record against.
-        let mut environment = PathEnvironment::open(&flox, pointer, dot_flox_path).unwrap();
-        let lockfile: Lockfile = environment.lockfile(&flox).unwrap().into();
-
+        let lockfile: Lockfile = open(&flox).lockfile(&flox).unwrap().into();
         let guard = UpgradeInformationGuard::read_in(&cache_path).unwrap();
-        let info = guard.info().clone().expect("failed check was recorded");
+        let info = guard.info().clone().unwrap();
         assert_eq!(info, UpgradeInformation {
             last_checked: info.last_checked,
             ..UpgradeInformation::failed_check(lockfile)
         });
 
         let exit_branch =
-            check_for_package_upgrades(&flox, &mut environment.into(), Duration::MAX).unwrap();
-        assert_eq!(exit_branch, ExitBranch::AlreadyChecked);
+            check_for_package_upgrades(&flox, &mut open(&flox), Duration::MAX).unwrap();
+        assert!(
+            matches!(exit_branch, ExitBranch::AlreadyChecked),
+            "{exit_branch:?}"
+        );
         resolve.assert_calls(1);
+    }
+
+    /// The remote fetch shares the upgrade check's cooldown, so a failed check
+    /// must still fetch, or a generation pushed from elsewhere goes unreported
+    /// until the cooldown ends.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn failed_check_still_fetches_remote_state() {
+        let owner: EnvironmentOwner = "owner".parse().unwrap();
+        let (mut flox, _tempdir) = flox_instance_with_optional_floxhub(Some(&owner));
+        let environment = mock_managed_environment_from_env_files(
+            &flox,
+            GENERATED_DATA.join("envs/hello"),
+            owner,
+        );
+
+        // Push from a second machine. Its own clone of the owner's floxmeta
+        // lives in its data dir, so this machine sees the push only by fetching.
+        let this_machine_data_dir =
+            std::mem::replace(&mut flox.data_dir, flox.temp_dir.join("other-machine-data"));
+        let other_project = flox.temp_dir.join("other-machine-project");
+        std::fs::create_dir_all(&other_project).unwrap();
+        let mut other_machine_environment =
+            ManagedEnvironment::open(&flox, environment.pointer().clone(), &other_project, None)
+                .unwrap();
+        other_machine_environment
+            .edit(&flox, "version = 1\n".to_string())
+            .unwrap();
+        other_machine_environment.push(&flox, false).unwrap();
+        flox.data_dir = this_machine_data_dir;
+        assert_eq!(environment.compare_remote().unwrap(), BranchOrd::Equal);
+
+        set_test_auth(&mut flox, "test");
+        let server = MockServer::start_async().await;
+        let resolve = refuse_resolves(&server);
+        flox.floxhub_client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+
+        let mut environment = ConcreteEnvironment::Managed(environment);
+        let result = check_for_upgrades_and_remote_state(&flox, &mut environment, Duration::MAX);
+        assert!(result.is_err(), "{result:?}");
+        resolve.assert_calls(1);
+
+        let ConcreteEnvironment::Managed(environment) = environment else {
+            unreachable!()
+        };
+        assert_eq!(environment.compare_remote().unwrap(), BranchOrd::Behind);
     }
 
     /// When logged out, `check_for_package_upgrades` records a no-op
@@ -423,7 +518,10 @@ mod tests {
         // First call: should record a no-op check and return Checked.
         let exit_branch =
             check_for_package_upgrades(&flox, &mut env.into(), Duration::MAX).unwrap();
-        assert_eq!(exit_branch, ExitBranch::Checked);
+        assert!(
+            matches!(exit_branch, ExitBranch::Checked),
+            "{exit_branch:?}"
+        );
 
         // Verify the written UpgradeInformation contains old == new (no false
         // upgrade notification) and no store_path (no build occurred).
@@ -448,10 +546,9 @@ mod tests {
         let env2 = PathEnvironment::open(&flox, pointer, dot_flox_path).unwrap();
         let exit_branch2 =
             check_for_package_upgrades(&flox, &mut env2.into(), Duration::MAX).unwrap();
-        assert_eq!(
-            exit_branch2,
-            ExitBranch::AlreadyChecked,
-            "second call should be throttled"
+        assert!(
+            matches!(exit_branch2, ExitBranch::AlreadyChecked),
+            "second call should be throttled: {exit_branch2:?}"
         );
     }
 }
