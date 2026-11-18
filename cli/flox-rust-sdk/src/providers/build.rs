@@ -1995,21 +1995,24 @@ mod tests {
     #[test]
     fn build_sandbox_allow_permits_listed_path() {
         let pname = String::from("foo");
-        // sandbox-allow is a v1.13.0 field, so the manifest must declare that
-        // schema version. /etc/hosts resolves to /private/etc/hosts on macOS;
-        // list both.
+        // Allow the resolved path: /etc/hosts can point into /private on macOS
+        // or /nix/store on NixOS.
+        let hosts_path = fs::canonicalize("/etc/hosts").unwrap();
+        // sandbox-allow requires schema v1.13.0 or newer.
         let manifest = formatdoc! {r#"
             schema-version = "1.13.0"
 
             [build.{pname}]
             sandbox = "enforce"
-            sandbox-allow = ["/etc/hosts", "/private/etc/hosts"]
+            sandbox-allow = ["{hosts_path}"]
             command = '''
                 cat /etc/hosts > /dev/null
                 mkdir -p $out
                 echo done > $out/{pname}
             '''
-        "#};
+        "#,
+            hosts_path = hosts_path.display(),
+        };
         let (flox, _temp_dir_handle) = flox_instance();
         let mut env = new_path_environment(&flox, &manifest);
 
