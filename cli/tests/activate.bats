@@ -5452,6 +5452,31 @@ Setting PATH from .bashrc"
     assert_output false # lockfile content should differ due to upgrade
 }
 
+# bats test_tags=activate:upgrade-checks
+@test "a failed background upgrade check is recorded and not shown" {
+  skip_x86_64_darwin_replay
+    project_setup_common
+    unset _FLOX_TESTING_DISABLE_BG_SIDE_EFFECTS # allow background checks for this test
+    "$FLOX_BIN" init
+    _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.yaml" "$FLOX_BIN" install hello
+
+    # This recording has no response for the check's resolve, so the check fails.
+    _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/badpkg.yaml" "$FLOX_BIN" activate -c true
+
+    timeout 5s bash -c "while [ ! -f .flox/cache/upgrade-checks.json ]; do sleep 0.1; done"
+
+    run jq '.check_failed and .upgrade_result.new_lockfile == .upgrade_result.old_lockfile' .flox/cache/upgrade-checks.json
+    assert_success
+    assert_output true
+
+    # The next activation reads the failed check and reports no upgrade.
+    run --separate-stderr "$FLOX_BIN" activate -c true
+    assert_success
+    assert_output ""
+    assert_equal "$stderr" "Sourcing .bashrc
+Setting PATH from .bashrc"
+}
+
 # =============================================================================
 # Nested activation PATH/MANPATH tests and helpers
 # =============================================================================

@@ -2,6 +2,7 @@ use std::fs::{self, File, TryLockError};
 use std::path::{Path, PathBuf};
 
 use flox_core::open_lock_file;
+use flox_manifest::lockfile::Lockfile;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use time::OffsetDateTime;
@@ -30,6 +31,33 @@ pub struct UpgradeInformation {
     pub last_checked: OffsetDateTime,
     /// The result of the last upgrade check
     pub upgrade_result: UpgradeResult,
+    /// Whether the last upgrade check failed.
+    ///
+    /// A failed check is still recorded so that the check is not retried
+    /// until `last_checked` has aged out.
+    /// Its `upgrade_result` is the current lockfile upgraded to itself,
+    /// so that it reports no upgrades.
+    /// CLI versions that predate this field ignore it and read the record as
+    /// a successful check that found no upgrades.
+    /// The field is omitted when `false`,
+    /// so that successful checks are written exactly as those versions write them.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub check_failed: bool,
+}
+
+impl UpgradeInformation {
+    /// Record a failed upgrade check of `lockfile`, checked now.
+    pub fn failed_check(lockfile: Lockfile) -> Self {
+        UpgradeInformation {
+            last_checked: OffsetDateTime::now_utc(),
+            upgrade_result: UpgradeResult {
+                old_lockfile: Some(lockfile.clone()),
+                new_lockfile: lockfile,
+                store_path: None,
+            },
+            check_failed: true,
+        }
+    }
 }
 
 /// A guard for a file containing upgrade information,
@@ -212,8 +240,6 @@ mod tests {
     use std::sync::mpsc;
     use std::time::Duration;
 
-    use flox_manifest::lockfile::Lockfile;
-
     use super::*;
 
     #[test]
@@ -289,6 +315,7 @@ mod tests {
                 new_lockfile: Lockfile::default(),
                 store_path: None,
             },
+            check_failed: false,
         });
 
         drop(locked);
@@ -310,6 +337,7 @@ mod tests {
                 new_lockfile: Lockfile::default(),
                 store_path: None,
             },
+            check_failed: false,
         };
         let _ = locked.info_mut().insert(info.clone());
         locked.commit().unwrap();
@@ -318,5 +346,28 @@ mod tests {
 
         let guard = UpgradeInformationGuard::read_in(temp_dir.path()).unwrap();
         assert_eq!(guard.info(), &Some(info));
+    }
+
+    /// The shape older CLI versions deserialize the upgrade information as.
+    #[derive(Debug, Deserialize)]
+    struct UpgradeInformationWithoutCheckFailed {
+        #[serde(with = "time::serde::iso8601")]
+        last_checked: OffsetDateTime,
+        upgrade_result: UpgradeResult,
+    }
+
+    #[test]
+    fn failed_check_reads_as_no_upgrades_for_older_versions() {
+        let info = UpgradeInformation {
+            last_checked: OffsetDateTime::now_utc().replace_millisecond(0).unwrap(),
+            ..UpgradeInformation::failed_check(Lockfile::default())
+        };
+        let json = serde_json::to_string(&info).unwrap();
+
+        let older: UpgradeInformationWithoutCheckFailed = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(older.last_checked, info.last_checked);
+        assert_eq!(older.upgrade_result, info.upgrade_result);
+        assert!(older.upgrade_result.diff().is_empty());
     }
 }

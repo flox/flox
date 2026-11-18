@@ -72,7 +72,7 @@ enum UpgradesStatus {
     ChangedSinceCheck,
     /// Upgrades are available for other systems but not the current one.
     OtherSystemsOnly,
-    /// The cache file does not exist (no background check has run yet).
+    /// No background check has run yet, or the last one failed.
     NotChecked,
     /// The cache exists and all packages are up to date.
     None,
@@ -535,6 +535,10 @@ impl List {
             return Ok((UpgradesStatus::NotChecked, None));
         };
 
+        if info.check_failed {
+            return Ok((UpgradesStatus::NotChecked, None));
+        }
+
         let checked_at = info
             .last_checked
             .format(&Rfc3339)
@@ -963,7 +967,12 @@ mod tests {
     };
     use flox_manifest::test_helpers::with_latest_schema;
     use flox_rust_sdk::flox::test_helpers::flox_instance;
-    use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment_in;
+    use flox_rust_sdk::models::environment::path_environment::test_helpers::{
+        new_path_environment_from_env_files,
+        new_path_environment_in,
+    };
+    use flox_rust_sdk::providers::upgrade_checks::UpgradeInformation;
+    use flox_test_utils::GENERATED_DATA;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
 
@@ -1854,5 +1863,29 @@ mod tests {
             out.contains("No packages installed for aarch64-darwin"),
             "no-packages notice missing; got:\n{out}"
         );
+    }
+
+    /// A failed background check knows nothing about upgrades, so it must not
+    /// read as "none" or carry a check time.
+    #[test]
+    fn upgrades_status_of_failed_check_is_not_checked() {
+        let (flox, _tempdir) = flox_instance();
+        let environment =
+            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
+        let mut environment = ConcreteEnvironment::Path(environment);
+        let lockfile: Lockfile = environment.lockfile(&flox).unwrap().into();
+
+        let guard = UpgradeInformationGuard::read_in(environment.cache_path().unwrap()).unwrap();
+        let mut locked = guard.lock_if_unlocked().unwrap().unwrap();
+        let _ = locked
+            .info_mut()
+            .insert(UpgradeInformation::failed_check(lockfile.clone()));
+        locked.commit().unwrap();
+
+        let (status, checked_at) =
+            List::get_upgrades_status(&flox, &mut environment, &lockfile).unwrap();
+
+        assert!(matches!(status, UpgradesStatus::NotChecked), "{status:?}");
+        assert_eq!(checked_at, None);
     }
 }

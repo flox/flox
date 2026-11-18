@@ -1359,6 +1359,7 @@ mod upgrade_notification_tests {
 
                 store_path: None,
             },
+            check_failed: false,
         });
 
         locked.commit().unwrap();
@@ -1440,6 +1441,46 @@ mod upgrade_notification_tests {
         "});
     }
 
+    /// A failed background check replaces the previous result, so the
+    /// activation that follows it says nothing about upgrades.
+    #[test]
+    fn no_notification_printed_after_failed_check() {
+        let (flox, _tempdir) = flox_instance();
+        let (subscriber, writer) = test_subscriber_message_only();
+
+        let environment = new_named_path_environment_from_env_files(
+            &flox,
+            GENERATED_DATA.join("envs/hello"),
+            "name",
+        );
+        let mut environment = ConcreteEnvironment::Path(environment);
+        write_upgrade_available(&flox, &mut environment);
+
+        let lockfile: Lockfile = environment.lockfile(&flox).unwrap().into();
+        {
+            let upgrade_information =
+                UpgradeInformationGuard::read_in(environment.cache_path().unwrap()).unwrap();
+            let mut locked = upgrade_information.lock_if_unlocked().unwrap().unwrap();
+            let _ = locked
+                .info_mut()
+                .insert(UpgradeInformation::failed_check(lockfile.clone()));
+            locked.commit().unwrap();
+        }
+
+        tracing::subscriber::with_default(subscriber, || {
+            notify_upgrades_if_available(
+                &flox,
+                &environment,
+                &lockfile,
+                &EnvironmentSelect::Unspecified,
+            )
+            .unwrap();
+        });
+
+        let printed = writer.to_string();
+        assert!(printed.is_empty(), "printed: {printed}");
+    }
+
     /// When the user specifies an environment via flags (e.g. `-d <path>` or
     /// `-r <env>`), the upgrade hint must include those flags so the suggested
     /// command actually targets the right environment.
@@ -1503,6 +1544,7 @@ mod upgrade_notification_tests {
 
                     store_path: None,
                 },
+                check_failed: false,
             });
 
             locked.commit().unwrap();
@@ -1551,6 +1593,7 @@ mod upgrade_notification_tests {
             let _ = locked.info_mut().insert(UpgradeInformation {
                 last_checked: OffsetDateTime::now_utc(),
                 upgrade_result,
+                check_failed: false,
             });
 
             locked.commit().unwrap();

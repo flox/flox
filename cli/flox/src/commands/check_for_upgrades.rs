@@ -4,6 +4,7 @@ use std::time::SystemTime;
 use anyhow::{Context, Result};
 use bpaf::{Bpaf, Parser};
 use flox_core::log_file_format_upgrade_check;
+use flox_manifest::lockfile::Lockfile;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{
     ConcreteEnvironment,
@@ -122,6 +123,8 @@ fn check_for_package_upgrades(
         return Ok(ExitBranch::LockTaken);
     };
 
+    let current_lockfile: Lockfile = environment.lockfile(flox)?.into();
+
     // When logged out, skip the catalog resolve entirely and record a no-op
     // result instead. old_lockfile == new_lockfile means diff() is empty,
     // so no false upgrade notification is shown. Recording last_checked here
@@ -130,26 +133,43 @@ fn check_for_package_upgrades(
     // state on every activation (DEV-324).
     let upgrade_result = if flox.auth_context.is_unauthenticated() {
         debug!("Not logged in; skipping package upgrade resolve.");
-        let current_lockfile = environment.lockfile(flox)?.into();
-        UpgradeResult {
-            old_lockfile: Some(environment.lockfile(flox)?.into()),
-            new_lockfile: current_lockfile,
+        Ok(UpgradeResult {
+            old_lockfile: Some(current_lockfile.clone()),
+            new_lockfile: current_lockfile.clone(),
             store_path: None,
-        }
+        })
     } else {
         info_span!("check-upgrade", progress = "Performing dry upgrade")
             .entered()
-            .in_scope(|| environment.dry_upgrade(flox, &[]))?
+            .in_scope(|| environment.dry_upgrade(flox, &[]))
     };
 
-    let new_info = UpgradeInformation {
-        last_checked: OffsetDateTime::now_utc(),
-        upgrade_result,
+    // A failure is recorded too, so that a check that keeps failing, such as
+    // a resolve the catalog refuses, reruns once per `timeout` rather than on
+    // every activation.
+    let (new_info, check_error) = match upgrade_result {
+        Ok(upgrade_result) => (
+            UpgradeInformation {
+                last_checked: OffsetDateTime::now_utc(),
+                upgrade_result,
+                check_failed: false,
+            },
+            None,
+        ),
+        Err(err) => (
+            UpgradeInformation::failed_check(current_lockfile),
+            Some(err),
+        ),
     };
 
     let _ = locked.info_mut().insert(new_info);
 
     locked.commit()?;
+
+    // Still fail the command, so the error reaches the check's log file.
+    if let Some(err) = check_error {
+        return Err(err.into());
+    }
 
     Ok(ExitBranch::Checked)
 }
@@ -217,6 +237,7 @@ mod tests {
 
     use flox_rust_sdk::flox::test_helpers::{flox_instance, set_test_auth};
     use flox_rust_sdk::models::environment::UpgradeResult;
+    use flox_rust_sdk::models::environment::path_environment::PathEnvironment;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::{
         new_path_environment,
         new_path_environment_from_env_files,
@@ -224,6 +245,9 @@ mod tests {
     use flox_rust_sdk::providers::catalog::test_helpers::catalog_replay_client;
     use flox_test_utils::GENERATED_DATA;
     use flox_test_utils::manifests::HELLO;
+    use floxhub_client::FloxhubClient;
+    use floxhub_client::client::test_helpers::client_config;
+    use httpmock::MockServer;
 
     use super::*;
 
@@ -247,6 +271,7 @@ mod tests {
                 new_lockfile: environment.lockfile(&flox).unwrap().into(),
                 store_path: None,
             },
+            check_failed: false,
         });
         locked.commit().unwrap();
 
@@ -315,11 +340,64 @@ mod tests {
 
         assert!(upgrade_information.info().is_some());
         let info = upgrade_information.info().as_ref().unwrap();
+        assert!(!info.check_failed);
         assert!(info.upgrade_result.old_lockfile.is_some());
         assert_ne!(
             &info.upgrade_result.new_lockfile,
             info.upgrade_result.old_lockfile.as_ref().unwrap()
         );
+    }
+
+    /// A check whose resolve is refused must still start the cooldown, so the
+    /// next activation does not rerun the dry upgrade.
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn failed_check_is_recorded_and_throttles() {
+        let (mut flox, _tempdir) = flox_instance();
+
+        let mut environment = new_path_environment(&flox, HELLO);
+        flox.floxhub_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
+        environment.lockfile(&flox).unwrap();
+        let cache_path = environment.cache_path().unwrap();
+        let dot_flox_path = environment.path.clone();
+        let pointer = environment.pointer.clone();
+
+        set_test_auth(&mut flox, "test");
+
+        // The catalog refuses the resolve, as it does for callers it does not
+        // accept.
+        let server = MockServer::start_async().await;
+        let resolve = server.mock(|when, then| {
+            when.method("POST").path("/api/v1/catalog/resolve");
+            then.status(401)
+                .json_body(serde_json::json!({"detail": "Log in to FloxHub"}));
+        });
+        flox.floxhub_client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+
+        let result = check_for_package_upgrades(&flox, &mut environment.into(), Duration::MAX);
+        assert!(result.is_err(), "the failure is still reported: {result:?}");
+        resolve.assert_calls(1);
+
+        // The lockfile as a later activation reads it, which is what the
+        // throttle compares the record against.
+        let mut environment = PathEnvironment::open(&flox, pointer, dot_flox_path).unwrap();
+        let lockfile: Lockfile = environment.lockfile(&flox).unwrap().into();
+
+        let guard = UpgradeInformationGuard::read_in(&cache_path).unwrap();
+        let info = guard.info().clone().expect("failed check was recorded");
+        assert_eq!(info, UpgradeInformation {
+            last_checked: info.last_checked,
+            ..UpgradeInformation::failed_check(lockfile)
+        });
+
+        let exit_branch =
+            check_for_package_upgrades(&flox, &mut environment.into(), Duration::MAX).unwrap();
+        assert_eq!(exit_branch, ExitBranch::AlreadyChecked);
+        resolve.assert_calls(1);
     }
 
     /// When logged out, `check_for_package_upgrades` records a no-op
@@ -329,8 +407,6 @@ mod tests {
     /// running on every activation (DEV-324).
     #[test]
     fn logged_out_records_noop_check_and_throttles() {
-        use flox_rust_sdk::models::environment::path_environment::PathEnvironment;
-
         // flox_instance() sets AuthContext::new_from_token(None) → Auth0(None),
         // which is_unauthenticated() == true — no catalog replay client needed
         // because no resolve occurs.
