@@ -6375,9 +6375,7 @@ success"
 }
 
 @test "activate warns when implicit default systems change on re-lock" {
-  if [ "$NIX_SYSTEM" == "x86_64-darwin" ]; then
-    skip "implicit default systems are unchanged on x86_64-darwin"
-  fi
+  skip_x86_64_darwin_replay
 
   project_setup_common
   "$FLOX_BIN" init
@@ -6390,7 +6388,48 @@ success"
     FLOX_SHELL=bash run "$FLOX_BIN" activate -- true
   assert_success
   assert_output --partial "! packages have been removed from lockfile for 'x86_64-darwin'"
-  assert_output --partial "To reinstall, add 'x86_64-darwin' to 'options.systems' with 'flox edit'"
+  assert_output --partial "Flox no longer supports 'x86_64-darwin'"
+}
+
+# Initialize an environment whose manifest and lockfile have the systems that
+# 'flox init' used to write, as a Flox that still supported x86_64-darwin
+# would have locked it.
+init_with_former_default_systems() {
+  "$FLOX_BIN" init
+  local systems='["x86_64-linux", "x86_64-darwin", "aarch64-linux", "aarch64-darwin"]'
+  tomlq --in-place --toml-output ".options.systems = $systems" \
+    "$PROJECT_DIR/.flox/env/manifest.toml"
+  jq ".manifest.options.systems = $systems" "$PROJECT_DIR/.flox/env/manifest.lock" \
+    > manifest.lock.tmp
+  mv manifest.lock.tmp "$PROJECT_DIR/.flox/env/manifest.lock"
+}
+
+@test "activate keeps the former default systems of an up to date lockfile" {
+  project_setup_common
+  init_with_former_default_systems
+
+  FLOX_SHELL=bash run "$FLOX_BIN" activate -- true
+  assert_success
+  run tomlq -e '.options.systems | length == 4' "$PROJECT_DIR/.flox/env/manifest.toml"
+  assert_success
+}
+
+@test "activate removes the former default systems when it locks" {
+  project_setup_common
+  init_with_former_default_systems
+  tomlq --in-place --toml-output '.vars.FOO = "bar"' "$PROJECT_DIR/.flox/env/manifest.toml"
+
+  FLOX_SHELL=bash run "$FLOX_BIN" activate -- true
+  assert_success
+  assert_output --partial "! Removed 'options.systems' from manifest.toml since Flox no longer supports 'x86_64-darwin'."
+  run tomlq -e '.options | has("systems") | not' "$PROJECT_DIR/.flox/env/manifest.toml"
+  assert_success
+
+  # The lockfile is up to date with the rewritten manifest, so activating
+  # again doesn't lock or warn.
+  FLOX_SHELL=bash run "$FLOX_BIN" activate -- true
+  assert_success
+  refute_output --partial "Removed 'options.systems'"
 }
 
 # bats test_tags=activate,activate:idempotent,activate:prior-release

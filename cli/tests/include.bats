@@ -204,9 +204,7 @@ EOF
 }
 
 @test "include upgrade warns when implicit default systems change on re-lock" {
-  if [ "$NIX_SYSTEM" == "x86_64-darwin" ]; then
-    skip "implicit default systems are unchanged on x86_64-darwin"
-  fi
+  skip_x86_64_darwin_replay
 
   "$FLOX_BIN" init -d included
   cp "$GENERATED_DATA"/envs/hello_before_three_system_relock/manifest.{toml,lock} \
@@ -222,7 +220,7 @@ EOF
     run "$FLOX_BIN" include upgrade -d composer
   assert_success
   assert_output --partial "! packages have been removed from lockfile for 'x86_64-darwin'"
-  assert_output --partial "To reinstall, add 'x86_64-darwin' to 'options.systems' with 'flox edit'"
+  assert_output --partial "Flox no longer supports 'x86_64-darwin'"
 }
 
 # ---------------------------------------------------------------------------- #

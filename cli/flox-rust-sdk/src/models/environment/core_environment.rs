@@ -16,7 +16,12 @@ use flox_manifest::interfaces::{
 };
 use flox_manifest::lockfile::{LOCKFILE_FILENAME, LockedPackage, Lockfile, LockfileError};
 use flox_manifest::parsed::common::KnownSchemaVersion;
-use flox_manifest::raw::{ModifyPackages, PackageToInstall, TomlEditError};
+use flox_manifest::raw::{
+    ModifyPackages,
+    PackageToInstall,
+    TomlEditError,
+    is_former_default_systems,
+};
 use flox_manifest::{
     MANIFEST_FILENAME,
     Manifest,
@@ -53,6 +58,23 @@ use crate::providers::services::process_compose::{ServiceError, maybe_make_servi
 
 pub struct ReadOnly {}
 struct ReadWrite {}
+
+/// Remove `options.systems` from `manifest` if they are the systems `flox
+/// init` wrote into every manifest before x86_64-darwin was retired, and say
+/// whether it did.
+///
+/// Those systems weren't the user's choice, so locking resolves for the
+/// default systems rather than rejecting x86_64-darwin. Callers write the
+/// result only alongside a lockfile they write anyway, so a command that
+/// changes nothing else leaves the manifest alone.
+fn without_former_default_systems(
+    manifest: Manifest<Migrated>,
+) -> Result<(Manifest<Migrated>, bool), ManifestError> {
+    if !is_former_default_systems(manifest.as_latest_schema().options.systems.as_deref()) {
+        return Ok((manifest, false));
+    }
+    Ok((manifest.remove_systems()?, true))
+}
 
 /// A view of an environment directory
 /// that can be used to build, link, and edit the environment.
@@ -193,13 +215,31 @@ impl<State> CoreEnvironment<State> {
     /// or implement the condition in the caller.
     ///
     /// Technically this does write to disk as a side effect for now.
-    /// It's included in the [ReadOnly] struct for ergonomic reasons
-    /// and because it doesn't modify the manifest.
+    /// It's included in the [ReadOnly] struct for ergonomic reasons.
+    ///
+    /// The manifest is rewritten when the lockfile isn't up to date with it
+    /// and either its schema must change to match the merged manifest, or its
+    /// `options.systems` are the former default systems, which are removed;
+    /// see [without_former_default_systems].
     pub fn lock(&mut self, flox: &Flox) -> Result<LockResult, EnvironmentError> {
-        let manifest_without_migrating = self.manifest_without_migrating()?.as_typed_only();
-        let original_schema = manifest_without_migrating.get_schema_version();
+        let mut manifest = self.manifest_without_migrating()?;
+        let original_schema = manifest.get_schema_version();
 
         let existing_lockfile = self.existing_lockfile()?;
+        let removes_former_default_systems = manifest.has_former_default_systems();
+        if removes_former_default_systems {
+            // Locking again would remove the systems, rewriting the manifest
+            // although nothing else changed, and a managed environment's
+            // checkout would no longer match its generation. An up to date
+            // lockfile is still valid, so return it instead.
+            if let Some(lockfile) = existing_lockfile.as_ref().filter(|lockfile| {
+                lockfile.is_up_to_date_with_serialized_manifest(&manifest.as_typed_only())
+            }) {
+                return Ok(LockResult::Unchanged(lockfile.clone()));
+            }
+            manifest = manifest.remove_systems()?;
+        }
+        let manifest_without_migrating = manifest.as_typed_only();
         let migrated_manifest_for_locking =
             manifest_without_migrating.migrate_typed_only(existing_lockfile.as_ref())?;
 
@@ -215,6 +255,10 @@ impl<State> CoreEnvironment<State> {
             &self.include_fetcher,
         )
         .block_on()?;
+
+        if removes_former_default_systems {
+            manifest.as_writable().write_to_file(self.manifest_path())?;
+        }
 
         // Now that we have an up to date lockfile, we check the schema version of its manifest
         // and ensure that the manifest on disk and the manifest in the lockfile are all in sync.
@@ -346,7 +390,7 @@ impl CoreEnvironment<ReadOnly> {
         flox: &Flox,
         out_link_prefix: Option<&Path>,
     ) -> Result<InstallationAttempt, EnvironmentError> {
-        let manifest = self.manifest(flox)?;
+        let (manifest, _) = without_former_default_systems(self.manifest(flox)?)?;
         // TODO: this could lead to double resolution and surprising errors
         // (e.g. if you try to install a package and we fail to resolve a different package)
         // We need a lockfile for logic about output merging
@@ -397,7 +441,7 @@ impl CoreEnvironment<ReadOnly> {
         // We need a lockfile for logic about output mergine
         let lockfile: Lockfile = self.lock(flox)?.into();
 
-        let manifest = self.manifest(flox)?;
+        let (manifest, _) = without_former_default_systems(self.manifest(flox)?)?;
 
         // Resolve specs to modifications using manifest + lockfile.
         // This also handles PackageOnlyIncluded detection internally.
@@ -453,6 +497,8 @@ impl CoreEnvironment<ReadOnly> {
             ParsedManifest::AsStated(m) => (m, None),
             ParsedManifest::Bumped { manifest, from, to } => (manifest, Some((from, to))),
         };
+        let (new_manifest, former_default_systems_removed) =
+            self.edited_without_former_default_systems(new_manifest)?;
         let (old_lockfile, migrated_manifest) =
             if let Some(lockfile) = maybe_up_to_date_lockfile.as_ref() {
                 (
@@ -472,7 +518,28 @@ impl CoreEnvironment<ReadOnly> {
             new_lockfile: Box::new(new_lockfile),
             built_environment_store_paths: store_path,
             schema_bumped: schema_bump,
+            former_default_systems_removed,
         })
+    }
+
+    /// Remove the former default systems from an edited manifest, as
+    /// [without_former_default_systems] does, but only if the manifest before
+    /// the edit had them too.
+    ///
+    /// Systems that the edit adds are the user's choice, so locking rejects
+    /// x86_64-darwin in them.
+    fn edited_without_former_default_systems(
+        &self,
+        edited: Manifest<Validated>,
+    ) -> Result<(Manifest<Validated>, bool), ManifestError> {
+        if !edited.has_former_default_systems()
+            || !self
+                .manifest_without_migrating()?
+                .has_former_default_systems()
+        {
+            return Ok((edited, false));
+        }
+        Ok((edited.remove_systems()?, true))
     }
 
     fn contents_match_existing_manifest(
@@ -503,6 +570,8 @@ impl CoreEnvironment<ReadOnly> {
             ParsedManifest::AsStated(m) => (m, None),
             ParsedManifest::Bumped { manifest, from, to } => (manifest, Some((from, to))),
         };
+        let (new_manifest, former_default_systems_removed) =
+            self.edited_without_former_default_systems(new_manifest)?;
         let mut old_lockfile = self.lockfile_if_up_to_date()?;
         if old_lockfile.is_none() {
             // If locking fails, we still want to perform the unsafe edit, so
@@ -548,6 +617,7 @@ impl CoreEnvironment<ReadOnly> {
                 new_lockfile: Box::new(new_lockfile),
                 built_environment_store_paths: store_path,
                 schema_bumped: schema_bump,
+                former_default_systems_removed,
             })),
             Err(err) => Ok(Err(EnvironmentError::Core(err))),
         }
@@ -571,7 +641,8 @@ impl CoreEnvironment<ReadOnly> {
         let manifest_without_migrating = self.manifest_without_migrating()?;
         let original_schema = manifest_without_migrating.get_schema_version();
 
-        let manifest = self.manifest(flox)?;
+        let (manifest, former_default_systems_removed) =
+            without_former_default_systems(self.manifest(flox)?)?;
 
         Self::ensure_valid_upgrade(groups_or_iids, &manifest)?;
         tracing::debug!("using catalog client to upgrade");
@@ -580,6 +651,18 @@ impl CoreEnvironment<ReadOnly> {
 
         if write_lockfile {
             if result.diff().is_empty() {
+                return Ok(result);
+            }
+
+            if former_default_systems_removed {
+                let (store_path, lockfile) = self.transact_with_manifest(
+                    &manifest,
+                    flox,
+                    out_link_prefix,
+                    Some(result.new_lockfile),
+                )?;
+                result.new_lockfile = lockfile;
+                result.store_path = Some(store_path);
                 return Ok(result);
             }
 
@@ -721,7 +804,8 @@ impl CoreEnvironment<ReadOnly> {
             "upgrading included environments"
         );
 
-        let manifest = self.manifest(flox)?;
+        let (manifest, former_default_systems_removed) =
+            without_former_default_systems(self.manifest(flox)?)?;
 
         let existing_lockfile_contents = self.existing_lockfile_contents()?;
         let existing_lockfile = existing_lockfile_contents
@@ -743,6 +827,28 @@ impl CoreEnvironment<ReadOnly> {
             Some(to_upgrade),
         )
         .block_on()?;
+
+        // Removing the systems always changes the lockfile, so only changes to
+        // the includes decide whether anything is written.
+        if former_default_systems_removed {
+            let mut result = UpgradeResult {
+                old_lockfile: existing_lockfile,
+                new_lockfile,
+                store_path: None,
+            };
+            if result.include_diff().is_empty() {
+                return Ok(result);
+            }
+            let (store_path, lockfile) = self.transact_with_manifest(
+                &manifest,
+                flox,
+                out_link_prefix,
+                Some(result.new_lockfile),
+            )?;
+            result.new_lockfile = lockfile;
+            result.store_path = Some(store_path);
+            return Ok(result);
+        }
 
         // If the merged manifest required a newer schema than the composer's
         // on-disk manifest (due to composition introducing features like
@@ -1015,6 +1121,9 @@ pub enum EditResult {
         /// with the latest supported schema, the (from, to) versions are stored
         /// here so the caller can display a warning to the user.
         schema_bumped: Option<(KnownSchemaVersion, KnownSchemaVersion)>,
+        /// Whether `options.systems` were removed from the edited manifest
+        /// because they were the former default systems.
+        former_default_systems_removed: bool,
     },
 }
 
@@ -1424,6 +1533,7 @@ mod tests {
     use super::*;
     use crate::flox::test_helpers::flox_instance;
     use crate::models::environment::Environment;
+    use crate::models::environment::path_environment::PathEnvironment;
     use crate::models::environment::path_environment::test_helpers::new_path_environment_in;
     use crate::models::environment::test_helpers::manifest_with_incompatible_system;
     use crate::providers::catalog::test_helpers::catalog_replay_client;
@@ -1993,6 +2103,10 @@ mod tests {
     /// The up-to-date predicate must accept a plain (single, uncomposed)
     /// prior-release lockfile paired with its manifest, without forcing a
     /// re-lock.
+    ///
+    /// The fixture keeps the `options.systems` that `flox init` wrote before
+    /// x86_64-darwin was retired, so this also covers such an environment
+    /// activating without its manifest being rewritten.
     #[test]
     fn lockfile_if_up_to_date_accepts_prior_release_plain() {
         let (flox, _temp) = flox_instance();
@@ -2057,24 +2171,27 @@ mod tests {
         );
     }
 
-    /// Re-locking the plain manifest under the current release must reproduce
+    /// Re-locking a plain manifest under the current release must reproduce
     /// the prior-release lockfile byte-for-byte (lockfile serialization
     /// stability).
     ///
-    /// The plain fixture installs no packages, so locking makes no catalog
-    /// requests and runs offline; no replay client is needed.
+    /// This uses the plain shape without `options.systems`: the `plain`
+    /// fixture has the former default systems, which locking now removes.
+    /// The fixture installs no packages, so locking makes no catalog requests
+    /// and runs offline; no replay client is needed.
     #[tokio::test(flavor = "multi_thread")]
     async fn locking_matches_prior_release_plain() {
         let (flox, _temp) = flox_instance();
 
         let base = MANUALLY_GENERATED
             .join("prior_release_baselines")
-            .join("plain");
+            .join("plain_default_systems");
 
-        let manifest_contents =
-            fs::read_to_string(base.join("manifest.toml")).expect("plain manifest.toml must exist");
-        let expected_lockfile_bytes = fs::read(base.join("manifest.lock"))
-            .expect("plain manifest.lock must exist; run 'just regen-prior-release-fixtures'");
+        let manifest_contents = fs::read_to_string(base.join("manifest.toml"))
+            .expect("plain_default_systems manifest.toml must exist");
+        let expected_lockfile_bytes = fs::read(base.join("manifest.lock")).expect(
+            "plain_default_systems manifest.lock must exist; run 'just regen-prior-release-fixtures'",
+        );
 
         // Create an env with only the manifest (no lockfile) so lock() runs.
         let mut env = new_core_environment(&flox, &manifest_contents);
@@ -2146,5 +2263,311 @@ mod tests {
              (post-#4180 composer-drift fix); re-capture via \
              'just regen-prior-release-fixtures'."
         );
+    }
+
+    /// The `options.systems` line `flox init` used to write into every
+    /// manifest.
+    const FORMER_DEFAULT_SYSTEMS_LINE: &str =
+        r#"systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]"#;
+
+    /// A lockfile that is up to date with `manifest_contents` and has no
+    /// packages, as a Flox that still supported x86_64-darwin would write it.
+    fn lockfile_without_packages(manifest_contents: &str) -> String {
+        let lockfile = Lockfile {
+            manifest: Manifest::parse_toml_typed(manifest_contents)
+                .unwrap()
+                .as_typed_only(),
+            ..Default::default()
+        };
+        serialize_json_with_newline(&lockfile).unwrap()
+    }
+
+    /// The message of the error that locking failed with.
+    fn resolve_error_message(err: EnvironmentError) -> String {
+        match err {
+            EnvironmentError::Core(CoreEnvironmentError::Resolve(err)) => err.to_string(),
+            err => panic!("expected a resolve error, got {err:?}"),
+        }
+    }
+
+    /// Locking removes the former default systems from manifest.toml, keeping
+    /// the comment above them, and records a lockfile that stays up to date
+    /// with the rewritten manifest, so later activations don't lock again.
+    #[test]
+    fn lock_removes_former_default_systems() {
+        let (flox, _tempdir) = flox_instance();
+        let mut env = new_core_environment(
+            &flox,
+            &with_latest_schema(formatdoc! {"
+                [options]
+                # Systems that environment is compatible with
+                {FORMER_DEFAULT_SYSTEMS_LINE}
+            "}),
+        );
+
+        env.lock(&flox).unwrap();
+
+        expect_test::expect![[r#"
+            schema-version = "1.19.0"
+
+            [options]
+            # Systems that environment is compatible with
+
+        "#]]
+        .assert_eq(&fs::read_to_string(env.manifest_path()).unwrap());
+        assert!(env.lockfile_if_up_to_date().unwrap().is_some());
+    }
+
+    /// Activating an environment whose lockfile is up to date doesn't lock it,
+    /// so the former default systems neither change nor fail.
+    #[test]
+    fn ensure_locked_keeps_former_default_systems_of_up_to_date_lockfile() {
+        let (flox, _tempdir) = flox_instance();
+        let manifest_contents = with_latest_schema(formatdoc! {"
+            [options]
+            {FORMER_DEFAULT_SYSTEMS_LINE}
+        "});
+        let mut env = new_core_environment_with_lockfile(
+            &flox,
+            &manifest_contents,
+            &lockfile_without_packages(&manifest_contents),
+        );
+
+        let result = env.ensure_locked(&flox).unwrap();
+
+        assert!(matches!(result, LockResult::Unchanged(_)));
+        assert_eq!(
+            fs::read_to_string(env.manifest_path()).unwrap(),
+            manifest_contents
+        );
+    }
+
+    /// Locking again with an up to date lockfile, as install and uninstall do
+    /// before changing the manifest, leaves the manifest alone, so that a
+    /// managed environment's checkout still matches its generation.
+    #[test]
+    fn lock_keeps_former_default_systems_of_up_to_date_lockfile() {
+        let (flox, _tempdir) = flox_instance();
+        let manifest_contents = with_latest_schema(formatdoc! {"
+            [options]
+            {FORMER_DEFAULT_SYSTEMS_LINE}
+        "});
+        let mut env = new_core_environment_with_lockfile(
+            &flox,
+            &manifest_contents,
+            &lockfile_without_packages(&manifest_contents),
+        );
+
+        env.lock(&flox).unwrap();
+
+        assert_eq!(
+            fs::read_to_string(env.manifest_path()).unwrap(),
+            manifest_contents
+        );
+    }
+
+    /// Any other mention of x86_64-darwin fails to lock, says what to remove,
+    /// and leaves the manifest alone.
+    #[test]
+    fn lock_rejects_retired_system() {
+        let cases = [
+            (
+                indoc! {r#"
+                    [options]
+                    systems = ["aarch64-darwin", "x86_64-darwin"]
+                "#},
+                indoc! {"
+                    Flox no longer supports 'x86_64-darwin', but 'options.systems' includes it.
+                    Remove 'x86_64-darwin' from 'options.systems' with 'flox edit'."},
+            ),
+            (
+                indoc! {r#"
+                    [install]
+                    hello.pkg-path = "hello"
+                    hello.systems = ["x86_64-darwin"]
+                "#},
+                indoc! {"
+                    Flox no longer supports 'x86_64-darwin', but 'install.hello.systems' includes it.
+                    Remove 'x86_64-darwin' from 'install.hello.systems' with 'flox edit'."},
+            ),
+            (
+                indoc! {r#"
+                    [install]
+                    hello.flake = "github:NixOS/nixpkgs#hello"
+                    hello.systems = ["aarch64-darwin", "x86_64-darwin"]
+                "#},
+                indoc! {"
+                    Flox no longer supports 'x86_64-darwin', but 'install.hello.systems' includes it.
+                    Remove 'x86_64-darwin' from 'install.hello.systems' with 'flox edit'."},
+            ),
+        ];
+        for (manifest_body, expected_message) in cases {
+            let (flox, _tempdir) = flox_instance();
+            let manifest_contents = with_latest_schema(manifest_body);
+            let mut env = new_core_environment(&flox, &manifest_contents);
+
+            let err = env.lock(&flox).unwrap_err();
+
+            assert_eq!(resolve_error_message(err), expected_message);
+            assert_eq!(
+                fs::read_to_string(env.manifest_path()).unwrap(),
+                manifest_contents
+            );
+        }
+    }
+
+    /// An edit that keeps the former default systems of the manifest it edits
+    /// removes them, and reports that it did.
+    #[test]
+    fn edit_removes_former_default_systems_the_edit_kept() {
+        let (flox, _tempdir) = flox_instance();
+        let manifest_contents = with_latest_schema(formatdoc! {"
+            [options]
+            {FORMER_DEFAULT_SYSTEMS_LINE}
+        "});
+        let mut env = new_core_environment_with_lockfile(
+            &flox,
+            &manifest_contents,
+            &lockfile_without_packages(&manifest_contents),
+        );
+        let edited = with_latest_schema(formatdoc! {r#"
+            [vars]
+            FOO = "bar"
+
+            [options]
+            {FORMER_DEFAULT_SYSTEMS_LINE}
+        "#});
+
+        let result = env.edit(&flox, edited, None).unwrap();
+
+        let EditResult::Changed {
+            former_default_systems_removed,
+            ..
+        } = result
+        else {
+            panic!("expected the edit to change the environment");
+        };
+        assert!(former_default_systems_removed);
+        expect_test::expect![[r#"
+            schema-version = "1.19.0"
+
+            [vars]
+            FOO = "bar"
+
+            [options]
+
+        "#]]
+        .assert_eq(&fs::read_to_string(env.manifest_path()).unwrap());
+    }
+
+    /// Systems an edit adds are the user's choice, so x86_64-darwin in them
+    /// fails to lock, even as the former default systems.
+    #[test]
+    fn edit_rejects_retired_system_the_edit_adds() {
+        let systems_lines = [
+            FORMER_DEFAULT_SYSTEMS_LINE,
+            r#"systems = ["aarch64-darwin", "x86_64-darwin"]"#,
+        ];
+        for systems_line in systems_lines {
+            let (mut env, flox, _tempdir) = empty_core_environment();
+            let edited = with_latest_schema(formatdoc! {"
+                [options]
+                {systems_line}
+            "});
+
+            let err = env.edit(&flox, edited, None).unwrap_err();
+
+            assert_eq!(resolve_error_message(err), indoc! {"
+                Flox no longer supports 'x86_64-darwin', but 'options.systems' includes it.
+                Remove 'x86_64-darwin' from 'options.systems' with 'flox edit'."});
+        }
+    }
+
+    /// Write an environment that a composer next to it includes as
+    /// `../included`, locked as a Flox that still supported x86_64-darwin
+    /// would lock it.
+    fn included_locked_before_retirement(flox: &Flox, workdir: &Path, manifest_contents: &str) {
+        let included = new_path_environment_in(flox, manifest_contents, workdir.join("included"));
+        fs::write(
+            included.lockfile_path(flox).unwrap(),
+            lockfile_without_packages(manifest_contents),
+        )
+        .unwrap();
+    }
+
+    /// A composer in `workdir` that includes `../included`.
+    fn composer_of_included(flox: &Flox, workdir: &Path) -> PathEnvironment {
+        new_path_environment_in(
+            flox,
+            &with_latest_schema(indoc! {r#"
+                [include]
+                environments = [{ dir = "../included" }]
+            "#}),
+            workdir.join("composer"),
+        )
+    }
+
+    /// The composer can't rewrite an included environment, so it merges the
+    /// include's former default systems as if they were unset.
+    #[test]
+    fn lock_merges_former_default_systems_of_include_as_unset() {
+        let (flox, _tempdir) = flox_instance();
+        let workdir = tempdir_in(&flox.temp_dir).unwrap();
+        let included_manifest = with_latest_schema(formatdoc! {"
+            [options]
+            {FORMER_DEFAULT_SYSTEMS_LINE}
+        "});
+        included_locked_before_retirement(&flox, workdir.path(), &included_manifest);
+        let mut composer = composer_of_included(&flox, workdir.path());
+
+        let lockfile: Lockfile = composer.lockfile(&flox).unwrap().into();
+
+        assert_eq!(
+            lockfile
+                .migrated_manifest()
+                .unwrap()
+                .as_latest_schema()
+                .options
+                .systems,
+            None
+        );
+    }
+
+    /// Any other mention of x86_64-darwin in an included environment fails to
+    /// lock the composer, naming the included environment.
+    #[test]
+    fn lock_rejects_retired_system_of_include() {
+        let cases = [
+            (
+                indoc! {r#"
+                    [options]
+                    systems = ["aarch64-darwin", "x86_64-darwin"]
+                "#},
+                indoc! {"
+                    Flox no longer supports 'x86_64-darwin', but 'options.systems' of included environment 'included' includes it.
+                    Change it in that environment, or override it with 'flox edit'."},
+            ),
+            (
+                indoc! {r#"
+                    [install]
+                    hello.pkg-path = "hello"
+                    hello.systems = ["x86_64-darwin"]
+                "#},
+                indoc! {"
+                    Flox no longer supports 'x86_64-darwin', but 'install.hello.systems' of included environment 'included' includes it.
+                    Change it in that environment, or override it with 'flox edit'."},
+            ),
+        ];
+        for (included_body, expected_message) in cases {
+            let (flox, _tempdir) = flox_instance();
+            let workdir = tempdir_in(&flox.temp_dir).unwrap();
+            let included_manifest = with_latest_schema(included_body);
+            included_locked_before_retirement(&flox, workdir.path(), &included_manifest);
+            let mut composer = composer_of_included(&flox, workdir.path());
+
+            let err = composer.lockfile(&flox).unwrap_err();
+
+            assert_eq!(resolve_error_message(err), expected_message);
+        }
     }
 }

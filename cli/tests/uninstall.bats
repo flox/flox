@@ -45,9 +45,7 @@ teardown() {
 }
 
 @test "uninstall: warns when an outdated lockfile is re-locked for new default systems" {
-  if [ "$NIX_SYSTEM" == "x86_64-darwin" ]; then
-    skip "implicit default systems are unchanged on x86_64-darwin"
-  fi
+  skip_x86_64_darwin_replay
 
   "$FLOX_BIN" init
   cp "$GENERATED_DATA"/envs/hello_before_three_system_relock/manifest.{toml,lock} \
@@ -59,7 +57,7 @@ teardown() {
     run "$FLOX_BIN" uninstall hello
   assert_success
   assert_output --partial "! packages have been removed from lockfile for 'x86_64-darwin'"
-  assert_output --partial "To reinstall, add 'x86_64-darwin' to 'options.systems' with 'flox edit'"
+  assert_output --partial "Flox no longer supports 'x86_64-darwin'"
 }
 
 @test "uninstall: confirmation message" {

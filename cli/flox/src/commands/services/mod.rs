@@ -168,6 +168,8 @@ impl ServicesEnvironment {
         mut environment: ConcreteEnvironment,
     ) -> Result<Self> {
         let socket = environment.services_socket_path(flox)?;
+        let _former_default_systems_notice =
+            message::FormerDefaultSystemsNotice::new(&environment, flox);
         let lockfile: Lockfile = environment.lockfile(flox)?.into();
         let manifest = lockfile.migrated_manifest()?;
 
@@ -376,7 +378,10 @@ pub async fn start_services_with_new_process_compose(
     names: &[String],
     generation: Option<GenerationId>,
 ) -> Result<Vec<String>> {
+    let former_default_systems_notice =
+        message::FormerDefaultSystemsNotice::new(&concrete_environment, &flox);
     let lockfile: Lockfile = concrete_environment.lockfile(&flox)?.into();
+    drop(former_default_systems_notice);
     let system = flox.system.clone();
 
     let manifest = lockfile.migrated_manifest()?;

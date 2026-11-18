@@ -367,7 +367,8 @@ get_system_other_than_current() {
       extra_system="${NIX_SYSTEM%%-darwin}-linux"
       ;;
     *-linux)
-      extra_system="${NIX_SYSTEM%%-linux}-darwin"
+      # Locking rejects x86_64-darwin, so it can't stand in for x86_64-linux.
+      extra_system="aarch64-darwin"
       ;;
     *)
       echo "Unsupported system: $NIX_SYSTEM"
@@ -417,14 +418,10 @@ with_latest_schema() {
   fi
 }
 
-# The catalog recordings in "$GENERATED_DATA" were made without x86_64-darwin,
-# which is no longer one of the implicit default systems. On an x86_64-darwin
-# host the implicit default set adds it back, so the resolve request an
-# environment sends no longer matches any recording and the mock server answers
-# 404. Tests that replay a recording can't run there.
-#
-# Coverage for resolving explicitly requested non-default systems lives in the
-# tests that call `pin_all_systems` instead of this.
+# The catalog recordings in "$GENERATED_DATA" were made for the implicit default
+# systems, which don't include x86_64-darwin. An environment locked from them has
+# nothing locked for an x86_64-darwin host, so tests that replay a recording and
+# then build or activate can't run there.
 skip_x86_64_darwin_replay() {
   if [ "$NIX_SYSTEM" == "x86_64-darwin" ]; then
     skip "catalog recordings don't cover x86_64-darwin"
@@ -436,18 +433,6 @@ skip_x86_64_darwin_replay() {
 recorded_resolved_rev() {
   yq -r 'select(.when.path == "/api/v1/catalog/resolve") | .then.body' "$1" \
     | jq -r '.items[].page.packages[0].rev'
-}
-
-# Ask for all four systems, including x86_64-darwin, which is no longer an
-# implicit default. Use this with the recordings that were deliberately made for
-# the full set (e.g. `resolve/bpftrace.yaml`, `envs/hello_as_greeting`) to cover
-# resolution against explicitly requested non-default systems. Such tests run on
-# every host and must not call `skip_x86_64_darwin_replay`.
-pin_all_systems() {
-  local manifest="${1:-.flox/env/manifest.toml}"
-  tomlq --in-place --toml-output \
-    '.options.systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]' \
-    "$manifest"
 }
 
 # ---------------------------------------------------------------------------- #

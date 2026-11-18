@@ -1000,10 +1000,18 @@ Semver ::= {
 
 `systems`
 :   The allowlist of systems that this environment supports.
-    Valid values are `x86_64-linux`, `aarch64-linux`,
-    `x86_64-darwin`, and `aarch64-darwin`.
-    [`flox init`](./flox-init.md) automatically populates this list with the
-    current system type.
+    Valid values are `x86_64-linux`, `aarch64-linux`, and `aarch64-darwin`.
+    When omitted, the environment supports `aarch64-darwin`, `aarch64-linux`,
+    and `x86_64-linux`, whatever system it is locked on.
+
+    Flox no longer supports `x86_64-darwin`.
+    Locking an environment whose `options.systems` or package `systems`
+    include it fails, except for one list:
+    `flox init` used to add `aarch64-darwin`, `aarch64-linux`, `x86_64-darwin`,
+    and `x86_64-linux` to every manifest,
+    so when an environment with exactly those systems is locked,
+    Flox removes `options.systems` from the manifest and uses the defaults.
+    An environment that is already locked keeps working without a change.
     A user that attempts to pull an environment from FloxHub when their environment
     isn't explicitly supported will be prompted whether to automatically add their
     system to this list.

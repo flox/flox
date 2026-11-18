@@ -1794,6 +1794,7 @@ mod test {
         read_environment_registry,
     };
     use crate::models::environment::DOT_FLOX;
+    use crate::models::environment::path_environment::test_helpers::new_named_path_environment_in;
     use crate::models::environment::test_helpers::{
         new_core_environment,
         new_core_environment_with_lockfile,
@@ -2901,6 +2902,157 @@ mod test {
             packages.len(),
             0,
             "Remote should not yet have hello package"
+        );
+    }
+
+    /// The `options.systems` line `flox init` used to write into every
+    /// manifest.
+    const FORMER_DEFAULT_SYSTEMS_LINE: &str =
+        r#"systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]"#;
+
+    /// `manifest_contents` with the former default systems.
+    fn with_former_default_systems(manifest_contents: &str) -> String {
+        format!("{manifest_contents}\n[options]\n{FORMER_DEFAULT_SYSTEMS_LINE}\n")
+    }
+
+    /// A managed environment whose first generation has `manifest_contents`
+    /// and `lockfile`, recording that manifest as a Flox that still supported
+    /// x86_64-darwin would.
+    fn mock_managed_environment_locked_before_retirement(
+        flox: &Flox,
+        owner: EnvironmentOwner,
+        manifest_contents: &str,
+        mut lockfile: Lockfile,
+    ) -> ManagedEnvironment {
+        lockfile.manifest = Manifest::parse_toml_typed(manifest_contents)
+            .unwrap()
+            .as_typed_only();
+        let env_files = tempfile::tempdir_in(&flox.temp_dir).unwrap();
+        fs::write(env_files.path().join(MANIFEST_FILENAME), manifest_contents).unwrap();
+        fs::write(
+            env_files.path().join(LOCKFILE_FILENAME),
+            serde_json::to_string_pretty(&lockfile).unwrap(),
+        )
+        .unwrap();
+        mock_managed_environment_from_env_files(flox, env_files.path(), owner)
+    }
+
+    /// Installing to a managed environment removes the former default systems
+    /// in the generation it creates.
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn install_generation_removes_former_default_systems() {
+        let owner = "owner".parse().unwrap();
+        let (mut flox, _temp_dir) = flox_instance_with_optional_floxhub(Some(&owner));
+        let mut env = mock_managed_environment_locked_before_retirement(
+            &flox,
+            owner,
+            &with_former_default_systems("version = 1\n"),
+            Lockfile::default(),
+        );
+        flox.floxhub_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
+
+        env.install(
+            &[PackageToInstall::Catalog(
+                CatalogPackage::from_str("hello").unwrap(),
+            )],
+            &flox,
+        )
+        .unwrap();
+
+        assert_eq!(
+            env.generations().current_gen_manifest_contents().unwrap(),
+            indoc! {r#"
+                version = 1
+
+                [options]
+
+                [install]
+                hello.pkg-path = "hello"
+            "#}
+        );
+    }
+
+    /// Editing a managed environment removes the former default systems that
+    /// the edit kept, in the generation it creates.
+    #[test]
+    fn edit_generation_removes_former_default_systems() {
+        let owner = "owner".parse().unwrap();
+        let (flox, _temp_dir) = flox_instance_with_optional_floxhub(Some(&owner));
+        let mut env = mock_managed_environment_locked_before_retirement(
+            &flox,
+            owner,
+            &with_former_default_systems("version = 1\n"),
+            Lockfile::default(),
+        );
+
+        env.edit(
+            &flox,
+            with_former_default_systems("version = 1\n\n[vars]\nFOO = \"bar\"\n"),
+        )
+        .unwrap();
+
+        assert_eq!(
+            env.generations().current_gen_manifest_contents().unwrap(),
+            indoc! {r#"
+                version = 1
+
+                [vars]
+                FOO = "bar"
+
+                [options]
+            "#}
+        );
+    }
+
+    /// Upgrading a managed environment removes the former default systems in
+    /// the generation it creates.
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn upgrade_generation_removes_former_default_systems() {
+        let owner = "owner".parse().unwrap();
+        let (mut flox, temp_dir) = flox_instance_with_optional_floxhub(Some(&owner));
+        let manifest = indoc! {r#"
+            version = 1
+
+            [install]
+            hello.pkg-path = "hello"
+        "#};
+        flox.floxhub_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/old_hello.yaml")).await;
+        let old_hello_lockfile: Lockfile =
+            new_named_path_environment_in(&flox, manifest, temp_dir.path().join("old"), "name")
+                .lockfile(&flox)
+                .unwrap()
+                .into();
+        let mut env = mock_managed_environment_locked_before_retirement(
+            &flox,
+            owner,
+            &with_former_default_systems(manifest),
+            old_hello_lockfile,
+        );
+        flox.floxhub_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
+
+        env.upgrade(&flox, &[]).unwrap();
+
+        assert_eq!(
+            env.generations().current_gen_manifest_contents().unwrap(),
+            indoc! {r#"
+                version = 1
+
+                [install]
+                hello.pkg-path = "hello"
+
+                [options]
+            "#}
         );
     }
 }

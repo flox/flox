@@ -421,6 +421,8 @@ impl Publish {
         let Some(lockfile) = path_env.existing_lockfile(&flox)? else {
             bail!(build_repo_err("Environment must be locked."));
         };
+        let _former_default_systems_notice =
+            message::FormerDefaultSystemsNotice::new(&path_env, &flox);
 
         // Used for non building expressions and manifest builds
         prefetch_flake_ref(&COMMON_NIXPKGS_URL)?;

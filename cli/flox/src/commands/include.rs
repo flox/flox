@@ -90,6 +90,8 @@ impl Upgrade {
                 "Getting latest changes to environments included in environment {description}..."
             )
         );
+        let _former_default_systems_notice =
+            message::FormerDefaultSystemsNotice::new(&environment, &flox);
         let result =
             span.in_scope(|| environment.include_upgrade(&flox, self.to_upgrade.clone()))?;
 

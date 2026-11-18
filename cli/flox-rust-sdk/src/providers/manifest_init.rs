@@ -454,7 +454,7 @@ mod tests {
     use super::*;
 
     /// The commented-out `systems` lines of the init template, derived from
-    /// [DEFAULT_SYSTEMS_STR] so expectations don't vary by build host.
+    /// [DEFAULT_SYSTEMS_STR] like the template itself.
     fn default_systems_comment_lines() -> String {
         DEFAULT_SYSTEMS_STR
             .iter()

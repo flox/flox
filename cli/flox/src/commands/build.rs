@@ -285,6 +285,7 @@ impl Build {
 
         let base_dir = env.parent_path()?;
         let expression_ref = NixFlakeref::from_path(env.dot_flox_path())?; // TODO: decouple from env
+        let _former_default_systems_notice = message::FormerDefaultSystemsNotice::new(&env, &flox);
         let flox_env_build_outputs = env.build(&flox)?;
         let lockfile: Lockfile = env.lockfile(&flox)?.into();
 
@@ -335,6 +336,7 @@ impl Build {
         };
 
         let base_dir = env.parent_path()?;
+        let _former_default_systems_notice = message::FormerDefaultSystemsNotice::new(&env, &flox);
         let built_environments = env.build(&flox)?;
 
         let lockfile: Lockfile = env.lockfile(&flox)?.into();
@@ -684,6 +686,7 @@ impl Build {
         };
 
         let expression_ref = NixFlakeref::from_path(env.dot_flox_path())?;
+        let _former_default_systems_notice = message::FormerDefaultSystemsNotice::new(&env, flox);
         let lockfile: Lockfile = env.lockfile(flox)?.into();
         let manifest = lockfile.migrated_manifest()?;
 

@@ -93,6 +93,8 @@ impl Uninstall {
             progress = format!("Uninstalling {} packages", self.packages.len()));
 
         let old_lockfile = concrete_environment.existing_lockfile(&flox)?;
+        let former_default_systems_notice =
+            message::FormerDefaultSystemsNotice::new(&concrete_environment, &flox);
         let attempt = span.in_scope(|| concrete_environment.uninstall(uninstall_specs, &flox))?;
 
         // Note, you need two spaces between this emoji and the package name
@@ -136,6 +138,7 @@ impl Uninstall {
         if let Some(new_lockfile) = concrete_environment.existing_lockfile(&flox)? {
             message::print_default_systems_changed(old_lockfile.as_ref(), &new_lockfile);
         }
+        drop(former_default_systems_notice);
 
         warn_manifest_changes_for_services(&flox, &concrete_environment);
 

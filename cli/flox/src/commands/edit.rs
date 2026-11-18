@@ -175,6 +175,8 @@ impl Edit {
                 let mut generations_environment =
                     GenerationsEnvironment::try_from(detected_environment)?;
 
+                let _former_default_systems_notice =
+                    message::FormerDefaultSystemsNotice::new(&generations_environment, &flox);
                 let sync_result =
                     generations_environment.create_generation_from_local_env(&flox)?;
                 match sync_result {
@@ -246,6 +248,7 @@ impl Edit {
                 ref old_lockfile,
                 ref new_lockfile,
                 ref schema_bumped,
+                former_default_systems_removed,
                 ..
             } => {
                 if let Some((from, to)) = schema_bumped {
@@ -278,6 +281,9 @@ impl Edit {
                     old_lockfile.as_ref().as_ref(),
                     new_lockfile,
                 );
+                if former_default_systems_removed {
+                    message::print_former_default_systems_removed();
+                }
                 message::print_unused_pkg_groups(new_lockfile);
 
                 if new_lockfile.compose.is_some() {

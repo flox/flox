@@ -100,6 +100,7 @@ impl Containerize {
             progress = format!("Creating container image and writing to {output}")
         );
 
+        let _former_default_systems_notice = message::FormerDefaultSystemsNotice::new(&env, &flox);
         let built_environment = env.build(&flox)?;
         let env_name = env.name();
         let lockfile: Lockfile = env.lockfile(&flox)?.into();
