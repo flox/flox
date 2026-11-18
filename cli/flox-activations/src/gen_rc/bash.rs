@@ -426,22 +426,41 @@ mod tests {
               trap - SIGINT;
               return $_prev_exit;
             };
+            _flox_nocasematch=;
+            if shopt -q nocasematch; then _flox_nocasematch=1; shopt -u nocasematch; fi;
             if [[ "$(declare -p PROMPT_COMMAND 2>&1)" == "declare -a"* ]] && (( BASH_VERSINFO[0] * 100 + BASH_VERSINFO[1] >= 501 )); then
-              _flox_hook_registered=;
-              for _flox_prompt_command in "${PROMPT_COMMAND[@]:-}"; do
-                if [[ ";$_flox_prompt_command;" == *";_flox_hook;"* ]]; then
-                  _flox_hook_registered=1;
-                  break;
-                fi;
-              done;
-              if [[ -z $_flox_hook_registered ]]; then
-                unset _flox_hook_registered _flox_prompt_command;
-                PROMPT_COMMAND=(_flox_hook "${PROMPT_COMMAND[@]}");
-              fi;
-              unset _flox_hook_registered _flox_prompt_command;
-            elif [[ ";${PROMPT_COMMAND:-};" != *";_flox_hook;"* ]]; then
-              PROMPT_COMMAND="_flox_hook${PROMPT_COMMAND:+;$PROMPT_COMMAND}";
+              _flox_prompt_array=1;
+              _flox_prompt_commands=("${PROMPT_COMMAND[@]:-}");
+            else
+              _flox_prompt_array=;
+              _flox_prompt_commands=("${PROMPT_COMMAND:-}");
             fi;
+            for _flox_prompt_command in "${_flox_prompt_commands[@]}"; do
+              if [[ $_flox_prompt_command == __vsc_prompt_cmd_original ]]; then
+                _flox_prompt_commands+=("${__vsc_original_prompt_command:-}");
+                break;
+              fi;
+            done;
+            _flox_hook_registered=;
+            for _flox_prompt_command in "${_flox_prompt_commands[@]}"; do
+              if [[ ";$_flox_prompt_command;" == *";_flox_hook;"* || $_flox_prompt_command == _flox_hook$'\n'* || $_flox_prompt_command == '__bp_precmd_invoke_cmd "$_"'$'\n_flox_hook' || $_flox_prompt_command == '__bp_precmd_invoke_cmd "$_"'$'\n_flox_hook'[$';\n']* ]]; then
+                _flox_hook_registered=1;
+                break;
+              fi;
+            done;
+            if [[ -z $_flox_hook_registered ]]; then
+              if [[ -n $_flox_prompt_array ]]; then
+                if [[ -n ${_flox_nocasematch:-} ]]; then shopt -s nocasematch; fi;
+                unset _flox_prompt_array _flox_prompt_commands _flox_hook_registered _flox_prompt_command _flox_nocasematch;
+                PROMPT_COMMAND=(_flox_hook "${PROMPT_COMMAND[@]}");
+              else
+                if [[ -n ${_flox_nocasematch:-} ]]; then shopt -s nocasematch; fi;
+                unset _flox_prompt_array _flox_prompt_commands _flox_hook_registered _flox_prompt_command _flox_nocasematch;
+                PROMPT_COMMAND="_flox_hook${PROMPT_COMMAND:+;$PROMPT_COMMAND}";
+              fi;
+            fi;
+            if [[ -n ${_flox_nocasematch:-} ]]; then shopt -s nocasematch; fi;
+            unset _flox_prompt_array _flox_prompt_commands _flox_hook_registered _flox_prompt_command _flox_nocasematch;
         "#]].assert_eq(&output);
     }
 
@@ -484,22 +503,41 @@ mod tests {
               trap - SIGINT;
               return $_prev_exit;
             };
+            _flox_nocasematch=;
+            if shopt -q nocasematch; then _flox_nocasematch=1; shopt -u nocasematch; fi;
             if [[ "$(declare -p PROMPT_COMMAND 2>&1)" == "declare -a"* ]] && (( BASH_VERSINFO[0] * 100 + BASH_VERSINFO[1] >= 501 )); then
-              _flox_hook_registered=;
-              for _flox_prompt_command in "${PROMPT_COMMAND[@]:-}"; do
-                if [[ ";$_flox_prompt_command;" == *";_flox_hook;"* ]]; then
-                  _flox_hook_registered=1;
-                  break;
-                fi;
-              done;
-              if [[ -z $_flox_hook_registered ]]; then
-                unset _flox_hook_registered _flox_prompt_command;
-                PROMPT_COMMAND=(_flox_hook "${PROMPT_COMMAND[@]}");
-              fi;
-              unset _flox_hook_registered _flox_prompt_command;
-            elif [[ ";${PROMPT_COMMAND:-};" != *";_flox_hook;"* ]]; then
-              PROMPT_COMMAND="_flox_hook${PROMPT_COMMAND:+;$PROMPT_COMMAND}";
+              _flox_prompt_array=1;
+              _flox_prompt_commands=("${PROMPT_COMMAND[@]:-}");
+            else
+              _flox_prompt_array=;
+              _flox_prompt_commands=("${PROMPT_COMMAND:-}");
             fi;
+            for _flox_prompt_command in "${_flox_prompt_commands[@]}"; do
+              if [[ $_flox_prompt_command == __vsc_prompt_cmd_original ]]; then
+                _flox_prompt_commands+=("${__vsc_original_prompt_command:-}");
+                break;
+              fi;
+            done;
+            _flox_hook_registered=;
+            for _flox_prompt_command in "${_flox_prompt_commands[@]}"; do
+              if [[ ";$_flox_prompt_command;" == *";_flox_hook;"* || $_flox_prompt_command == _flox_hook$'\n'* || $_flox_prompt_command == '__bp_precmd_invoke_cmd "$_"'$'\n_flox_hook' || $_flox_prompt_command == '__bp_precmd_invoke_cmd "$_"'$'\n_flox_hook'[$';\n']* ]]; then
+                _flox_hook_registered=1;
+                break;
+              fi;
+            done;
+            if [[ -z $_flox_hook_registered ]]; then
+              if [[ -n $_flox_prompt_array ]]; then
+                if [[ -n ${_flox_nocasematch:-} ]]; then shopt -s nocasematch; fi;
+                unset _flox_prompt_array _flox_prompt_commands _flox_hook_registered _flox_prompt_command _flox_nocasematch;
+                PROMPT_COMMAND=(_flox_hook "${PROMPT_COMMAND[@]}");
+              else
+                if [[ -n ${_flox_nocasematch:-} ]]; then shopt -s nocasematch; fi;
+                unset _flox_prompt_array _flox_prompt_commands _flox_hook_registered _flox_prompt_command _flox_nocasematch;
+                PROMPT_COMMAND="_flox_hook${PROMPT_COMMAND:+;$PROMPT_COMMAND}";
+              fi;
+            fi;
+            if [[ -n ${_flox_nocasematch:-} ]]; then shopt -s nocasematch; fi;
+            unset _flox_prompt_array _flox_prompt_commands _flox_hook_registered _flox_prompt_command _flox_nocasematch;
         "#]].assert_eq(&output);
     }
 
