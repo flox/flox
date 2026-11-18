@@ -108,10 +108,20 @@ Auto-activation is on by default and only requires the Flox prompt hook to be
 installed in your shell.
 To install the hook without activating a startup environment,
 add the appropriate command to your shell's startup file.
+Each command, placed in the file named for it, installs the hook only in
+interactive shells.
 
-Bash (`~/.bashrc`) and Zsh (`~/.zshrc`):
+Bash (`~/.bashrc`):
 
 ```bash
+if [[ $- == *i* ]]; then
+  eval "$(flox activate --hook-only)"
+fi
+```
+
+Zsh (`~/.zshrc`):
+
+```zsh
 eval "$(flox activate --hook-only)"
 ```
 
@@ -128,6 +138,31 @@ if ( $?prompt ) then
   eval "`flox activate --hook-only`"
 endif
 ```
+
+The interactive checks matter because Zsh and Tcsh run the hook
+on every directory change, not only at a prompt.
+A script that installed the hook and then changes into the directory of an
+allowed environment activates that environment and runs its profile scripts.
+Tcsh reads `~/.tcshrc` for scripts not started with `tcsh -f`
+and for commands run with `ssh host cmd`,
+so the `$?prompt` check keeps the hook out of them.
+Zsh reads `~/.zshrc` only for interactive shells, so it needs no check.
+Put the Zsh hook only in `~/.zshrc`, not in `~/.zshenv`, `~/.zprofile`, or
+`~/.zlogin`:
+Zsh normally reads `~/.zshenv` for every script,
+and `~/.zprofile` and `~/.zlogin` for every login shell,
+including noninteractive ones such as `zsh -l script`.
+Bash runs the hook only before a prompt,
+and Fish only after its first prompt,
+so in a script the hook never activates anything.
+Many Bash builds, including the macOS system Bash,
+also read `~/.bashrc` for commands run with `ssh host cmd`,
+and Fish reads `config.fish` for every script,
+so their checks save the cost of running `flox` in shells that never prompt.
+An in-place activation in a startup file, such as `eval "$(flox activate)"`,
+installs the same hook,
+so Zsh and Tcsh scripts that read that file can auto-activate environments
+in the same way.
 
 The shell is detected in the same way as for in-place activation.
 No default environment or FloxHub account is required.
@@ -400,6 +435,11 @@ Activate `default` Flox environment only within the current shell
 ```bash
 eval "$(flox activate)"
 ```
+
+This also installs the Flox hook,
+so in `~/.zprofile` it can auto-activate environments in noninteractive
+Zsh login shells such as `zsh -l script`
+(see "Enabling auto-activation").
 
 # SEE ALSO
 [`flox-deactivate(1)`](./flox-deactivate.md),
