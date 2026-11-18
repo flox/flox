@@ -528,10 +528,10 @@ mod test {
         ]);
     }
 
-    /// When the host system is outside the supported set, it's expected too,
-    /// so a version without a build for it is annotated.
+    /// An expected set that includes `x86_64-darwin` annotates a version
+    /// without a build for it.
     #[test]
-    fn versions_missing_an_expected_host_system_are_annotated() {
+    fn versions_missing_x86_64_darwin_are_annotated_when_it_is_expected() {
         let expected = systems(&[
             "aarch64-darwin",
             "aarch64-linux",
