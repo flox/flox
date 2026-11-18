@@ -62,7 +62,7 @@
 use std::io::{BufRead, BufReader, Read};
 use std::process::{Child, ChildStderr, ChildStdout, Stdio};
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::env_registry;
@@ -325,8 +325,12 @@ fn run_store_gc() -> Result<String> {
         reader_thread
             .join()
             .map_err(|_| anyhow!("Background thread panicked"))??;
-        proc.wait()
+        let status = proc
+            .wait()
             .context("Failed while waiting for GC process to exit")?;
+        if !status.success() {
+            bail!("Nix store GC failed: {status}");
+        }
         debug!("joined gc reader thread");
         Ok::<String, anyhow::Error>(freed_msg)
     })?;

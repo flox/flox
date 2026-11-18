@@ -151,7 +151,7 @@ impl Containerize {
 }
 
 fn should_extend_config(labels: &[String]) -> bool {
-    labels.is_empty()
+    !labels.is_empty()
 }
 
 fn extend_config(labels: &[String], config: &mut ContainerizeConfig) {
@@ -489,5 +489,11 @@ mod tests {
         assert!(temp_env::with_var("PATH", neither_path, || {
             docker_target.validate_in_path().is_err()
         }));
+    }
+
+    #[test]
+    fn should_extend_config_only_when_labels_present() {
+        assert!(!should_extend_config(&[]));
+        assert!(should_extend_config(&["key=value".to_string()]));
     }
 }

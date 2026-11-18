@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Result, bail};
 use bpaf::Bpaf;
 use flox_events::{CliEnvironmentPayload, EventKind, EventsHub};
 use flox_manifest::interfaces::AsLatestSchema;
@@ -45,6 +45,7 @@ impl Stop {
             &self.names,
         )?;
 
+        let mut failed_count = 0;
         for process in named_processes {
             if !process.is_running {
                 message::warning(format!("Service '{}' is not running", process.name));
@@ -56,10 +57,15 @@ impl Stop {
                     "Failed to stop service '{}': {}",
                     process.name, err
                 ));
+                failed_count += 1;
                 continue;
             }
 
             message::updated(format!("Service '{}' stopped", process.name));
+        }
+
+        if failed_count > 0 {
+            bail!("Failed to stop {failed_count} service(s)");
         }
 
         Ok(())
