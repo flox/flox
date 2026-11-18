@@ -37,7 +37,14 @@ use flox_manifest::parsed::latest::{
     PkgGroups,
 };
 use flox_manifest::parsed::{Inner, latest};
-use flox_manifest::raw::DEFAULT_SYSTEMS_STR;
+use flox_manifest::raw::{
+    DEFAULT_SYSTEMS_STR,
+    MANIFEST_INSTALL_KEY,
+    MANIFEST_OPTIONS_KEY,
+    MANIFEST_SYSTEMS_KEY,
+    RETIRED_SYSTEM,
+    is_former_default_systems,
+};
 use flox_manifest::{Manifest, ManifestError, MigratedTypedOnly};
 use floxhub_client::{
     FloxhubClientError,
@@ -95,6 +102,16 @@ pub enum ResolveError {
 
     // todo: this should probably part of some validation logic of the manifest file
     //       rather than occurring during the locking process creation
+    #[error("{}", retired_system_message(setting, include.as_deref()))]
+    RetiredSystem {
+        setting: RetiredSystemSetting,
+        /// The included environment the setting comes from, if the manifest
+        /// being locked doesn't set it.
+        include: Option<String>,
+    },
+
+    /// Never raised for [RETIRED_SYSTEM], which [ResolveError::RetiredSystem]
+    /// reports before resolution, so this never advises adding it.
     #[error(
         "'{install_id}' specifies disabled or unknown system '{system}' (enabled systems: {enabled_systems}).\n\nAdd '{system}' to 'options.systems' in manifest.toml",
         enabled_systems=enabled_systems.join(", ")
@@ -210,6 +227,89 @@ fn unknown_stability_message(
         {next_step}",
         available = available.join(", "),
     }
+}
+
+/// A setting that names [RETIRED_SYSTEM].
+#[derive(Debug, Clone, PartialEq)]
+pub enum RetiredSystemSetting {
+    /// `options.systems`
+    Options,
+    /// `install.<INSTALL_ID>.systems`
+    Package(String),
+}
+
+impl RetiredSystemSetting {
+    fn key_path(&self) -> String {
+        match self {
+            Self::Options => format!("{MANIFEST_OPTIONS_KEY}.{MANIFEST_SYSTEMS_KEY}"),
+            Self::Package(install_id) => format!(
+                "{MANIFEST_INSTALL_KEY}.{}.{MANIFEST_SYSTEMS_KEY}",
+                toml_edit::Key::new(install_id.as_str())
+            ),
+        }
+    }
+
+    /// The first setting of `manifest` that names [RETIRED_SYSTEM].
+    ///
+    /// Store paths are left out: a store path is built for exactly the system
+    /// its `systems` names, so there is nothing to remove from that list short
+    /// of the package itself.
+    fn find(manifest: &ManifestLatest) -> Option<Self> {
+        let names_retired = |systems: Option<&Vec<String>>| {
+            systems.is_some_and(|s| s.iter().any(|s| s == RETIRED_SYSTEM))
+        };
+        if names_retired(manifest.options.systems.as_ref()) {
+            return Some(Self::Options);
+        }
+        manifest
+            .install
+            .inner()
+            .iter()
+            .find(|(_, descriptor)| {
+                let systems = match descriptor {
+                    ManifestPackageDescriptor::Catalog(descriptor) => &descriptor.systems,
+                    ManifestPackageDescriptor::FlakeRef(descriptor) => &descriptor.systems,
+                    ManifestPackageDescriptor::StorePath(_) => return false,
+                };
+                names_retired(systems.as_ref())
+            })
+            .map(|(install_id, _)| Self::Package(install_id.clone()))
+    }
+
+    /// Whether `manifest` contributes this setting's value to `merged`.
+    fn is_set_by(&self, manifest: &ManifestLatest, merged: &ManifestLatest) -> bool {
+        match self {
+            Self::Options => manifest.options.systems == merged.options.systems,
+            Self::Package(install_id) => {
+                let descriptor = manifest.install.inner().get(install_id);
+                descriptor.is_some() && descriptor == merged.install.inner().get(install_id)
+            },
+        }
+    }
+}
+
+fn retired_system_message(setting: &RetiredSystemSetting, include: Option<&str>) -> String {
+    let location = format!("'{}'", setting.key_path());
+    match include {
+        None => formatdoc! {"
+            Flox no longer supports '{RETIRED_SYSTEM}', but {location} includes it.
+            Remove '{RETIRED_SYSTEM}' from {location} with 'flox edit'."},
+        Some(include) => formatdoc! {"
+            Flox no longer supports '{RETIRED_SYSTEM}', but {location} of included environment '{include}' includes it.
+            Change it in that environment, or override it with 'flox edit'."},
+    }
+}
+
+/// `manifest` with `options.systems` removed if they are the systems `flox
+/// init` used to write into every manifest.
+///
+/// An included environment's manifest can't be rewritten by the composer, so
+/// its former default systems are dropped only for the merge.
+fn without_former_default_systems(mut manifest: ManifestLatest) -> ManifestLatest {
+    if is_former_default_systems(manifest.options.systems.as_deref()) {
+        manifest.options.systems = None;
+    }
+    manifest
 }
 
 /// Errors that occur during merging a manifest that flox edit can recover from
@@ -468,6 +568,9 @@ impl LockManifest {
         )
         .map_err(EnvironmentError::Recoverable)?;
 
+        Self::check_retired_system(&merged, manifest.as_latest_schema(), compose.as_ref())
+            .map_err(|e| EnvironmentError::Core(CoreEnvironmentError::Resolve(e)))?;
+
         let catalog = &flox.floxhub_client;
         let packages =
             Self::resolve_manifest(&merged, seed_lockfile, catalog, &flox.installable_locker)
@@ -668,10 +771,11 @@ impl LockManifest {
         let deps = locked_includes
             .iter()
             .map(|include| {
-                include
-                    .manifest
-                    .migrate_typed_only(None)
-                    .map(|manifest| (include.name.clone(), manifest.as_latest_schema().clone()))
+                include.manifest.migrate_typed_only(None).map(|manifest| {
+                    let manifest =
+                        without_former_default_systems(manifest.as_latest_schema().clone());
+                    (include.name.clone(), manifest)
+                })
             })
             .collect::<Result<Vec<_>, _>>()
             .map_err(RecoverableMergeError::Migration)?;
@@ -694,6 +798,44 @@ impl LockManifest {
         };
 
         Ok((merged, Some(compose)))
+    }
+
+    /// Error if `merged` names [RETIRED_SYSTEM], saying whether `composer` or
+    /// which included environment in `compose` sets it.
+    ///
+    /// This runs before resolution, so that a request for the retired system
+    /// never reaches the catalog.
+    fn check_retired_system(
+        merged: &ManifestLatest,
+        composer: &ManifestLatest,
+        compose: Option<&Compose>,
+    ) -> Result<(), ResolveError> {
+        let Some(setting) = RetiredSystemSetting::find(merged) else {
+            return Ok(());
+        };
+        if setting.is_set_by(composer, merged) {
+            return Err(ResolveError::RetiredSystem {
+                setting,
+                include: None,
+            });
+        }
+        // Later includes take priority, so the last one that matches is the
+        // one whose value was merged.
+        let include = compose
+            .into_iter()
+            .flat_map(|compose| compose.include.iter().rev())
+            .find(|include| {
+                include
+                    .manifest
+                    .migrate_typed_only(None)
+                    .is_ok_and(|manifest| {
+                        let manifest =
+                            without_former_default_systems(manifest.as_latest_schema().clone());
+                        setting.is_set_by(&manifest, merged)
+                    })
+            })
+            .map(|include| include.name.clone());
+        Err(ResolveError::RetiredSystem { setting, include })
     }
 
     /// Helper method that removes the first IncludeToUpgrade that matches a given

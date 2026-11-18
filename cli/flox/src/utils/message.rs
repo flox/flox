@@ -12,7 +12,9 @@ use flox_manifest::lockfile::{LockedPackage, Lockfile, PackageOutputs, default_s
 use flox_manifest::parsed::Inner;
 use flox_manifest::parsed::common::DEFAULT_GROUP_NAME;
 use flox_manifest::parsed::latest::{PkgGroups, SelectedOutputs};
-use flox_manifest::raw::PackageToInstall;
+use flox_manifest::raw::{DEFAULT_SYSTEMS_STR, PackageToInstall, RETIRED_SYSTEM};
+use flox_rust_sdk::flox::Flox;
+use flox_rust_sdk::models::environment::Environment;
 use indoc::formatdoc;
 use minus::{ExitStrategy, Pager, page_all};
 use tracing::{debug, info};
@@ -394,18 +396,60 @@ pub(crate) fn print_default_systems_changed(
     };
 
     for system in change.removed {
-        warning(
-            formatdoc! {"
+        // Locking rejects the retired system in 'options.systems', so adding
+        // it back is no way to reinstall.
+        let next_step = if system == RETIRED_SYSTEM {
+            format!("Flox no longer supports '{system}'")
+        } else {
+            format!("To reinstall, add '{system}' to 'options.systems' with 'flox edit'")
+        };
+        warning(formatdoc! {"
             packages have been removed from lockfile for '{system}'
-            To reinstall, add '{system}' to 'options.systems' with 'flox edit'
-        "}
-            .trim_end(),
-        );
+            {next_step}"});
     }
 
     for system in change.added {
         info(format!("packages have been added for '{system}'"));
     }
+}
+
+/// Whether the environment's manifest has the systems `flox init` used to
+/// write into every manifest, for [print_former_default_systems_removed] to
+/// compare with the lockfile after a command that may lock.
+pub(crate) fn has_former_default_systems(environment: &impl Environment, flox: &Flox) -> bool {
+    environment
+        .manifest_without_migrating(flox)
+        .is_ok_and(|manifest| manifest.has_former_default_systems())
+}
+
+/// Report that locking removed `options.systems` from manifest.toml because
+/// they were the systems `flox init` used to write into every manifest.
+///
+/// `had_former_default_systems` is whether the manifest the command started
+/// from had them, and `new_lockfile` shows whether the lock kept them.
+pub(crate) fn print_former_default_systems_removed(
+    had_former_default_systems: bool,
+    new_lockfile: &Lockfile,
+) {
+    if !had_former_default_systems {
+        return;
+    }
+    let user_manifest = match new_lockfile.migrated_user_manifest() {
+        Ok(user_manifest) => user_manifest,
+        // A warning must never fail the command that triggered the re-lock.
+        Err(err) => {
+            debug!(%err, "failed to read the locked manifest's systems");
+            return;
+        },
+    };
+    if user_manifest.as_latest_schema().options.systems.is_some() {
+        return;
+    }
+    warning(formatdoc! {"
+        Removed 'options.systems' from manifest.toml since Flox no longer supports '{RETIRED_SYSTEM}'.
+        It listed the systems 'flox init' used to add to every manifest, so the environment now uses the default systems ({default_systems}).",
+        default_systems = DEFAULT_SYSTEMS_STR.join(", "),
+    });
 }
 
 #[cfg(test)]
@@ -528,7 +572,7 @@ mod tests {
 
         assert_eq!(writer.to_string(), indoc! {"
             ! packages have been removed from lockfile for 'x86_64-darwin'
-            To reinstall, add 'x86_64-darwin' to 'options.systems' with 'flox edit'
+            Flox no longer supports 'x86_64-darwin'
             ℹ packages have been added for 'riscv64-linux'
             "});
     }
@@ -539,7 +583,7 @@ mod tests {
             &[
                 "aarch64-darwin",
                 "aarch64-linux",
-                "x86_64-darwin",
+                "riscv64-linux",
                 "x86_64-linux",
             ],
             None,
@@ -555,8 +599,36 @@ mod tests {
         .await;
 
         assert_eq!(writer.to_string(), indoc! {"
-            ! packages have been removed from lockfile for 'x86_64-darwin'
-            To reinstall, add 'x86_64-darwin' to 'options.systems' with 'flox edit'
+            ! packages have been removed from lockfile for 'riscv64-linux'
+            To reinstall, add 'riscv64-linux' to 'options.systems' with 'flox edit'
+            "});
+    }
+
+    /// The removal is reported only when the command started from the former
+    /// default systems and the lock it wrote no longer has them.
+    #[tokio::test]
+    async fn print_former_default_systems_removed_after_removal_only() {
+        let systems = [
+            "aarch64-darwin",
+            "aarch64-linux",
+            "x86_64-darwin",
+            "x86_64-linux",
+        ];
+        let kept = lockfile_locked_for_systems(&systems, Some(&systems));
+        let removed = lockfile_locked_for_systems(&systems[..2], None);
+
+        let (subscriber, writer) = test_subscriber_message_only();
+        async {
+            print_former_default_systems_removed(true, &kept);
+            print_former_default_systems_removed(false, &removed);
+            print_former_default_systems_removed(true, &removed);
+        }
+        .with_subscriber(subscriber)
+        .await;
+
+        assert_eq!(writer.to_string(), indoc! {"
+            ! Removed 'options.systems' from manifest.toml since Flox no longer supports 'x86_64-darwin'.
+            It listed the systems 'flox init' used to add to every manifest, so the environment now uses the default systems (aarch64-darwin, aarch64-linux, x86_64-linux).
             "});
     }
 

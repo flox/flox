@@ -82,6 +82,8 @@ impl Upgrade {
             concrete_environment = %description,
             progress = %progress_message
         );
+        let had_former_default_systems =
+            message::has_former_default_systems(&concrete_environment, &flox);
         let result = span.in_scope(|| {
             let groups_or_iids = &self
                 .groups_or_iids
@@ -163,6 +165,10 @@ impl Upgrade {
         if result.store_path.is_some() {
             message::print_default_systems_changed(
                 result.old_lockfile.as_ref(),
+                &result.new_lockfile,
+            );
+            message::print_former_default_systems_removed(
+                had_former_default_systems,
                 &result.new_lockfile,
             );
         }

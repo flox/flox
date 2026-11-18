@@ -21,7 +21,9 @@ use flox_manifest::lockfile::{
 };
 use flox_manifest::parsed::Inner;
 use flox_manifest::parsed::latest::SelectedOutputs;
+use flox_manifest::raw::RETIRED_SYSTEM;
 use floxhub_client::{CatalogClientTrait, FloxhubClientError, ResolveAuthError, StoreInfo};
+use indoc::formatdoc;
 use pollster::FutureExt as _;
 use rsevents_extra::Semaphore;
 use serde::{Deserialize, Serialize};
@@ -139,6 +141,24 @@ impl Display for DownloadAttempt {
     }
 }
 
+/// Locking rejects [RETIRED_SYSTEM] in `options.systems`, so the message
+/// doesn't advise adding it.
+fn lockfile_missing_current_system_message(system: &str, locked_systems: &[String]) -> String {
+    let next_step = if system == RETIRED_SYSTEM {
+        format!("Flox no longer supports '{system}', so it can't be added to 'options.systems'.")
+    } else {
+        format!(
+            "Run 'flox upgrade' to re-lock the environment for your system, or add '{system}' to 'options.systems' with 'flox edit'."
+        )
+    };
+    formatdoc! {"
+        This environment is not locked for your system ({system}).
+        Locked systems: {locked}
+        {next_step}",
+        locked = locked_systems.join(", "),
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum BuildEnvError {
     #[error("Failed to realize '{install_id}':\n{message}")]
@@ -170,11 +190,7 @@ pub enum BuildEnvError {
     )]
     VarsCycle { cycle: String },
 
-    #[error(
-        "This environment is not locked for your system ({system}).\n\
-        Locked systems: {locked}\n\
-        Run 'flox upgrade' to re-lock the environment for your system, or add '{system}' to 'options.systems' with 'flox edit'.",
-        locked = locked_systems.join(", "))]
+    #[error("{}", lockfile_missing_current_system_message(system, locked_systems))]
     LockfileMissingCurrentSystem {
         system: String,
         locked_systems: Vec<String>,

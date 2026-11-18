@@ -378,8 +378,10 @@ impl ActivateOptions {
 
         let now_active = UninitializedEnvironment::from_concrete_environment(&concrete_environment);
 
-        // Read before `lockfile()`, which may re-lock and overwrite it.
+        // Read before `lockfile()`, which may re-lock and overwrite them.
         let old_lockfile = concrete_environment.existing_lockfile(&flox)?;
+        let had_former_default_systems =
+            message::has_former_default_systems(&concrete_environment, &flox);
         let lockfile = match concrete_environment.lockfile(&flox)? {
             LockResult::Changed(lockfile) => {
                 message::print_overridden_manifest_fields(&lockfile);
@@ -388,6 +390,9 @@ impl ActivateOptions {
             },
             LockResult::Unchanged(lockfile) => lockfile,
         };
+        // Removing the systems can lock to the same lockfile, if it was
+        // written before the systems were added.
+        message::print_former_default_systems_removed(had_former_default_systems, &lockfile);
         let manifest = &lockfile.migrated_manifest()?;
 
         // After locking, so the setting and the lockfile the notice compares

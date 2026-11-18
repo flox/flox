@@ -220,7 +220,7 @@ EOF
     run "$FLOX_BIN" include upgrade -d composer
   assert_success
   assert_output --partial "! packages have been removed from lockfile for 'x86_64-darwin'"
-  assert_output --partial "To reinstall, add 'x86_64-darwin' to 'options.systems' with 'flox edit'"
+  assert_output --partial "Flox no longer supports 'x86_64-darwin'"
 }
 
 # ---------------------------------------------------------------------------- #

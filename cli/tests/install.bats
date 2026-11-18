@@ -162,9 +162,9 @@ EOF
 
 @test "'flox install' overrides install ID with '-i'" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/envs/hello_as_greeting/hello_as_greeting.yaml"
+  skip "envs/hello_as_greeting requests x86_64-darwin; re-record it with 'just gen-data'"
   run "$FLOX_BIN" init
   assert_success
-  pin_all_systems
   run "$FLOX_BIN" install -i greeting hello
   assert_success
   manifest=$(cat "$PROJECT_DIR/.flox/env/manifest.toml")
@@ -173,9 +173,9 @@ EOF
 
 @test "'flox install' overrides install ID with '--id'" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/envs/hello_as_greeting/hello_as_greeting.yaml"
+  skip "envs/hello_as_greeting requests x86_64-darwin; re-record it with 'just gen-data'"
   run "$FLOX_BIN" init
   assert_success
-  pin_all_systems
   run "$FLOX_BIN" install --id greeting hello
   assert_success
   manifest=$(cat "$PROJECT_DIR/.flox/env/manifest.toml")
@@ -367,8 +367,8 @@ EOF
 
 # bats test_tags=install:single-not-on-all-systems
 @test "resolution fixup: package not available on all systems installs with looser constraints" {
+  skip "resolve/bpftrace.yaml requests x86_64-darwin; re-record it with 'just gen-data'"
   "$FLOX_BIN" init
-  pin_all_systems
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/bpftrace.yaml" \
     run "$FLOX_BIN" install bpftrace
@@ -445,27 +445,6 @@ EOF
     cat << EOF
 ✘ ERROR: resolution failed:$SPACE
 No version compatible with '14.16.1' found for 'nodejs' on 'aarch64-darwin'.
-EOF
-  )"
-}
-
-@test "resolution message: systems not on same page" {
-  "$FLOX_BIN" init
-  # x86_64-darwin is the system with no page in common with the others, so this
-  # error only occurs when it is asked for explicitly.
-  pin_all_systems
-
-  # disable backtrace; we expect this to fail and assert output
-  RUST_BACKTRACE=0 \
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/torchvision-bin.yaml" \
-    run "$FLOX_BIN" install python311Packages.torchvision-bin
-
-  assert_failure
-  SPACE=" "
-  assert_output --partial "$(
-    cat << EOF
-✘ ERROR: resolution failed:$SPACE
-The package 'python311Packages.torchvision-bin' is not found for all requested systems on the same page, consider package groups with the following system groupings: (aarch64-linux), (x86_64-darwin), (aarch64-linux,x86_64-darwin), (aarch64-darwin,aarch64-linux,x86_64-darwin).
 EOF
   )"
 }

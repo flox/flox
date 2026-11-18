@@ -55,6 +55,58 @@ pub static DEFAULT_SYSTEMS_STR: LazyLock<Vec<String>> = LazyLock::new(|| {
     ]
 });
 
+/// A system that manifests and lockfiles may still name, but that Flox no
+/// longer locks for.
+pub const RETIRED_SYSTEM: &str = "x86_64-darwin";
+
+/// The `options.systems` that `flox init` wrote into every new manifest
+/// before x86_64-darwin was retired, so a manifest with exactly these systems
+/// didn't choose them.
+const FORMER_DEFAULT_SYSTEMS: [&str; 4] = [
+    "aarch64-darwin",
+    "aarch64-linux",
+    "x86_64-darwin",
+    "x86_64-linux",
+];
+
+/// Whether `systems` are [FORMER_DEFAULT_SYSTEMS] in any order.
+pub fn is_former_default_systems(systems: Option<&[String]>) -> bool {
+    systems.is_some_and(|systems| {
+        systems.iter().map(String::as_str).collect::<BTreeSet<_>>()
+            == BTreeSet::from(FORMER_DEFAULT_SYSTEMS)
+    })
+}
+
+impl Manifest<Validated> {
+    /// Whether `options.systems` are the systems `flox init` used to write
+    /// into every manifest; see [is_former_default_systems].
+    pub fn has_former_default_systems(&self) -> bool {
+        is_former_default_systems(self.inner.parsed.systems().map(Vec::as_slice))
+    }
+
+    /// Remove `options.systems`, keeping the comments above it.
+    pub fn remove_systems(&self) -> Result<Self, ManifestError> {
+        let mut manifest = self.clone();
+        *manifest.inner.parsed.systems_mut() = None;
+        manifest.update_systems()?;
+        Ok(manifest)
+    }
+}
+
+impl Manifest<Migrated> {
+    /// Remove `options.systems`, keeping the comments above it.
+    ///
+    /// The manifest from before the migration loses it as well, since it
+    /// becomes the composer manifest that a lockfile records.
+    pub fn remove_systems(&self) -> Result<Self, ManifestError> {
+        let mut manifest = self.clone();
+        manifest.inner.migrated_parsed.options.systems = None;
+        *manifest.inner.original_parsed.systems_mut() = None;
+        manifest.update_systems()?;
+        Ok(manifest)
+    }
+}
+
 pub(crate) fn get_schema_version_kind(toml: &DocumentMut) -> Result<VersionKind, ManifestError> {
     if let Some(item) = toml.get("version") {
         if let Some(int) = item.as_integer() {
@@ -987,12 +1039,55 @@ fn update_systems(
             TomlEditError::MalformedOptionsTable(options_field_type)
         })?;
         table_like_set_string_array(options_table, "systems", systems);
-    } else if let Some(options_field) = raw.get_mut("options") {
-        let options_field_type = options_field.type_name().into();
-        let options_table = options_field
-            .as_table_mut()
-            .ok_or(TomlEditError::MalformedOptionsTable(options_field_type))?;
-        options_table.remove("systems");
+    } else {
+        remove_raw_options_systems(raw)?;
+    }
+    Ok(())
+}
+
+/// Removes `options.systems` from a raw TOML manifest.
+///
+/// The comments above it stay where they were, as for
+/// [`remove_raw_pkg_groups`], since they may be the user's own notes rather
+/// than a description of the systems.
+fn remove_raw_options_systems(raw: &mut DocumentMut) -> Result<(), TomlEditError> {
+    let Some(options_item) = raw.get(MANIFEST_OPTIONS_KEY) else {
+        return Ok(());
+    };
+    let options_item_type = options_item.type_name().to_string();
+    let options_table = options_item
+        .as_table_like()
+        .ok_or(TomlEditError::MalformedOptionsTable(options_item_type))?;
+    if !options_table.contains_key(MANIFEST_SYSTEMS_KEY) {
+        return Ok(());
+    }
+    let options_header_position = options_item
+        .as_table()
+        .filter(|table| !table.is_implicit() && !table.is_dotted())
+        .and_then(Table::position);
+    let no_removed_keys = BTreeSet::new();
+    let destination = match next_line_after(options_table, MANIFEST_SYSTEMS_KEY, &no_removed_keys) {
+        Some(line) => CommentsDestination::Line(vec![MANIFEST_OPTIONS_KEY.to_string()], line),
+        None if options_header_position.is_some() => {
+            CommentsDestination::NextHeader(options_header_position)
+        },
+        None => match next_line_after(raw.as_table(), MANIFEST_OPTIONS_KEY, &no_removed_keys) {
+            Some(line) => CommentsDestination::Line(vec![], line),
+            None => CommentsDestination::NextHeader(None),
+        },
+    };
+    let comments = line_prefix(options_table, MANIFEST_SYSTEMS_KEY)
+        .and_then(|prefix| prefix.as_str().map(str::to_string))
+        .filter(|comments| !comments.trim().is_empty());
+
+    if let Some(options_table) = raw
+        .get_mut(MANIFEST_OPTIONS_KEY)
+        .and_then(Item::as_table_like_mut)
+    {
+        options_table.remove(MANIFEST_SYSTEMS_KEY);
+    }
+    if let Some(comments) = comments {
+        move_comments(raw, &comments, destination);
     }
     Ok(())
 }
@@ -1120,8 +1215,8 @@ fn remove_raw_pkg_groups(
     Ok(())
 }
 
-/// Where [`remove_raw_pkg_groups`] moves the comments above a removed table
-/// or line.
+/// Where [`remove_raw_pkg_groups`] and [`remove_raw_options_systems`] move the
+/// comments above a removed table or line.
 enum CommentsDestination {
     /// Above the line of the key in the table at the path.
     Line(Vec<String>, String),
@@ -1937,7 +2032,7 @@ mod test {
     use proptest_derive::Arbitrary;
 
     use super::*;
-    use crate::interfaces::CommonFields;
+    use crate::interfaces::{AsWritableManifest, CommonFields, WriteManifest};
     use crate::raw::test_helpers::mk_test_manifest_from_contents;
     use crate::test_helpers::with_latest_schema;
 
@@ -2777,6 +2872,136 @@ curl.outputs = [\"bin\", \"man\"]
         let opts = manifest.inner.raw["options"].clone();
         assert!(opts["allow"]["unfree"].as_bool().unwrap());
         assert!(opts.get("systems").is_none());
+    }
+
+    /// Only the exact set `flox init` used to write counts, in any order.
+    #[test]
+    fn is_former_default_systems_compares_as_a_set() {
+        let systems = |systems: &[&str]| systems.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+
+        assert!(is_former_default_systems(Some(&systems(&[
+            "x86_64-linux",
+            "x86_64-darwin",
+            "aarch64-linux",
+            "aarch64-darwin",
+        ]))));
+        assert!(!is_former_default_systems(Some(&systems(&[
+            "aarch64-darwin",
+            "aarch64-linux",
+            "x86_64-linux",
+        ]))));
+        assert!(!is_former_default_systems(Some(&systems(&[
+            "aarch64-darwin",
+            "aarch64-linux",
+            "riscv64-linux",
+            "x86_64-darwin",
+            "x86_64-linux",
+        ]))));
+        assert!(!is_former_default_systems(None));
+    }
+
+    /// The manifest `flox init` wrote before x86_64-darwin was retired keeps
+    /// the comment above `systems` and everything else.
+    #[test]
+    fn remove_systems_keeps_comment_above_systems() {
+        let manifest = Manifest::parse_toml_typed(with_latest_schema(indoc! {r#"
+            [install]
+            hello.pkg-path = "hello"
+
+            ## Other Environment Options -----------------------------------------
+            [options]
+            # Systems that environment is compatible with
+            systems = [
+              "aarch64-darwin",
+              "aarch64-linux",
+              "x86_64-darwin",
+              "x86_64-linux",
+            ]
+            # Uncomment to disable CUDA detection.
+            # cuda-detection = false
+        "#}))
+        .unwrap();
+        assert!(manifest.has_former_default_systems());
+
+        let removed = manifest.remove_systems().unwrap();
+
+        assert!(!removed.has_former_default_systems());
+        expect![[r#"
+            schema-version = "1.19.0"
+
+            [install]
+            hello.pkg-path = "hello"
+
+            ## Other Environment Options -----------------------------------------
+            [options]
+            # Systems that environment is compatible with
+            # Uncomment to disable CUDA detection.
+            # cuda-detection = false
+
+        "#]]
+        .assert_eq(&removed.as_writable().to_string());
+    }
+
+    /// A comment above `systems` moves to the next line of `[options]`, and a
+    /// dotted `options.systems` loses only its own line.
+    #[test]
+    fn remove_systems_moves_comment_to_next_line() {
+        let table = Manifest::parse_toml_typed(with_latest_schema(indoc! {r#"
+            [options]
+            # chosen by flox init
+            systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
+            allow.unfree = true
+        "#}))
+        .unwrap();
+        let dotted = Manifest::parse_toml_typed(with_latest_schema(indoc! {r#"
+            # chosen by flox init
+            options.systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
+            options.allow.unfree = true
+        "#}))
+        .unwrap();
+
+        expect![[r#"
+            schema-version = "1.19.0"
+
+            [options]
+            # chosen by flox init
+
+            allow.unfree = true
+
+        "#]]
+        .assert_eq(&table.remove_systems().unwrap().as_writable().to_string());
+        expect![[r#"
+            schema-version = "1.19.0"
+
+            # chosen by flox init
+
+            options.allow.unfree = true
+
+        "#]]
+        .assert_eq(&dotted.remove_systems().unwrap().as_writable().to_string());
+    }
+
+    /// The manifest from before a migration loses `options.systems` too, so
+    /// that a lockfile recording it as the composer stays up to date with the
+    /// written manifest.
+    #[test]
+    fn remove_systems_from_migrated_manifest() {
+        let manifest = mk_test_manifest_from_contents(with_latest_schema(indoc! {r#"
+            [options]
+            systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
+        "#}));
+
+        let removed = manifest.remove_systems().unwrap();
+
+        assert_eq!(removed.inner.migrated_parsed.options.systems, None);
+        assert_eq!(removed.inner.original_parsed.systems(), None);
+        expect![[r#"
+            schema-version = "1.19.0"
+
+            [options]
+
+        "#]]
+        .assert_eq(&removed.as_writable().to_string());
     }
 
     #[test]

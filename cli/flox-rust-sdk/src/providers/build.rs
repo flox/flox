@@ -2950,11 +2950,18 @@ mod tests {
             new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/go_gcc"));
         let env_path = env.parent_path().unwrap();
 
+        // Locking rejects x86_64-darwin in a package's systems.
+        // TODO: drop the replace once envs/go_gcc is regenerated from
+        // test_data/input_data/envs/go_gcc, which no longer names it.
         let base_manifest = env
             .manifest_without_migrating(&flox)
             .unwrap()
             .as_writable()
-            .to_string();
+            .to_string()
+            .replace(
+                r#"clang.systems = ["aarch64-darwin", "x86_64-darwin"]"#,
+                r#"clang.systems = ["aarch64-darwin"]"#,
+            );
         let build_manifest = formatdoc! {r#"
             {base_manifest}
 

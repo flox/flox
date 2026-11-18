@@ -9,7 +9,6 @@ use crate::Parsed;
 /// ManifestLatest outside the crate.
 pub(crate) trait CommonFields {
     fn systems(&self) -> Option<&Vec<System>>;
-    #[cfg(test)]
     fn systems_mut(&mut self) -> &mut Option<Vec<System>>;
 }
 
@@ -30,7 +29,6 @@ impl CommonFields for Parsed {
         }
     }
 
-    #[cfg(test)]
     fn systems_mut(&mut self) -> &mut Option<Vec<System>> {
         match self {
             Parsed::V1(m) => &mut m.options.systems,

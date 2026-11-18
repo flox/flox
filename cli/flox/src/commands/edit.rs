@@ -246,6 +246,7 @@ impl Edit {
                 ref old_lockfile,
                 ref new_lockfile,
                 ref schema_bumped,
+                former_default_systems_removed,
                 ..
             } => {
                 if let Some((from, to)) = schema_bumped {
@@ -276,6 +277,10 @@ impl Edit {
 
                 message::print_default_systems_changed(
                     old_lockfile.as_ref().as_ref(),
+                    new_lockfile,
+                );
+                message::print_former_default_systems_removed(
+                    former_default_systems_removed,
                     new_lockfile,
                 );
                 message::print_unused_pkg_groups(new_lockfile);

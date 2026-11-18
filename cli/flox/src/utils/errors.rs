@@ -704,8 +704,9 @@ pub fn format_resolve_error(err: &ResolveError) -> String {
         ResolveError::UnrecognizedSystem(system) => formatdoc! {"
             Unrecognized system in manifest: {system}
 
-            Supported systems are: aarch64-linux, x86_64-linux, aarch64-darwin, x86_64-darwin
+            Supported systems are: aarch64-linux, x86_64-linux, aarch64-darwin
         "},
+        ResolveError::RetiredSystem { .. } => display_chain(err),
         ResolveError::SystemUnavailableInManifest { .. } => display_chain(err),
         ResolveError::ResolutionFailed(_) => display_chain(err),
         ResolveError::UnknownStability { .. } => display_chain(err),

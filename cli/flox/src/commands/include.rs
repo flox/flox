@@ -90,6 +90,7 @@ impl Upgrade {
                 "Getting latest changes to environments included in environment {description}..."
             )
         );
+        let had_former_default_systems = message::has_former_default_systems(&environment, &flox);
         let result =
             span.in_scope(|| environment.include_upgrade(&flox, self.to_upgrade.clone()))?;
 
@@ -114,6 +115,10 @@ impl Upgrade {
             if result.store_path.is_some() {
                 message::print_default_systems_changed(
                     result.old_lockfile.as_ref(),
+                    &result.new_lockfile,
+                );
+                message::print_former_default_systems_removed(
+                    had_former_default_systems,
                     &result.new_lockfile,
                 );
             }
