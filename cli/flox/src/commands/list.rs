@@ -94,6 +94,7 @@ impl List {
             debug!(error = %err, "Failed to record v2 event");
         }
 
+        let former_default_systems_notice = message::FormerDefaultSystemsNotice::new(&env, &flox);
         let (manifest_contents, lockfile) = match (&mut env, self.upstream) {
             (ConcreteEnvironment::Path(_), true) => {
                 bail!("'--upstream' cannot be used with path environments");
@@ -122,13 +123,17 @@ impl List {
 
                 (remote_manifest_contents, lockfile)
             },
-            (env, false) => (
-                env.manifest_without_migrating(&flox)?
+            (env, false) => {
+                // Lock before reading the manifest, since locking may rewrite it.
+                let lockfile = env.lockfile(&flox)?.into();
+                let manifest_contents = env
+                    .manifest_without_migrating(&flox)?
                     .as_writable()
-                    .to_string(),
-                env.lockfile(&flox)?.into(),
-            ),
+                    .to_string();
+                (manifest_contents, lockfile)
+            },
         };
+        drop(former_default_systems_notice);
 
         if self.list_mode == ListMode::Config {
             Self::print_config(&lockfile, &manifest_contents)?;
@@ -964,8 +969,11 @@ mod tests {
     use flox_manifest::test_helpers::with_latest_schema;
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment_in;
+    use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
+    use flox_test_utils::manifests::FORMER_DEFAULT_SYSTEMS;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
+    use tracing::instrument::WithSubscriber;
 
     use super::*;
 
@@ -1853,6 +1861,39 @@ mod tests {
         assert!(
             out.contains("No packages installed for aarch64-darwin"),
             "no-packages notice missing; got:\n{out}"
+        );
+    }
+
+    /// Listing locks a manifest that has no up to date lockfile, so it warns
+    /// that the lock removed the former default systems. Listing again finds
+    /// the lockfile up to date and prints nothing.
+    #[tokio::test]
+    async fn list_warns_when_locking_removes_former_default_systems() {
+        let (flox, tempdir) = flox_instance();
+        let env = new_path_environment_in(&flox, FORMER_DEFAULT_SYSTEMS, tempdir.path());
+        let manifest_path = env.manifest_path(&flox).unwrap();
+        let list = || List {
+            environment: EnvironmentSelect::Dir(env.parent_path().unwrap()),
+            upstream: false,
+            list_mode: ListMode::Config,
+        };
+
+        let (subscriber, writer) = test_subscriber_message_only();
+        async {
+            list().handle(Config::default(), flox).await.unwrap();
+            let (flox, _tempdir) = flox_instance();
+            list().handle(Config::default(), flox).await.unwrap();
+        }
+        .with_subscriber(subscriber)
+        .await;
+
+        assert_eq!(writer.to_string(), indoc! {"
+            ! Removed 'options.systems' from manifest.toml since Flox no longer supports 'x86_64-darwin'.
+            It listed the systems 'flox init' used to add to every manifest, so the environment now uses the default systems (aarch64-darwin, aarch64-linux, x86_64-linux).
+            "});
+        assert_eq!(
+            fs::read_to_string(manifest_path).unwrap(),
+            "\n    version = 1\n\n    [options]\n"
         );
     }
 }

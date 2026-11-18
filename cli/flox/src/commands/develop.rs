@@ -124,7 +124,10 @@ impl Develop {
 
         let base_dir = env.parent_path()?;
         let cache_path = env.cache_path()?;
+        let former_default_systems_notice = message::FormerDefaultSystemsNotice::new(&env, &flox);
         let lockfile: Lockfile = env.lockfile(&flox)?.into();
+        // The development shell execs, which would never drop it.
+        drop(former_default_systems_notice);
         let lockfile_manifest = lockfile.migrated_manifest()?;
 
         let expression_parent_dir = env.dot_flox_path();

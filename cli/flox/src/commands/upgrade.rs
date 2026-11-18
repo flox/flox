@@ -82,8 +82,8 @@ impl Upgrade {
             concrete_environment = %description,
             progress = %progress_message
         );
-        let had_former_default_systems =
-            message::has_former_default_systems(&concrete_environment, &flox);
+        let former_default_systems_notice =
+            message::FormerDefaultSystemsNotice::new(&concrete_environment, &flox);
         let result = span.in_scope(|| {
             let groups_or_iids = &self
                 .groups_or_iids
@@ -167,11 +167,8 @@ impl Upgrade {
                 result.old_lockfile.as_ref(),
                 &result.new_lockfile,
             );
-            message::print_former_default_systems_removed(
-                had_former_default_systems,
-                &result.new_lockfile,
-            );
         }
+        drop(former_default_systems_notice);
 
         warn_manifest_changes_for_services(&flox, &concrete_environment);
 
@@ -234,7 +231,7 @@ mod tests {
     use flox_rust_sdk::providers::catalog::test_helpers::catalog_replay_client;
     use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use flox_test_utils::GENERATED_DATA;
-    use flox_test_utils::manifests::HELLO;
+    use flox_test_utils::manifests::{FORMER_DEFAULT_SYSTEMS, HELLO};
     use indoc::indoc;
     use pretty_assertions::{assert_eq, assert_str_eq};
     use serial_test::serial;
@@ -431,6 +428,33 @@ mod tests {
         let printed = writer.to_string();
 
         assert_eq!(printed, "No upgrades available for packages in 'name'.\n");
+    }
+
+    /// Upgrading locks a manifest that has no up to date lockfile before it
+    /// finds there is nothing to upgrade, so it warns that the lock removed
+    /// the former default systems.
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial(global_events_client)]
+    async fn warns_when_locking_removes_former_default_systems_without_upgrades() {
+        let (flox, _tempdir) = flox_instance();
+        let (subscriber, writer) = test_subscriber_message_only();
+        let environment = new_named_path_environment(&flox, FORMER_DEFAULT_SYSTEMS, "name");
+
+        Upgrade {
+            environment: EnvironmentSelect::Dir(environment.parent_path().unwrap()),
+            dry_run: false,
+            groups_or_iids: Vec::new(),
+        }
+        .handle(flox)
+        .with_subscriber(subscriber)
+        .await
+        .unwrap();
+
+        assert_eq!(writer.to_string(), indoc! {"
+            No upgrades available for packages in 'name'.
+            ! Removed 'options.systems' from manifest.toml since Flox no longer supports 'x86_64-darwin'.
+            It listed the systems 'flox init' used to add to every manifest, so the environment now uses the default systems (aarch64-darwin, aarch64-linux, x86_64-linux).
+            "});
     }
 
     /// Run an upgrade of an environment that only has upgrades on other systems

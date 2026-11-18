@@ -194,8 +194,8 @@ impl Install {
 
         // Get a list of the packages that this environment is already overriding via composition.
         let old_lockfile = concrete_environment.existing_lockfile(&flox)?;
-        let had_former_default_systems =
-            message::has_former_default_systems(&concrete_environment, &flox);
+        let former_default_systems_notice =
+            message::FormerDefaultSystemsNotice::new(&concrete_environment, &flox);
         let existing_composer_package_overrides = old_lockfile
             .as_ref()
             .and_then(|lockfile| lockfile.compose.as_ref())
@@ -281,7 +281,7 @@ impl Install {
         message::packages_outputs_updated(&partitioned.outputs_updated, &description);
         message::packages_newly_overridden_by_composer(&new_package_overrides);
         message::print_default_systems_changed(old_lockfile.as_ref(), &lockfile);
-        message::print_former_default_systems_removed(had_former_default_systems, &lockfile);
+        drop(former_default_systems_notice);
 
         if !installation.modifications.is_empty() {
             for warning in Self::generate_unfree_and_broken_warnings(
