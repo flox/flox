@@ -114,7 +114,14 @@ impl<State> CoreEnvironment<State> {
     pub fn existing_lockfile(&self) -> Result<Option<Lockfile>, CoreEnvironmentError> {
         let lockfile_path = self.lockfile_path();
         if let Ok(lockfile_path) = CanonicalPath::new(lockfile_path) {
-            Ok(Some(Lockfile::read_from_file(&lockfile_path)?))
+            match Lockfile::read_from_file(&lockfile_path) {
+                Ok(lockfile) => Ok(Some(lockfile)),
+                Err(LockfileError::ParseJson(err)) => {
+                    tracing::warn!(?err, "Existing lockfile is corrupt, treating as absent");
+                    Ok(None)
+                },
+                Err(err) => Err(err.into()),
+            }
         } else {
             Ok(None)
         }
@@ -131,7 +138,14 @@ impl<State> CoreEnvironment<State> {
             return Ok(None);
         };
 
-        let lockfile = Lockfile::read_from_file(&lockfile_path)?;
+        let lockfile = match Lockfile::read_from_file(&lockfile_path) {
+            Ok(lockfile) => lockfile,
+            Err(LockfileError::ParseJson(err)) => {
+                tracing::warn!(?err, "Existing lockfile is corrupt, treating as out of date");
+                return Ok(None);
+            },
+            Err(err) => return Err(err.into()),
+        };
 
         // Check if the manifest embedded in the lockfile and the manifest
         // itself have the same contents
@@ -512,12 +526,11 @@ impl CoreEnvironment<ReadOnly> {
         let migrated_manifest = new_manifest.migrate(old_lockfile.as_ref())?;
 
         let tempdir = tempfile::tempdir_in(&flox.temp_dir)
-            .map_err(CoreEnvironmentError::MakeSandbox)?
-            .keep();
+            .map_err(CoreEnvironmentError::MakeSandbox)?;
 
         debug!(
             "transaction: making temporary environment in {}",
-            tempdir.display()
+            tempdir.path().display()
         );
         let mut temp_env = self.writable(&tempdir)?;
 
@@ -873,12 +886,11 @@ impl CoreEnvironment<ReadOnly> {
         manifest.as_latest_schema().services.validate()?;
 
         let tempdir = tempfile::tempdir_in(&flox.temp_dir)
-            .map_err(CoreEnvironmentError::MakeSandbox)?
-            .keep();
+            .map_err(CoreEnvironmentError::MakeSandbox)?;
 
         debug!(
             "transaction: making temporary environment in {}",
-            tempdir.display()
+            tempdir.path().display()
         );
         let mut temp_env = self.writable(&tempdir)?;
 
@@ -929,12 +941,11 @@ impl CoreEnvironment<ReadOnly> {
         out_link_prefix: Option<&Path>,
     ) -> Result<BuildEnvOutputs, CoreEnvironmentError> {
         let tempdir = tempfile::tempdir_in(&flox.temp_dir)
-            .map_err(CoreEnvironmentError::MakeSandbox)?
-            .keep();
+            .map_err(CoreEnvironmentError::MakeSandbox)?;
 
         debug!(
             "transaction: making temporary environment in {}",
-            tempdir.display()
+            tempdir.path().display()
         );
         let mut temp_env = self.writable(&tempdir)?;
 

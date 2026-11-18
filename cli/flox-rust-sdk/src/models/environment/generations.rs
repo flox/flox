@@ -363,7 +363,7 @@ impl Generations<ReadWrite<'_>> {
         // copy generation environment files
         let generation_path = self.repo.path().join(generation.to_string());
         let env_path = generation_path.join(ENV_DIR_NAME);
-        fs::create_dir_all(&env_path).unwrap();
+        fs::create_dir_all(&env_path).map_err(GenerationsError::CreateGenerationEnvDir)?;
 
         // Copy the manifest and optional lockfile into `<generation>/env/`.
         fs::copy(
@@ -501,6 +501,8 @@ pub enum GenerationsError {
     // endregion
 
     // region: manifest errors
+    #[error("could not create generation environment directory")]
+    CreateGenerationEnvDir(#[source] std::io::Error),
     #[error("could not write manifest file")]
     WriteManifest(#[source] std::io::Error),
     #[error("could not copy generation manifest")]

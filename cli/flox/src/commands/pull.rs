@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
@@ -87,6 +87,31 @@ pub struct Pull {
 struct QueryFunctions {
     query_add_system: fn(&str) -> Result<bool>,
     query_ignore_build_errors: fn() -> Result<bool>,
+}
+
+/// RAII guard to clean up a newly created `.flox` directory if pulling an environment fails.
+#[derive(Debug)]
+struct DotFloxCleanupGuard<'a> {
+    path: &'a Path,
+    armed: bool,
+}
+
+impl<'a> DotFloxCleanupGuard<'a> {
+    fn new(path: &'a Path) -> Self {
+        Self { path, armed: true }
+    }
+
+    fn disarm(&mut self) {
+        self.armed = false;
+    }
+}
+
+impl Drop for DotFloxCleanupGuard<'_> {
+    fn drop(&mut self) {
+        if self.armed && self.path.exists() {
+            let _ = fs::remove_dir_all(self.path);
+        }
+    }
 }
 
 impl Pull {
@@ -358,6 +383,8 @@ impl Pull {
             serde_json::to_string_pretty(&pointer).context("Could not serialize pointer")?;
         pointer_content.push('\n');
 
+        let mut cleanup_guard = DotFloxCleanupGuard::new(&dot_flox_path);
+
         fs::create_dir_all(&dot_flox_path).context("Could not create .flox/ directory")?;
         let pointer_path = dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME);
         fs::write(pointer_path, pointer_content).context("Could not write pointer")?;
@@ -368,11 +395,7 @@ impl Pull {
                 Err(err) => Err(Self::handle_open_error_during_pull_new(flox, err).await),
             };
             match result {
-                Err(err) => {
-                    fs::remove_dir_all(&dot_flox_path)
-                        .context("Could not clean up .flox/ directory")?;
-                    Err(err)?
-                },
+                Err(err) => Err(err)?,
                 Ok(env) => env,
             }
         };
@@ -455,6 +478,7 @@ impl Pull {
             },
         }
 
+        cleanup_guard.disarm();
         Ok(())
     }
 
