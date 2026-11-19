@@ -1,5 +1,6 @@
 mod activate;
 mod activation_state;
+mod archive;
 mod auth;
 mod beta;
 mod build;
@@ -33,6 +34,7 @@ pub use send_telemetry::{
 mod services;
 mod services_socket;
 mod show;
+mod unarchive;
 mod uninstall;
 mod upgrade;
 
@@ -634,7 +636,10 @@ impl FloxArgs {
                 self.command,
                 Some(Commands::Admin(AdminCommands::Auth(_)))
                     | Some(Commands::Share(
-                        ShareCommands::Push(_) | ShareCommands::Publish(_)
+                        ShareCommands::Push(_)
+                            | ShareCommands::Publish(_)
+                            | ShareCommands::Archive(_)
+                            | ShareCommands::Unarchive(_)
                     ))
             );
             // The outermost activation surfaces the reminder; any `flox`
@@ -1028,6 +1033,20 @@ enum ShareCommands {
     )]
     Publish(#[bpaf(external(publish::publish))] publish::Publish),
 
+    /// Archive a package so that it can no longer be installed by name
+    #[bpaf(
+        command,
+        hide,
+        header(indoc!{"Archive `<catalog>/<package>`, hiding it from search and stopping it from
+                       being installed by name. Environments that already pin it keep working."}),
+        footer("Run 'man flox-archive' for more details.")
+    )]
+    Archive(#[bpaf(external(archive::archive))] archive::Archive),
+
+    /// Unarchive a package so that it can be installed by name again
+    #[bpaf(command, hide, footer("Run 'man flox-unarchive' for more details."))]
+    Unarchive(#[bpaf(external(unarchive::unarchive))] unarchive::Unarchive),
+
     /// Send an environment to FloxHub
     #[bpaf(command, footer("Run 'man flox-push' for more details."))]
     Push(#[bpaf(external(push::push))] push::Push),
@@ -1046,6 +1065,8 @@ impl ShareCommands {
         match self {
             ShareCommands::Build(args) => args.handle(&config, flox).await?,
             ShareCommands::Publish(args) => args.handle(config, flox).await?,
+            ShareCommands::Archive(args) => args.handle(flox).await?,
+            ShareCommands::Unarchive(args) => args.handle(flox).await?,
             ShareCommands::Push(args) => args.handle(flox).await?,
             ShareCommands::Pull(args) => args.handle(flox).await?,
             ShareCommands::Containerize(args) => args.handle(flox).await?,
@@ -1057,6 +1078,8 @@ impl ShareCommands {
         match self {
             ShareCommands::Build(args) => args.subcommand_name(),
             ShareCommands::Publish(_) => "publish",
+            ShareCommands::Archive(_) => "archive",
+            ShareCommands::Unarchive(_) => "unarchive",
             ShareCommands::Push(_) => "push",
             ShareCommands::Pull(_) => "pull",
             ShareCommands::Containerize(_) => "containerize",
