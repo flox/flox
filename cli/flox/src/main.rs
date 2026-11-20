@@ -128,6 +128,19 @@ fn main() -> ExitCode {
             return ExitCode::from(1);
         },
     };
+    if env::var_os("NIX_CACHE_HOME").is_none()
+        && let Some(cache_home) = config
+            .flox
+            .nix
+            .as_ref()
+            .and_then(|nix| nix.cache_home.as_ref())
+    {
+        // Set the path once so all CLI subprocesses inherit the same Nix cache.
+        // SAFETY: The process is still single-threaded before telemetry and the runtime start.
+        unsafe {
+            env::set_var("NIX_CACHE_HOME", cache_home);
+        }
+    }
     let args = commands::flox_cli().run_inner(Args::current_args());
     // Completion must not print the first-run notice or create its device ID.
     // Let bpaf recognize completion requests rather than inspecting raw flags.
