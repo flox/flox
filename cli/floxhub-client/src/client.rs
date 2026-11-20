@@ -550,6 +550,12 @@ impl CatalogClientTrait for FloxhubClient {
         attr_path: impl AsRef<str> + Send + Sync,
     ) -> Result<PackageDetails, VersionsError> {
         let attr_path = attr_path.as_ref();
+        // The deprecation belongs to the pkg-path, not to a page: the server
+        // takes it from the first row before paginating
+        // (catalog_server/db/catalog_db.py, `show_packages`), so the first
+        // page's is enough.
+        let deprecation = std::sync::Mutex::new(None);
+        let deprecation_ref = &deprecation;
         let stream = make_depaging_stream(
             |page_number, page_size| async move {
                 let response = self
@@ -572,6 +578,10 @@ impl CatalogClientTrait for FloxhubClient {
                     })?;
 
                 let packages = response.into_inner();
+                if page_number == 0 {
+                    *deprecation_ref.lock().expect("deprecation lock poisoned") =
+                        packages.deprecation;
+                }
 
                 Ok::<_, VersionsError>((packages.total_count, packages.items))
             },
@@ -579,7 +589,11 @@ impl CatalogClientTrait for FloxhubClient {
         );
 
         let (count, results) = collect_search_results(stream, None).await?;
-        let search_results = PackageDetails { results, count };
+        let search_results = PackageDetails {
+            results,
+            count,
+            deprecation: deprecation.into_inner().expect("deprecation lock poisoned"),
+        };
 
         Ok(search_results)
     }
@@ -1062,6 +1076,7 @@ pub mod tests {
     use super::test_helpers::client_config;
     use super::*;
     use crate::auth::test_helpers::FAKE_EXPIRED_TOKEN;
+    use crate::types::{DeprecationInfo, DeprecationKind};
     const SENTRY_TRACE_HEADER: &str = "sentry-trace";
 
     #[tokio::test]
@@ -1654,6 +1669,62 @@ pub mod tests {
             .await;
         mock.assert();
         assert!(res.is_ok(), "Expected successful response, got: {:?}", res);
+    }
+
+    /// The deprecation the catalog reports for a pkg-path is passed on with
+    /// its builds.
+    #[tokio::test]
+    async fn package_versions_returns_the_deprecation() {
+        let server = MockServer::start_async().await;
+
+        let mock = server.mock(|_, then| {
+            then.status(200)
+                .header("content-type", "application/json")
+                .json_body(json!({
+                    "items": [],
+                    "total_count": 0,
+                    "deprecation": {
+                        "kind": "removed",
+                        "message": "php81 is EOL",
+                        "replacement": null,
+                    },
+                }));
+        });
+
+        let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
+        let details = client.package_versions("php81").await.unwrap();
+
+        mock.assert();
+        assert_eq!(details, PackageDetails {
+            results: vec![],
+            count: Some(0),
+            deprecation: Some(DeprecationInfo {
+                kind: DeprecationKind::Removed,
+                message: Some("php81 is EOL".to_string()),
+                replacement: None,
+            }),
+        });
+    }
+
+    #[tokio::test]
+    async fn package_versions_without_deprecation() {
+        let server = MockServer::start_async().await;
+
+        let mock = server.mock(|_, then| {
+            then.status(200)
+                .header("content-type", "application/json")
+                .json_body(json!({"items": [], "total_count": 0, "deprecation": null}));
+        });
+
+        let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
+        let details = client.package_versions("pkg").await.unwrap();
+
+        mock.assert();
+        assert_eq!(details, PackageDetails {
+            results: vec![],
+            count: Some(0),
+            deprecation: None,
+        });
     }
 
     // region: Error response handling
