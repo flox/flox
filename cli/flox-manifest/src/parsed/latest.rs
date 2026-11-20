@@ -31,8 +31,12 @@ pub use crate::parsed::v1_16_0::{
 // latest schema re-exports those copies rather than common's.
 pub use crate::parsed::v1_18_0::ActivateOptions;
 pub use crate::parsed::v1_19_0::{Options, PkgGroup, PkgGroups};
+// Build is version-specific from V1_13_0 on (`sandbox-allow`) and again
+// from V1_20_0 (`auto-patchelf`), so the latest schema re-exports the
+// V1_20_0 copies.
+pub use crate::parsed::v1_20_0::{Build, BuildDescriptor};
 use crate::{Manifest, ManifestError, TypedOnly};
-pub type ManifestLatest = crate::parsed::v1_19_0::ManifestV1_19_0;
+pub type ManifestLatest = crate::parsed::v1_20_0::ManifestV1_20_0;
 
 impl ManifestLatest {
     /// Try to return a manifest in its original schema
@@ -153,6 +157,18 @@ impl ManifestLatest {
                 untyped
             },
             KnownSchemaVersion::V1_19_0 => {
+                let mut untyped =
+                    serde_json::to_value(self).map_err(ManifestError::SerializeJson)?;
+                let map = untyped
+                    .as_object_mut()
+                    .expect("all valid manifests should serialize to JSON objects");
+                // A set `auto-patchelf` on any build fails the V1_19_0 re-parse
+                // below (`BuildDescriptor` denies unknown fields) and routes to
+                // latest; unset it is skipped when serializing.
+                map.insert("schema-version".into(), "1.19.0".into());
+                untyped
+            },
+            KnownSchemaVersion::V1_20_0 => {
                 return Ok(Some(self.as_typed_only()));
             },
         };
@@ -204,9 +220,7 @@ mod tests {
     use crate::interfaces::{PackageLookup, SchemaVersion};
     use crate::parsed::Inner;
     use crate::parsed::common::{BuildVersion, IncludeDescriptor, PackageDescriptorStorePath};
-    // ManifestLatest's build section is the version-specific Build (with
-    // `sandbox-allow`), so build assertions use the latest schema's types.
-    use crate::parsed::v1_13_0::{Build, BuildDescriptor, Profile, ProfileDeactivate};
+    use crate::parsed::v1_13_0::{Profile, ProfileDeactivate};
     use crate::parsed::v1_14_0::Plugins;
     // ManifestLatest's services section is the version-specific Services
     // (with `depends-on` and `shutdown.{timeout-seconds,signal}`), so service
@@ -443,6 +457,7 @@ mod tests {
                     runtime_packages: None,
                     sandbox: None,
                     sandbox_allow: None,
+                    auto_patchelf: None,
                     version: None,
                     description: None,
                     license: None,
@@ -1262,6 +1277,68 @@ mod tests {
             .unwrap();
 
         assert_eq!(compat.get_schema_version(), KnownSchemaVersion::latest());
+    }
+
+    #[test]
+    fn auto_patchelf_rejected_by_v1_19_0_schema() {
+        let manifest = with_schema(KnownSchemaVersion::V1_19_0, indoc! {r#"
+            [build.hello]
+            command = "mkdir -p $out"
+            auto-patchelf = true
+        "#});
+
+        let err = Manifest::parse_toml_typed(&manifest)
+            .expect_err("'auto-patchelf' should be rejected by the v1.19.0 schema");
+
+        let ManifestError::Invalid(err) = err else {
+            panic!("expected ManifestError::Invalid, got: {err:?}");
+        };
+        assert!(
+            err.message()
+                .starts_with("unknown field `auto-patchelf`, expected"),
+            "unexpected error message: {err}",
+        );
+    }
+
+    fn manifest_with_build(auto_patchelf: Option<bool>) -> ManifestLatest {
+        ManifestLatest {
+            build: Build(
+                [("hello".to_string(), BuildDescriptor {
+                    command: "mkdir -p $out".to_string(),
+                    runtime_packages: None,
+                    sandbox: None,
+                    sandbox_allow: None,
+                    auto_patchelf,
+                    version: None,
+                    description: None,
+                    license: None,
+                })]
+                .into(),
+            ),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn downgrades_to_v1_19_0_when_auto_patchelf_unused() {
+        let compat = manifest_with_build(None)
+            .as_maybe_backwards_compatible(KnownSchemaVersion::V1_19_0, None)
+            .unwrap();
+
+        assert_eq!(compat.get_schema_version(), KnownSchemaVersion::V1_19_0);
+    }
+
+    #[test]
+    fn stays_latest_schema_when_auto_patchelf_used() {
+        // `false` is as much a use of the field as `true`: both are written
+        // to the manifest and neither parses under the older schema.
+        for auto_patchelf in [Some(true), Some(false)] {
+            let compat = manifest_with_build(auto_patchelf)
+                .as_maybe_backwards_compatible(KnownSchemaVersion::V1_19_0, None)
+                .unwrap();
+
+            assert_eq!(compat.get_schema_version(), KnownSchemaVersion::latest());
+        }
     }
 
     /// Generates a mock `TypedManifest` for testing purposes.

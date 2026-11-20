@@ -4,6 +4,7 @@
   nixpkgs-url,
   flox-env, # environment from which package is built
   build-wrapper-env, # environment with which to wrap contents of bin, sbin
+  auto-patchelf ? false, # rewrite RUNPATH of ELF files in $out (Linux only)
   install-prefix ? null, # optional
   srcTarball ? null, # optional
   buildDeps ? [ ], # optional
@@ -53,6 +54,10 @@ let
   buildScript-contents = /. + buildScript;
   buildCache-tar-contents = if (buildCache == null) then null else (/. + buildCache);
 
+  # The auto-patchelf step only applies to ELF files, so it is a no-op on
+  # Darwin regardless of the manifest attribute.
+  run-auto-patchelf = auto-patchelf && pkgs.stdenv.isLinux;
+
   dollar_out_bin_copy_hints = ''
     echo "  - copy a single file with 'mkdir -p \$out/bin && cp file \$out/bin'" 1>&2
     echo "  - copy a bin directory with 'mkdir \$out && cp -r bin \$out'" 1>&2
@@ -94,7 +99,15 @@ pkgs.runCommand name
         t3
       ]
       ++ pkgs.stdenv.defaultNativeBuildInputs
-      ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [ darwin.autoSignDarwinBinariesHook ];
+      ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [ darwin.autoSignDarwinBinariesHook ]
+      # auto-patchelf is a script that shells out to patchelf, so both are
+      # needed; they come from the package builder's nixpkgs, not from the
+      # user's manifest. Qualified with `pkgs.` because the bare name
+      # `auto-patchelf` is this expression's boolean argument.
+      ++ pkgs.lib.optionals run-auto-patchelf [
+        pkgs.auto-patchelf
+        pkgs.patchelf
+      ];
     outputs = [
       "out"
     ]
@@ -315,6 +328,32 @@ pkgs.runCommand name
         done
       fi
 
+    ''
+    + pkgs.lib.optionalString run-auto-patchelf ''
+      # Point the ELF files in $out at the libraries of the build wrapper
+      # environment, which is what the installed package runs against. This
+      # is for build results that are not linked against store paths, such as
+      # PyPI wheels, whose libraries are only found at runtime inside a
+      # `flox activate` shell (via LD_AUDIT) and not in run mode.
+      #
+      # Files with a link count above one are replaced by a private copy
+      # first: patchelf rewrites in place, and package managers like uv
+      # hardlink wheels out of their cache, so patching the link would write
+      # this build's RUNPATH into the cache (and, in sandbox mode with a
+      # build cache, into the next build).
+      find "$out" -type f -links +1 -print0 | while IFS= read -r -d "" f; do
+        cp -p "$f" "$f.unlinked" && mv -f "$f.unlinked" "$f"
+      done
+      # Libraries that cannot be found are reported but do not fail the
+      # build: a wheel may reference an optional library, or one the
+      # program never loads.
+      declare -a libs
+      if [ -d "${build-wrapper-env-package}/lib" ]; then
+        libs=(--libs "${build-wrapper-env-package}/lib")
+      fi
+      auto-patchelf --paths "$out" "''${libs[@]}" --ignore-missing '*'
+    ''
+    + ''
       for prog in ''${bin[@]} ''${sbin[@]} ''${libexec[@]}; do
         # Start by patching shebangs in executables, making sure to prefer
         # interpreters found in the build wrapper environment over the ones

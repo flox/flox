@@ -65,6 +65,7 @@ Valid string values are:
 - `1.17.0`: introduced `description`
 - `1.18.0`: introduced `options.activate.upgrade-notifications`
 - `1.19.0`: introduced `options.stability` and `pkg-groups`
+- `1.20.0`: introduced build `auto-patchelf`
 
 Existing manifest schemas, including the older `version = 1` format, are
 automatically forward-migrated when using features that require a newer schema
@@ -902,6 +903,7 @@ BuildDescriptor ::= {
   command          = STRING
 , sandbox          = null | ("off" | "warn" | "enforce" | "pure")
 , sandbox-allow    = null | [<STRING>, ...]
+, auto-patchelf    = null | BOOL
 , version          = null | STRING | VersionFile | VersionCommand
 , description      = null | STRING
 , runtime-packages = null | [<STRING>, ...]
@@ -947,6 +949,27 @@ VersionCommand ::= {
     is passed to the sandbox as a space-separated value). Only meaningful for
     the local sandbox modes (`"warn"` and `"enforce"`); it has no effect under
     `"off"` or `"pure"`.
+
+`auto-patchelf`
+:   Whether to rewrite the shared library search path (`RUNPATH`) of the
+    ELF files in the build result so that they find their libraries in the
+    build's runtime environment. Defaults to `false`.
+    When set to `true`, on Linux, `auto-patchelf` from nixpkgs runs over
+    `$out` after `command` completes and before the executables in
+    `$out/bin` are wrapped, searching `$FLOX_ENV/lib` of the runtime
+    environment (the packages listed in `runtime-packages`, or the default
+    package group) for every library an ELF file needs. A library it cannot
+    find is reported as a warning and left for the dynamic linker to resolve.
+    Use this for builds that install prebuilt binaries whose dependencies are
+    not recorded as store paths, such as PyPI wheels with native code,
+    which otherwise fail with `cannot open shared object file` outside a
+    `flox activate` shell. The libraries themselves must still be installed:
+    for example `libstdc++.so.6` and `libz.so.1` come from `gcc-unwrapped`
+    and `zlib`.
+    Because `auto-patchelf` replaces the `RUNPATH` of every ELF file it
+    visits, including ones that were already correctly linked, it is not
+    enabled by default.
+    Accepted and ignored on macOS, where `RUNPATH` does not apply.
 
 `version`
 :   The version to attach to this build artifact.
