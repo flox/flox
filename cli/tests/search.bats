@@ -102,6 +102,33 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
+# The notice is on stdout, in the table, on the line under its row, and
+# nothing is warned on stderr.
+# The catalog reports `php81` as deprecated with a message and no replacement.
+@test "'flox search' - deprecated result without a replacement" {
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/search/php81.yaml"
+  run --separate-stderr "$FLOX_BIN" search php81
+  assert_success
+  assert_equal "${lines[0]}" "php81  HTML-embedded scripting language"
+  assert_equal "${lines[1]}" "       ! php81 is EOL"
+  assert_equal "${#lines[@]}" 2
+  assert_equal "$stderr" "$SHOW_HINT"
+}
+
+# The catalog reports `aria` as renamed to `aria2`, and `aria2` as not
+# deprecated, so only the `aria` row is followed by a notice.
+@test "'flox search' - deprecated result with a replacement" {
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/search/aria.yaml"
+  run --separate-stderr "$FLOX_BIN" search aria
+  assert_success
+  assert_equal "${lines[0]}" "aria         Lightweight, multi-protocol, multi-source, command-line download utility"
+  assert_equal "${lines[1]}" "             ! 'aria' has been renamed to/replaced by 'aria2'"
+  assert_equal "${lines[2]}" "aria2        Lightweight, multi-protocol, multi-source, command-line download utility"
+  assert_equal "$stderr" $'Showing 10 of 1075 results. Use \'flox search aria --all\' to see the full list.\n\n'"$SHOW_HINT"
+}
+
+# ---------------------------------------------------------------------------- #
+
 @test "'flox search' error message when no results" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/search/surely_doesnt_exist.yaml"
   # disable backtrace; we expect this to fail and assert output

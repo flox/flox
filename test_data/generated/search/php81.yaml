@@ -1,0 +1,17 @@
+when:
+  path: /api/v1/catalog/search
+  method: GET
+then:
+  status: 200
+  header:
+  - name: date
+    value: Fri, 20 Nov 2026 20:59:25 GMT
+  - name: content-type
+    value: application/json
+  - name: content-length
+    value: '321'
+  - name: server
+    value: uvicorn
+  - name: apigw-requestid
+    value: HKErGgW_oAMEY0A=
+  body: '{"items":[{"attr_path":"php81","catalog":null,"pkg_path":"php81","name":"php-with-extensions-8.1.33","pname":"php81","version":"8.1.33","description":"HTML-embedded scripting language","stabilities":[],"system":"x86_64-linux","deprecation":{"kind":"removed","replacement":null,"message":"php81 is EOL"}}],"total_count":1}'
