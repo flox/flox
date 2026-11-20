@@ -8,6 +8,7 @@ pkgsContext:
 
 let
   cfg = config.programs.flox;
+  system = pkgs.stdenv.hostPlatform.system;
 in
 {
 
@@ -22,7 +23,15 @@ in
       package = lib.mkOption {
         type = lib.types.package;
         description = "Flox CLI package";
-        default = pkgsContext.${pkgs.stdenv.hostPlatform.system}.flox;
+        # Without the fallback, a configuration on a system the flake dropped
+        # (x86_64-darwin) fails with "attribute missing" and no pointer to why.
+        default =
+          pkgsContext.${system}.flox or (throw ''
+            Flox does not ship the CLI for ${system}; support for x86_64-darwin (Intel Macs) has ended.
+            The Flox flake provides it for: ${lib.concatStringsSep ", " (builtins.attrNames pkgsContext)}.
+            To keep this configuration evaluating, set `programs.flox.package` to a Flox package
+            you provide, or set `programs.flox.enable = false`.
+          '');
         defaultText = lib.literalExpression "pkgs.flox";
         example = lib.literalExpression "pkgs.flox";
       };

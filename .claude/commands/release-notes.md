@@ -62,7 +62,6 @@ there are none), and the version in the links.
 * [DEB (aarch64-linux)](https://downloads.flox.dev/by-env/stable/deb/flox-1.0.0.aarch64-linux.deb)
 * [RPM (x86_64-linux)](https://downloads.flox.dev/by-env/stable/rpm/flox-1.0.0.x86_64-linux.rpm)
 * [RPM (aarch64-linux)](https://downloads.flox.dev/by-env/stable/rpm/flox-1.0.0.aarch64-linux.rpm)
-* [OSX (x86_64-darwin)](https://downloads.flox.dev/by-env/stable/osx/flox-1.0.0.x86_64-darwin.pkg)
 * [OSX (aarch64-darwin)](https://downloads.flox.dev/by-env/stable/osx/flox-1.0.0.aarch64-darwin.pkg)
 
 > [!NOTE]
