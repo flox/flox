@@ -1,0 +1,103 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "schema-version": "1.19.0",
+    "install": {
+      "dotnet-sdk": {
+        "pkg-path": "dotnet-sdk"
+      }
+    },
+    "hook": {},
+    "profile": {},
+    "options": {}
+  },
+  "packages": [
+    {
+      "attr_path": "dotnet-sdk",
+      "broken": false,
+      "derivation": "/nix/store/0lhml6hxly88fk2i7i2aba3mrj4mwyx6-dotnet-sdk-wrapped-8.0.427.drv",
+      "description": "Core functionality needed to create .NET Core projects, that is shared between Visual Studio and CLI (wrapper) (combined) (wrapper)",
+      "install_id": "dotnet-sdk",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=04906337b6d53e8bb0eaf0470ae9f070a4d4eb55",
+      "name": "dotnet-sdk-wrapped-8.0.427",
+      "pname": "dotnet-sdk",
+      "rev": "04906337b6d53e8bb0eaf0470ae9f070a4d4eb55",
+      "rev_count": 1122823,
+      "rev_date": "2026-11-17T04:43:17Z",
+      "scrape_date": "2026-11-19T05:47:33.105280Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "8.0.427",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/8vahysazcp49xrw6vib5w46xyjfzk4nj-dotnet-sdk-wrapped-8.0.427"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "dotnet-sdk",
+      "broken": false,
+      "derivation": "/nix/store/fwb9wxra7069hqmiyf15b0gzkqiji6yy-dotnet-sdk-wrapped-8.0.427.drv",
+      "description": "Core functionality needed to create .NET Core projects, that is shared between Visual Studio and CLI (wrapper) (combined) (wrapper)",
+      "install_id": "dotnet-sdk",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=04906337b6d53e8bb0eaf0470ae9f070a4d4eb55",
+      "name": "dotnet-sdk-wrapped-8.0.427",
+      "pname": "dotnet-sdk",
+      "rev": "04906337b6d53e8bb0eaf0470ae9f070a4d4eb55",
+      "rev_count": 1122823,
+      "rev_date": "2026-11-17T04:43:17Z",
+      "scrape_date": "2026-11-19T06:14:10.432294Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "8.0.427",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/vl4xwkm1bzsmfl79a07x75xw77c14f2l-dotnet-sdk-wrapped-8.0.427"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "dotnet-sdk",
+      "broken": false,
+      "derivation": "/nix/store/9k59aa5zn9pfv9bnlp1van99ag38089p-dotnet-sdk-wrapped-8.0.427.drv",
+      "description": "Core functionality needed to create .NET Core projects, that is shared between Visual Studio and CLI (wrapper) (combined) (wrapper)",
+      "install_id": "dotnet-sdk",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=04906337b6d53e8bb0eaf0470ae9f070a4d4eb55",
+      "name": "dotnet-sdk-wrapped-8.0.427",
+      "pname": "dotnet-sdk",
+      "rev": "04906337b6d53e8bb0eaf0470ae9f070a4d4eb55",
+      "rev_count": 1122823,
+      "rev_date": "2026-11-17T04:43:17Z",
+      "scrape_date": "2026-11-19T06:43:20.573113Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "8.0.427",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/lzya0qfd42l8rfqh9r27pc9hqwfc9pa5-dotnet-sdk-wrapped-8.0.427"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    }
+  ]
+}

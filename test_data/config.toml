@@ -101,6 +101,25 @@ post_cmd = '''
 pre_cmd = "flox init && flox install hello"
 cmd = "flox install curl"
 
+# Installs a package whose version requirement forces the group onto an older
+# catalog revision than the package already installed. Records the request
+# made by the second install, along with the lockfile that precedes it.
+[resolve.nodejs_after_dotnet_sdk]
+skip_if_output_exists = "envs/dotnet_sdk_before_nodejs"
+pre_cmd = '''
+    flox init
+    flox install dotnet-sdk
+    cp .flox/env/manifest.toml old-manifest.toml
+    cp .flox/env/manifest.lock old-manifest.lock
+'''
+cmd = "flox install nodejs@16.15.0"
+post_cmd = '''
+    env_dir="$(dirname "$RESPONSE_FILE")/../envs/dotnet_sdk_before_nodejs"
+    mkdir -p "$env_dir"
+    cp old-manifest.toml "$env_dir/manifest.toml"
+    cp old-manifest.lock "$env_dir/manifest.lock"
+'''
+
 # Records the request made after dropping x86_64-darwin from the implicit
 # default systems, along with the four-system lockfile that precedes it.
 [resolve.curl_three_systems_after_hello]
