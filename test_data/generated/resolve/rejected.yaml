@@ -5,7 +5,7 @@ then:
   status: 401
   header:
     - name: date
-      value: Sun, 25 Oct 2026 11:50:57 GMT
+      value: Fri, 20 Nov 2026 12:35:30 GMT
     - name: content-type
       value: application/json
     - name: content-length
@@ -13,5 +13,5 @@ then:
     - name: server
       value: uvicorn
     - name: apigw-requestid
-      value: FzH9UgVKoAMEYfw=
+      value: HI63Agw7IAMEaTw=
   body: '{"detail":"Unable to verify token"}'

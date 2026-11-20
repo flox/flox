@@ -5,7 +5,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Sun, 25 Oct 2026 11:53:52 GMT
+    value: Fri, 20 Nov 2026 12:37:11 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -13,5 +13,5 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: FzIYpirboAMEaRg=
+    value: HI7GvgK8oAMEMtg=
   body: '{"command_name":"vi","providers":[{"attr_path":"nvi","pname":"nvi","exact_name_match":false,"system":"aarch64-darwin"},{"attr_path":"open-watcom-v2","pname":"open-watcom-v2","exact_name_match":false,"system":"aarch64-darwin"},{"attr_path":"tests.vim.test-all-plugins-have-vimPlugin-true","pname":"test-all-plugins-have-vimPlugin-true","exact_name_match":false,"system":"aarch64-darwin"},{"attr_path":"vim","pname":"vim","exact_name_match":false,"system":"aarch64-darwin"},{"attr_path":"vim_configurable","pname":"vim_configurable","exact_name_match":false,"system":"aarch64-darwin"},{"attr_path":"vim-darwin","pname":"vim-darwin","exact_name_match":false,"system":"aarch64-darwin"},{"attr_path":"vim-full","pname":"vim-full","exact_name_match":false,"system":"aarch64-darwin"},{"attr_path":"vimHugeX","pname":"vimHugeX","exact_name_match":false,"system":"aarch64-darwin"}],"total_count":8,"listing_known":true}'

@@ -275,12 +275,6 @@ pub trait CatalogClientTrait {
         package_name: impl AsRef<str> + Send + Sync,
     ) -> Result<PublishResponse, FloxhubClientError>;
 
-    /// Get all locked sources for a catalog.
-    async fn get_catalog_locked_sources(
-        &self,
-        catalog_name: impl AsRef<str> + Send + Sync,
-    ) -> Result<ResultsPage<LockedSourceItem>, FloxhubClientError>;
-
     /// Look up and lock build inputs for one or more grouped reference sets in
     /// a single batched request (POST /build-inputs/lookup).
     async fn build_inputs_lookup(
@@ -588,38 +582,6 @@ impl CatalogClientTrait for FloxhubClient {
         let search_results = PackageDetails { results, count };
 
         Ok(search_results)
-    }
-
-    async fn get_catalog_locked_sources(
-        &self,
-        catalog_name: impl AsRef<str> + Send + Sync,
-    ) -> Result<ResultsPage<LockedSourceItem>, FloxhubClientError> {
-        let catalog_name = catalog_name.as_ref();
-        tracing::debug!(catalog_name, "fetching locked sources");
-
-        let stream = make_depaging_stream(
-            |page_number, page_size| async move {
-                let catalog_name_api = str_to_catalog_name(catalog_name)?;
-                let response = self
-                    .catalog
-                    .get_catalog_locked_sources_api_v1_catalog_catalogs_catalog_name_locked_sources_get(
-                        &catalog_name_api,
-                        Some(page_number),
-                        Some(page_size),
-                    )
-                    .await
-                    .map_api_error()
-                    .await?
-                    .into_inner();
-
-                Ok::<_, FloxhubClientError>((response.total_count, response.items))
-            },
-            RESPONSE_PAGE_SIZE,
-        );
-
-        let (count, results) = collect_all_results(stream).await?;
-
-        Ok(ResultsPage { results, count })
     }
 
     async fn build_inputs_lookup(

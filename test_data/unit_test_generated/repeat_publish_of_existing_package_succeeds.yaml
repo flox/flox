@@ -6,7 +6,7 @@ then:
   status: 201
   header:
   - name: date
-    value: Sun, 25 Oct 2026 12:16:21 GMT
+    value: Fri, 20 Nov 2026 12:45:06 GMT
   - name: server
     value: uvicorn
   - name: content-length
@@ -23,7 +23,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Sun, 25 Oct 2026 12:16:21 GMT
+    value: Fri, 20 Nov 2026 12:45:06 GMT
   - name: server
     value: uvicorn
   - name: content-length
@@ -71,7 +71,7 @@ then:
   status: 201
   header:
   - name: date
-    value: Sun, 25 Oct 2026 12:16:21 GMT
+    value: Fri, 20 Nov 2026 12:45:06 GMT
   - name: server
     value: uvicorn
   - name: content-length
@@ -88,7 +88,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Sun, 25 Oct 2026 12:16:21 GMT
+    value: Fri, 20 Nov 2026 12:45:06 GMT
   - name: server
     value: uvicorn
   - name: content-length
@@ -136,7 +136,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Sun, 25 Oct 2026 12:16:21 GMT
+    value: Fri, 20 Nov 2026 12:45:06 GMT
   - name: server
     value: uvicorn
   - name: content-length
