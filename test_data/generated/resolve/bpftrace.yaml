@@ -6,7 +6,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Sun, 25 Oct 2026 11:52:34 GMT
+    value: Fri, 20 Nov 2026 12:34:48 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -14,7 +14,7 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: FzIMehACoAMEMkw=
+    value: HI6wXjD5IAMESZA=
   body: '{"items":[{"name":"toplevel","page":null,"candidate_pages":null,"messages":[{"level":"error","type":"attr_path_not_found.not_found_for_all_systems","message":"The package ''bpftrace'' is not found for all the requested systems, suggest limiting systems to (aarch64-linux,x86_64-linux).","context":{"attr_path":"bpftrace","install_id":"bpftrace","valid_systems":"aarch64-linux,x86_64-linux"}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 1: Only allow missing builds for packages without current locked derivations.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 1: Only allow missing builds for packages without current locked derivations."}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 2: Unlock existing derivations but require known builds.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 2: Unlock existing derivations but require known builds."}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 3: Unlock existing derivations and allow missing builds.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 3: Unlock existing derivations and allow missing builds."}}]}]}'
 ---
 when:
@@ -25,13 +25,13 @@ then:
   status: 200
   header:
   - name: date
-    value: Sun, 25 Oct 2026 11:52:34 GMT
+    value: Fri, 20 Nov 2026 12:34:48 GMT
   - name: content-type
     value: application/json
   - name: content-length
-    value: '2023'
+    value: '2003'
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: FzIMgg8KoAMEM7g=
-  body: '{"items":[{"name":"toplevel","page":{"page":1097682,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"bpftrace","pkg_path":"bpftrace","derivation":"/nix/store/7qm106i2zwamx1h6108v6663yv9xvx6m-bpftrace-0.27.0.drv","name":"bpftrace-0.27.0","pname":"bpftrace","version":"0.27.0","system":"aarch64-linux","outputs":[{"name":"man","store_path":"/nix/store/3a8ycyipgz7lz62hfwgafk61d62h7970-bpftrace-0.27.0-man"},{"name":"out","store_path":"/nix/store/4vlya68alykhwcbj6pss9gbyw8pi2pvb-bpftrace-0.27.0"}],"outputs_to_install":["man","out","out"],"description":"High-level tracing language for Linux eBPF","license":"Apache-2.0","locked_url":"https://github.com/flox/nixpkgs?rev=02c087f3fe673c9e317f206a627cb6b910336dbe","rev":"02c087f3fe673c9e317f206a627cb6b910336dbe","rev_count":1097682,"rev_date":"2026-10-20T13:28:04Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["staging","unstable"],"scrape_date":"2026-10-21T06:26:17.159316Z","cache_uri":null,"install_id":"bpftrace"},{"catalog":"nixpkgs","attr_path":"bpftrace","pkg_path":"bpftrace","derivation":"/nix/store/wxjd2y6s4fqf2hh58a1m10l0czp6j3vy-bpftrace-0.27.0.drv","name":"bpftrace-0.27.0","pname":"bpftrace","version":"0.27.0","system":"x86_64-linux","outputs":[{"name":"man","store_path":"/nix/store/i6kbks5d0ja22655a0in156ra6923hck-bpftrace-0.27.0-man"},{"name":"out","store_path":"/nix/store/7g3x5lmnvyy0pqxvlyb4233y8ax13sk1-bpftrace-0.27.0"}],"outputs_to_install":["man","out","out"],"description":"High-level tracing language for Linux eBPF","license":"Apache-2.0","locked_url":"https://github.com/flox/nixpkgs?rev=02c087f3fe673c9e317f206a627cb6b910336dbe","rev":"02c087f3fe673c9e317f206a627cb6b910336dbe","rev_count":1097682,"rev_date":"2026-10-20T13:28:04Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["staging","unstable"],"scrape_date":"2026-10-21T07:05:52.611434Z","cache_uri":null,"install_id":"bpftrace"}],"messages":[],"complete":true},"candidate_pages":null,"messages":[]}]}'
+    value: HI6waj50IAMEaSA=
+  body: '{"items":[{"name":"toplevel","page":{"page":1122823,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"bpftrace","pkg_path":"bpftrace","derivation":"/nix/store/k3m9pjvsm4drhh4sd82fiyrmvc1g18mb-bpftrace-0.27.1.drv","name":"bpftrace-0.27.1","pname":"bpftrace","version":"0.27.1","system":"aarch64-linux","outputs":[{"name":"man","store_path":"/nix/store/l9za3wxv4xpw6lnd68qgdc9halnf4h9l-bpftrace-0.27.1-man"},{"name":"out","store_path":"/nix/store/16vilydqh6bb9580xny8hv23c1j9ly3b-bpftrace-0.27.1"}],"outputs_to_install":["man","out","out"],"description":"High-level tracing language for Linux eBPF","license":"Apache-2.0","locked_url":"https://github.com/flox/nixpkgs?rev=04906337b6d53e8bb0eaf0470ae9f070a4d4eb55","rev":"04906337b6d53e8bb0eaf0470ae9f070a4d4eb55","rev_count":1122823,"rev_date":"2026-11-17T04:43:17Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2026-11-19T06:14:10.375648Z","cache_uri":null,"install_id":"bpftrace"},{"catalog":"nixpkgs","attr_path":"bpftrace","pkg_path":"bpftrace","derivation":"/nix/store/p2ncy6fgh1dgg7b85lcpy77rh25rnm3y-bpftrace-0.27.1.drv","name":"bpftrace-0.27.1","pname":"bpftrace","version":"0.27.1","system":"x86_64-linux","outputs":[{"name":"man","store_path":"/nix/store/5sbgkfkp8f9plg36cnnnizbd9gkcn838-bpftrace-0.27.1-man"},{"name":"out","store_path":"/nix/store/x6ln1cnmh64yhwh6pgxs9dqdk0rknbms-bpftrace-0.27.1"}],"outputs_to_install":["man","out","out"],"description":"High-level tracing language for Linux eBPF","license":"Apache-2.0","locked_url":"https://github.com/flox/nixpkgs?rev=04906337b6d53e8bb0eaf0470ae9f070a4d4eb55","rev":"04906337b6d53e8bb0eaf0470ae9f070a4d4eb55","rev_count":1122823,"rev_date":"2026-11-17T04:43:17Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2026-11-19T06:43:20.558267Z","cache_uri":null,"install_id":"bpftrace"}],"messages":[],"complete":true},"candidate_pages":null,"messages":[]}]}'

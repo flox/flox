@@ -16,17 +16,17 @@
     {
       "attr_path": "bashNonInteractive",
       "broken": false,
-      "derivation": "/nix/store/sfnk2mrj9z7amb2q5q7cixizrqxgx6dc-bash-5.3p20.drv",
+      "derivation": "/nix/store/ig8lvy55zlsh7fnqmrcxx3dzjd6aapxy-bash-5.3p20.drv",
       "description": "GNU Bourne-Again Shell, the de facto standard shell on Linux",
       "install_id": "bash",
       "license": "GPL-3.0-or-later",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=3ec636362e1816bc2f0888fa0fa2c69f1bc9e504",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=04906337b6d53e8bb0eaf0470ae9f070a4d4eb55",
       "name": "bash-5.3p20",
       "pname": "bashNonInteractive",
-      "rev": "3ec636362e1816bc2f0888fa0fa2c69f1bc9e504",
-      "rev_count": 1100280,
-      "rev_date": "2026-10-23T16:35:39Z",
-      "scrape_date": "2026-10-25T05:51:32.485272Z",
+      "rev": "04906337b6d53e8bb0eaf0470ae9f070a4d4eb55",
+      "rev_count": 1122823,
+      "rev_date": "2026-11-17T04:43:17Z",
+      "scrape_date": "2026-11-19T05:47:32.989776Z",
       "stabilities": [
         "unstable"
       ],
@@ -40,11 +40,11 @@
         "out"
       ],
       "outputs": {
-        "dev": "/nix/store/hkgc64nm0vgp8jvy4bivcj106ryb2g47-bash-5.3p20-dev",
-        "doc": "/nix/store/63wlr7g8q4nzgyzhx7000asi571ghmn8-bash-5.3p20-doc",
-        "info": "/nix/store/2p819ssq7918b5s7z4cgqbrviza7ppmz-bash-5.3p20-info",
-        "man": "/nix/store/p1fiqk5a5zpaakdaz6dlr43yvsfjlllm-bash-5.3p20-man",
-        "out": "/nix/store/i1pdjlwb27ki88zssg5q2h696v1r1m15-bash-5.3p20"
+        "dev": "/nix/store/9v4rr32p4f5dgf0b39gnp19m5ljw72ny-bash-5.3p20-dev",
+        "doc": "/nix/store/vh5n20m73sxp3ilrmv7pf6hkqi7kqh36-bash-5.3p20-doc",
+        "info": "/nix/store/ma7s4sc8yd5yfwbfmr6i7kw0lzid7y09-bash-5.3p20-info",
+        "man": "/nix/store/p1sy0lmmd6vdcz2zkyq086yxqqw9vpsa-bash-5.3p20-man",
+        "out": "/nix/store/0xvlm2gh32710pjdswinpjqyahpfifiq-bash-5.3p20"
       },
       "system": "aarch64-darwin",
       "group": "toplevel",
@@ -53,17 +53,17 @@
     {
       "attr_path": "bashNonInteractive",
       "broken": false,
-      "derivation": "/nix/store/3ilgh22z0kad09ys6c6g7g8f2kq0bk17-bash-5.3p20.drv",
+      "derivation": "/nix/store/wa5wsqkbri5a3bi4jkr9r0345i3h7lyb-bash-5.3p20.drv",
       "description": "GNU Bourne-Again Shell, the de facto standard shell on Linux",
       "install_id": "bash",
       "license": "GPL-3.0-or-later",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=3ec636362e1816bc2f0888fa0fa2c69f1bc9e504",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=04906337b6d53e8bb0eaf0470ae9f070a4d4eb55",
       "name": "bash-5.3p20",
       "pname": "bashNonInteractive",
-      "rev": "3ec636362e1816bc2f0888fa0fa2c69f1bc9e504",
-      "rev_count": 1100280,
-      "rev_date": "2026-10-23T16:35:39Z",
-      "scrape_date": "2026-10-25T06:24:58.725449Z",
+      "rev": "04906337b6d53e8bb0eaf0470ae9f070a4d4eb55",
+      "rev_count": 1122823,
+      "rev_date": "2026-11-17T04:43:17Z",
+      "scrape_date": "2026-11-19T06:14:10.372931Z",
       "stabilities": [
         "unstable"
       ],
@@ -74,15 +74,16 @@
         "out",
         "out",
         "out",
+        "out",
         "out"
       ],
       "outputs": {
-        "debug": "/nix/store/ppcw1hjahb5nrz7671g15i4b5g5ly1mz-bash-5.3p20-debug",
-        "dev": "/nix/store/c6mgg9hnsl642g3cpdcjdih2q2lx57rv-bash-5.3p20-dev",
-        "doc": "/nix/store/qbm49z8nblcmhq6jxnisq8w9bpqn5sac-bash-5.3p20-doc",
-        "info": "/nix/store/57mffskr7svi56zp1zymnx7smv51s03x-bash-5.3p20-info",
-        "man": "/nix/store/fh6skwq4pb1v2djwwh5lfgl8p3ypihh7-bash-5.3p20-man",
-        "out": "/nix/store/czx7cscpnqqmc9nwmbpnv2zcvck64mmf-bash-5.3p20"
+        "debug": "/nix/store/y469l4sh0mv69aaxcbkyrkv6fzl01kg4-bash-5.3p20-debug",
+        "dev": "/nix/store/zbj4wg23f0dh7glrs5pcp7nkwk408bm3-bash-5.3p20-dev",
+        "doc": "/nix/store/gqahpp40izl8xwq3bmv27w9z939wzbaz-bash-5.3p20-doc",
+        "info": "/nix/store/l6vd4sqf6p6kv50p5my3ns20xbl1f4wc-bash-5.3p20-info",
+        "man": "/nix/store/6zzv4l2n5x6s2hkf76kbc8ilqyx04mq3-bash-5.3p20-man",
+        "out": "/nix/store/xl3n26zm1kv1zhj3mma2x929f4sx3dlh-bash-5.3p20"
       },
       "system": "aarch64-linux",
       "group": "toplevel",
@@ -91,17 +92,17 @@
     {
       "attr_path": "bashNonInteractive",
       "broken": false,
-      "derivation": "/nix/store/30hr2syjmfvflwi68acggp3w870ikw5c-bash-5.3p20.drv",
+      "derivation": "/nix/store/kbpcpb1ps9sxn55ng7yifk6zmncrjifx-bash-5.3p20.drv",
       "description": "GNU Bourne-Again Shell, the de facto standard shell on Linux",
       "install_id": "bash",
       "license": "GPL-3.0-or-later",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=3ec636362e1816bc2f0888fa0fa2c69f1bc9e504",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=04906337b6d53e8bb0eaf0470ae9f070a4d4eb55",
       "name": "bash-5.3p20",
       "pname": "bashNonInteractive",
-      "rev": "3ec636362e1816bc2f0888fa0fa2c69f1bc9e504",
-      "rev_count": 1100280,
-      "rev_date": "2026-10-23T16:35:39Z",
-      "scrape_date": "2026-10-25T07:01:24.172072Z",
+      "rev": "04906337b6d53e8bb0eaf0470ae9f070a4d4eb55",
+      "rev_count": 1122823,
+      "rev_date": "2026-11-17T04:43:17Z",
+      "scrape_date": "2026-11-19T06:43:20.555718Z",
       "stabilities": [
         "unstable"
       ],
@@ -113,15 +114,17 @@
         "out",
         "out",
         "out",
+        "out",
+        "out",
         "out"
       ],
       "outputs": {
-        "debug": "/nix/store/lxfa5zazy3zpsjqjfqzym8hjgdw6qw72-bash-5.3p20-debug",
-        "dev": "/nix/store/b5rilb1d66qd5xmikql84k3p31wcmpqv-bash-5.3p20-dev",
-        "doc": "/nix/store/2aimjx9b6cm4pmjdfdjnwz49h8mjsnn2-bash-5.3p20-doc",
-        "info": "/nix/store/6p4ik3i8qaipiyb05hjpirsw8rybsxas-bash-5.3p20-info",
-        "man": "/nix/store/kgah67i9sql17wak2psj0pwh5ias77zi-bash-5.3p20-man",
-        "out": "/nix/store/nnm9gdr70ihc6zc9298mzz8jpcgaciql-bash-5.3p20"
+        "debug": "/nix/store/54vmhr3s8vp5rc87qw3sdfmsl1xdiq5j-bash-5.3p20-debug",
+        "dev": "/nix/store/02pyv1n66h4l27zv105gip35b99qrqam-bash-5.3p20-dev",
+        "doc": "/nix/store/plf6jzl88rxfiww4fwsw38pkm5fwslk3-bash-5.3p20-doc",
+        "info": "/nix/store/b4sk68p1sgchci3wj1z6fpm0h49dnxv2-bash-5.3p20-info",
+        "man": "/nix/store/6bc8vbgxfjva7sxmkncc8micaiglb6w5-bash-5.3p20-man",
+        "out": "/nix/store/hasnvc0j36gg6qrdsfcx7yivx3c2bpqr-bash-5.3p20"
       },
       "system": "x86_64-linux",
       "group": "toplevel",
