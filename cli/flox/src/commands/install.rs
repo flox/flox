@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
@@ -42,11 +43,16 @@ use flox_rust_sdk::providers::lock_manifest::{
     ResolutionFailures,
     ResolveError,
 };
-use floxhub_client::{MsgAttrPathNotFoundNotFoundForAllSystems, MsgAttrPathNotFoundNotInCatalog};
+use floxhub_client::{
+    CatalogClientTrait,
+    MsgAttrPathNotFoundNotFoundForAllSystems,
+    MsgAttrPathNotFoundNotInCatalog,
+};
+use futures::StreamExt;
 use indoc::formatdoc;
 use itertools::Itertools;
 use shell_gen::ShellWithPath;
-use tracing::{debug, info_span, instrument, span, warn};
+use tracing::{Instrument, debug, info_span, instrument, span, warn};
 
 use super::services::warn_manifest_changes_for_services;
 use super::{EnvironmentSelect, environment_select};
@@ -57,6 +63,7 @@ use crate::commands::{
     ensure_auth,
     environment_description,
 };
+use crate::utils::deprecation::deprecation_notice;
 use crate::utils::detect_shell::detect_shell_for_in_place;
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::didyoumean::{DidYouMean, InstallSuggestion};
@@ -112,6 +119,17 @@ struct PackageToInstallRetry {
     system_subset: bool,
     pkg: PackageToInstall,
 }
+
+/// How long to wait for the catalog's deprecation of each newly installed
+/// package before leaving it out of the output.
+///
+/// The lookups run concurrently, so this bounds what they add to an install
+/// that has already succeeded.
+const DEPRECATION_LOOKUP_TIMEOUT: Duration = Duration::from_secs(3);
+
+/// How many deprecation lookups are in flight at once, so that installing many
+/// packages doesn't send them all to the catalog at the same time.
+const DEPRECATION_LOOKUP_CONCURRENCY: usize = 8;
 
 /// A container for the packages that a user attempted to install.
 #[derive(Debug, Clone)]
@@ -280,6 +298,24 @@ impl Install {
         message::packages_newly_overridden_by_composer(&new_package_overrides);
         message::print_default_systems_changed(old_lockfile.as_ref(), &lockfile);
 
+        // Packages that were already installed, or only had their outputs
+        // updated, aren't new choices, so the user isn't warned about them.
+        let newly_installed = partitioned
+            .successes
+            .iter()
+            .chain(&partitioned.system_subsets)
+            .collect::<Vec<_>>();
+        for warning in Self::deprecation_warnings(
+            &flox.floxhub_client,
+            &newly_installed,
+            DEPRECATION_LOOKUP_TIMEOUT,
+            DEPRECATION_LOOKUP_CONCURRENCY,
+        )
+        .await
+        {
+            message::warning(warning);
+        }
+
         if !installation.modifications.is_empty() {
             for warning in Self::generate_unfree_and_broken_warnings(
                 &lockfile.packages,
@@ -305,6 +341,59 @@ impl Install {
         }
 
         Ok(())
+    }
+
+    /// The warnings for the catalog packages among `packages` that the catalog
+    /// reports as deprecated, in the order the packages were given.
+    ///
+    /// The install has already succeeded when this runs, so a lookup that
+    /// fails or takes longer than `timeout` is logged and skipped rather than
+    /// reported. Flake references and store paths aren't in the catalog and
+    /// aren't looked up. At most `concurrency` lookups are in flight at once.
+    async fn deprecation_warnings(
+        client: &impl CatalogClientTrait,
+        packages: &[&PackageToInstall],
+        timeout: Duration,
+        concurrency: usize,
+    ) -> Vec<String> {
+        // The same pkg-path can be installed under several ids.
+        let pkg_paths = packages
+            .iter()
+            .filter_map(|pkg| match pkg {
+                PackageToInstall::Catalog(pkg) => Some(pkg.pkg_path.as_str()),
+                PackageToInstall::Flake(_) | PackageToInstall::StorePath(_) => None,
+            })
+            .unique()
+            .collect::<Vec<_>>();
+        if pkg_paths.is_empty() {
+            return vec![];
+        }
+
+        let lookups = futures::stream::iter(pkg_paths)
+            .map(|pkg_path| async move {
+                let lookup =
+                    tokio::time::timeout(timeout, client.package_deprecation(pkg_path)).await;
+                match lookup {
+                    Ok(Ok(deprecation)) => deprecation.map(|d| deprecation_notice(pkg_path, &d)),
+                    Ok(Err(err)) => {
+                        debug!(%pkg_path, %err, "failed to look up deprecation");
+                        None
+                    },
+                    Err(_) => {
+                        debug!(%pkg_path, ?timeout, "timed out looking up deprecation");
+                        None
+                    },
+                }
+            })
+            // `buffered` yields in input order, unlike `buffer_unordered`.
+            .buffered(concurrency)
+            .collect::<Vec<_>>()
+            .instrument(info_span!(
+                "install",
+                progress = "Checking for deprecated packages..."
+            ));
+
+        lookups.await.into_iter().flatten().collect()
     }
 
     fn format_packages_for_tracing(packages: &[PackageToInstall]) -> String {
@@ -828,12 +917,15 @@ fn add_activation_to_rc_file(
 
 #[cfg(test)]
 mod tests {
+    use std::time::{Duration, Instant};
+
     use flox_manifest::lockfile::test_helpers::fake_catalog_package_lock;
     use flox_manifest::lockfile::{LockedPackage, LockedPackageCatalog, Lockfile};
     use flox_manifest::raw::{CatalogPackage, PackageToInstall, RawSelectedOutputs};
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::models::environment::Environment;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::{
+        new_named_path_environment,
         new_named_path_environment_from_env_files,
         new_path_environment_in,
     };
@@ -842,13 +934,264 @@ mod tests {
     use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use flox_test_utils::GENERATED_DATA;
     use flox_test_utils::manifests::EMPTY_ALL_SYSTEMS;
+    use floxhub_client::FloxhubClient;
+    use floxhub_client::client::test_helpers::client_config;
+    use httpmock::MockServer;
     use indoc::formatdoc;
+    use serde_json::json;
     use tracing::instrument::WithSubscriber;
 
     use super::{add_activation_to_rc_file, ensure_rc_file_exists};
     use crate::commands::EnvironmentSelect;
     use crate::commands::install::{Install, package_list_for_prompt};
     use crate::utils::message;
+
+    #[tokio::test]
+    async fn one_lookup_per_pkg_path_installed_under_several_ids() {
+        let server = MockServer::start_async().await;
+        let php81 = server.mock(|when, then| {
+            when.path("/api/v1/catalog/packages/php81")
+                .query_param("pageSize", "0");
+            then.status(200).json_body(json!({
+                "items": [],
+                "total_count": 108,
+                "deprecation": {"kind": "removed", "replacement": null, "message": "php81 is EOL"},
+                "lifecycle": null,
+            }));
+        });
+        let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        let first = PackageToInstall::parse(&"x86_64-linux".to_string(), "php81").unwrap();
+        let mut second = PackageToInstall::parse(&"x86_64-linux".to_string(), "php81").unwrap();
+        second.set_id("php");
+
+        let warnings =
+            Install::deprecation_warnings(&client, &[&first, &second], Duration::from_secs(5), 8)
+                .await;
+
+        php81.assert_calls(1);
+        assert_eq!(warnings, vec!["php81 is EOL".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn failed_lookup_is_skipped_without_hiding_other_warnings() {
+        let server = MockServer::start_async().await;
+        let hello = server.mock(|when, then| {
+            when.path("/api/v1/catalog/packages/hello")
+                .query_param("pageSize", "0");
+            then.status(500).json_body(json!({"detail": "boom"}));
+        });
+        server.mock(|when, then| {
+            when.path("/api/v1/catalog/packages/php81")
+                .query_param("pageSize", "0");
+            then.status(200).json_body(json!({
+                "items": [],
+                "total_count": 108,
+                "deprecation": {"kind": "removed", "replacement": null, "message": "php81 is EOL"},
+                "lifecycle": null,
+            }));
+        });
+        let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        let hello_pkg = PackageToInstall::parse(&"x86_64-linux".to_string(), "hello").unwrap();
+        let php81_pkg = PackageToInstall::parse(&"x86_64-linux".to_string(), "php81").unwrap();
+
+        let warnings = Install::deprecation_warnings(
+            &client,
+            &[&hello_pkg, &php81_pkg],
+            Duration::from_secs(5),
+            8,
+        )
+        .await;
+
+        hello.assert_calls(1);
+        assert_eq!(warnings, vec!["php81 is EOL".to_string()]);
+    }
+
+    /// The catalog answers after 5 seconds, far past the 200ms the lookup is
+    /// given, so the warning is left out and the call returns without waiting.
+    #[tokio::test]
+    async fn timed_out_lookup_is_skipped() {
+        let server = MockServer::start_async().await;
+        server.mock(|when, then| {
+            when.path("/api/v1/catalog/packages/php81")
+                .query_param("pageSize", "0");
+            then.status(200).delay(Duration::from_secs(5)).json_body(json!({
+                "items": [],
+                "total_count": 108,
+                "deprecation": {"kind": "removed", "replacement": null, "message": "php81 is EOL"},
+                "lifecycle": null,
+            }));
+        });
+        let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        let php81 = PackageToInstall::parse(&"x86_64-linux".to_string(), "php81").unwrap();
+
+        let started = Instant::now();
+        let warnings =
+            Install::deprecation_warnings(&client, &[&php81], Duration::from_millis(200), 8).await;
+
+        assert!(warnings.is_empty(), "unexpected warnings: {warnings:?}");
+        assert!(
+            started.elapsed() < Duration::from_secs(4),
+            "waited for the slow lookup: {:?}",
+            started.elapsed()
+        );
+    }
+
+    /// Three lookups that each take 2 seconds finish in about 2 seconds
+    /// together, where one after another they would take 6.
+    #[tokio::test]
+    async fn lookups_run_concurrently() {
+        let server = MockServer::start_async().await;
+        server.mock(|when, then| {
+            when.path("/api/v1/catalog/packages/a")
+                .query_param("pageSize", "0");
+            then.status(200)
+                .delay(Duration::from_secs(2))
+                .json_body(json!({
+                    "items": [], "total_count": 1, "deprecation": null, "lifecycle": null,
+                }));
+        });
+        server.mock(|when, then| {
+            when.path("/api/v1/catalog/packages/b")
+                .query_param("pageSize", "0");
+            then.status(200)
+                .delay(Duration::from_secs(2))
+                .json_body(json!({
+                    "items": [], "total_count": 1, "deprecation": null, "lifecycle": null,
+                }));
+        });
+        server.mock(|when, then| {
+            when.path("/api/v1/catalog/packages/c")
+                .query_param("pageSize", "0");
+            then.status(200)
+                .delay(Duration::from_secs(2))
+                .json_body(json!({
+                    "items": [], "total_count": 1, "deprecation": null, "lifecycle": null,
+                }));
+        });
+        let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        let a = PackageToInstall::parse(&"x86_64-linux".to_string(), "a").unwrap();
+        let b = PackageToInstall::parse(&"x86_64-linux".to_string(), "b").unwrap();
+        let c = PackageToInstall::parse(&"x86_64-linux".to_string(), "c").unwrap();
+
+        let started = Instant::now();
+        Install::deprecation_warnings(&client, &[&a, &b, &c], Duration::from_secs(10), 8).await;
+
+        assert!(
+            started.elapsed() < Duration::from_secs(5),
+            "lookups ran one after another: {:?}",
+            started.elapsed()
+        );
+    }
+
+    /// With room for one lookup at a time, two lookups of 1 second each take
+    /// at least 2 seconds.
+    #[tokio::test]
+    async fn lookups_are_limited_to_the_given_concurrency() {
+        let server = MockServer::start_async().await;
+        server.mock(|when, then| {
+            when.path("/api/v1/catalog/packages/a")
+                .query_param("pageSize", "0");
+            then.status(200)
+                .delay(Duration::from_secs(1))
+                .json_body(json!({
+                    "items": [], "total_count": 1, "deprecation": null, "lifecycle": null,
+                }));
+        });
+        server.mock(|when, then| {
+            when.path("/api/v1/catalog/packages/b")
+                .query_param("pageSize", "0");
+            then.status(200)
+                .delay(Duration::from_secs(1))
+                .json_body(json!({
+                    "items": [], "total_count": 1, "deprecation": null, "lifecycle": null,
+                }));
+        });
+        let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        let a = PackageToInstall::parse(&"x86_64-linux".to_string(), "a").unwrap();
+        let b = PackageToInstall::parse(&"x86_64-linux".to_string(), "b").unwrap();
+
+        let started = Instant::now();
+        Install::deprecation_warnings(&client, &[&a, &b], Duration::from_secs(10), 1).await;
+
+        assert!(
+            started.elapsed() >= Duration::from_secs(2),
+            "lookups overlapped: {:?}",
+            started.elapsed()
+        );
+    }
+
+    /// The first package's lookup finishes after the second's, and its
+    /// warning still comes first.
+    #[tokio::test]
+    async fn warnings_follow_the_order_the_packages_were_given() {
+        let server = MockServer::start_async().await;
+        server.mock(|when, then| {
+            when.path("/api/v1/catalog/packages/php81")
+                .query_param("pageSize", "0");
+            then.status(200).delay(Duration::from_secs(1)).json_body(json!({
+                "items": [],
+                "total_count": 108,
+                "deprecation": {"kind": "removed", "replacement": null, "message": "php81 is EOL"},
+                "lifecycle": null,
+            }));
+        });
+        server.mock(|when, then| {
+            when.path("/api/v1/catalog/packages/aria")
+                .query_param("pageSize", "0");
+            then.status(200).json_body(json!({
+                "items": [],
+                "total_count": 12,
+                "deprecation": {
+                    "kind": "removed",
+                    "replacement": "aria2",
+                    "message": "'aria' has been renamed to/replaced by 'aria2'",
+                },
+                "lifecycle": null,
+            }));
+        });
+        let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        let php81 = PackageToInstall::parse(&"x86_64-linux".to_string(), "php81").unwrap();
+        let aria = PackageToInstall::parse(&"x86_64-linux".to_string(), "aria").unwrap();
+
+        let warnings =
+            Install::deprecation_warnings(&client, &[&php81, &aria], Duration::from_secs(10), 8)
+                .await;
+
+        assert_eq!(warnings, vec![
+            "php81 is EOL".to_string(),
+            "'aria' has been renamed to/replaced by 'aria2'".to_string(),
+        ]);
+    }
+
+    #[tokio::test]
+    async fn no_lookup_for_packages_outside_the_catalog() {
+        let server = MockServer::start_async().await;
+        let any_request = server.mock(|_, then| {
+            then.status(200).json_body(json!({
+                "items": [], "total_count": 0, "deprecation": null, "lifecycle": null,
+            }));
+        });
+        let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        let flake =
+            PackageToInstall::parse(&"x86_64-linux".to_string(), "github:nixos/nixpkgs#hello")
+                .unwrap();
+        let store_path = PackageToInstall::parse(
+            &"x86_64-linux".to_string(),
+            "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-hello-2.12.1",
+        )
+        .unwrap();
+
+        let warnings = Install::deprecation_warnings(
+            &client,
+            &[&flake, &store_path],
+            Duration::from_secs(5),
+            8,
+        )
+        .await;
+
+        any_request.assert_calls(0);
+        assert!(warnings.is_empty(), "unexpected warnings: {warnings:?}");
+    }
 
     /// [Install::generate_warnings] shouldn't warn for packages not in packages_to_install
     #[test]
@@ -1056,6 +1399,66 @@ mod tests {
              ! '{install_id}' installed only for the following systems: {installed_systems}
         "};
         assert_eq!(writer.to_string(), expected);
+    }
+
+    /// Runs `flox install` for `packages` in an empty environment, replaying
+    /// the recording at `recording` (resolve and deprecation lookups), and
+    /// returns the messages it prints.
+    async fn install_replaying(recording: &str, packages: &[&str]) -> String {
+        let (mut flox, _tempdir) = flox_instance();
+        let (subscriber, writer) = test_subscriber_message_only();
+
+        let environment = new_named_path_environment(&flox, "version = 1", "name");
+        flox.floxhub_client = catalog_replay_client(GENERATED_DATA.join(recording)).await;
+
+        Install {
+            environment: EnvironmentSelect::Dir(environment.parent_path().unwrap()),
+            id: vec![],
+            packages: packages.iter().map(|p| p.to_string()).collect(),
+        }
+        .handle(flox)
+        .with_subscriber(subscriber)
+        .await
+        .expect("installation failed");
+
+        writer.to_string()
+    }
+
+    // On x86_64-darwin the default systems add x86_64-darwin, so the resolve
+    // request doesn't match the recording.
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn warns_after_installing_deprecated_package() {
+        let output = install_replaying("resolve/php81.yaml", &["php81"]).await;
+
+        assert_eq!(output, formatdoc! {"
+            ✔ 'php81' installed to environment 'name'
+            ! php81 is EOL
+        "});
+    }
+
+    /// Of three packages, only the two the catalog reports as deprecated are
+    /// warned about, in the order they were requested.
+    // On x86_64-darwin the default systems add x86_64-darwin, so the resolve
+    // request doesn't match the recording.
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn warns_only_about_deprecated_packages_when_installing_several() {
+        let output =
+            install_replaying("resolve/php81_aria_hello.yaml", &["php81", "aria", "hello"]).await;
+
+        assert_eq!(output, formatdoc! {"
+            ✔ 'php81', 'aria', 'hello' installed to environment 'name'
+            ℹ 'aria' has additional outputs, use 'flox list -a' to see more
+            ! php81 is EOL
+            ! 'aria' has been renamed to/replaced by 'aria2'
+        "});
     }
 
     /// Re-locking an environment locked by a Flox version with a different

@@ -180,6 +180,35 @@ impl FloxhubClient {
         *self = Self::new(modified_config)?;
         Ok(())
     }
+
+    /// One page of the builds the catalog lists for an attr_path.
+    async fn packages_page(
+        &self,
+        attr_path: &str,
+        page_number: u64,
+        page_size: u64,
+    ) -> Result<api_types::PackagesResult, VersionsError> {
+        let response = self
+            .catalog
+            .packages_api_v1_catalog_packages_attr_path_get(
+                attr_path,
+                Some(page_number),
+                Some(page_size),
+            )
+            .await
+            .map_api_error()
+            .await
+            .map_err(|e| match e {
+                FloxhubClientError::APIError(APIError::ErrorResponse(response))
+                    if response.status() == StatusCode::NOT_FOUND =>
+                {
+                    VersionsError::NotFound
+                },
+                other => other.into(),
+            })?;
+
+        Ok(response.into_inner())
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -267,6 +296,16 @@ pub trait CatalogClientTrait {
         &self,
         attr_path: impl AsRef<str> + Send + Sync,
     ) -> Result<PackageDetails, VersionsError>;
+
+    /// Get the deprecation the catalog reports for an attr_path, without
+    /// listing its builds.
+    ///
+    /// `Ok(None)` means the pkg-path exists and is not deprecated. A pkg-path
+    /// the catalog doesn't know is `Err(VersionsError::NotFound)`.
+    async fn package_deprecation(
+        &self,
+        attr_path: impl AsRef<str> + Send + Sync,
+    ) -> Result<Option<DeprecationInfo>, VersionsError>;
 
     /// Get publish info for a package.
     async fn publish_info(
@@ -558,26 +597,9 @@ impl CatalogClientTrait for FloxhubClient {
         let deprecation_ref = &deprecation;
         let stream = make_depaging_stream(
             |page_number, page_size| async move {
-                let response = self
-                    .catalog
-                    .packages_api_v1_catalog_packages_attr_path_get(
-                        attr_path,
-                        Some(page_number),
-                        Some(page_size),
-                    )
-                    .await
-                    .map_api_error()
-                    .await
-                    .map_err(|e| match e {
-                        FloxhubClientError::APIError(APIError::ErrorResponse(response))
-                            if response.status() == StatusCode::NOT_FOUND =>
-                        {
-                            VersionsError::NotFound
-                        },
-                        other => other.into(),
-                    })?;
-
-                let packages = response.into_inner();
+                let packages = self
+                    .packages_page(attr_path, page_number, page_size)
+                    .await?;
                 if page_number == 0 {
                     *deprecation_ref.lock().expect("deprecation lock poisoned") =
                         packages.deprecation;
@@ -596,6 +618,21 @@ impl CatalogClientTrait for FloxhubClient {
         };
 
         Ok(search_results)
+    }
+
+    async fn package_deprecation(
+        &self,
+        attr_path: impl AsRef<str> + Send + Sync,
+    ) -> Result<Option<DeprecationInfo>, VersionsError> {
+        // A page size of 0 returns the deprecation without any builds, so this
+        // costs one small request however many builds the pkg-path has. The
+        // catalog accepts 0 (`pageSize: Query(ge=0)`) and still fills in
+        // `deprecation` (`packages` in floxhub
+        // src/catalog-server/catalog_server/api/v1/endpoints/catalog.py).
+        Ok(self
+            .packages_page(attr_path.as_ref(), 0, 0)
+            .await?
+            .deprecation)
     }
 
     async fn build_inputs_lookup(
@@ -1725,6 +1762,76 @@ pub mod tests {
             count: Some(0),
             deprecation: None,
         });
+    }
+
+    /// A deprecation lookup is one request for zero builds, however many
+    /// builds the pkg-path has.
+    #[tokio::test]
+    async fn package_deprecation_asks_for_no_builds() {
+        let server = MockServer::start_async().await;
+
+        let mock = server.mock(|when, then| {
+            when.path("/api/v1/catalog/packages/php81")
+                .query_param("page", "0")
+                .query_param("pageSize", "0");
+            then.status(200)
+                .header("content-type", "application/json")
+                .json_body(json!({
+                    "items": [],
+                    "total_count": 108,
+                    "deprecation": {
+                        "kind": "removed",
+                        "message": "php81 is EOL",
+                        "replacement": null,
+                    },
+                }));
+        });
+
+        let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
+        let deprecation = client.package_deprecation("php81").await.unwrap();
+
+        mock.assert_calls(1);
+        assert_eq!(
+            deprecation,
+            Some(DeprecationInfo {
+                kind: DeprecationKind::Removed,
+                message: Some("php81 is EOL".to_string()),
+                replacement: None,
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn package_deprecation_is_none_when_not_deprecated() {
+        let server = MockServer::start_async().await;
+
+        server.mock(|_, then| {
+            then.status(200)
+                .header("content-type", "application/json")
+                .json_body(json!({"items": [], "total_count": 12, "deprecation": null}));
+        });
+
+        let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
+
+        assert_eq!(client.package_deprecation("hello").await.unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn package_deprecation_reports_unknown_pkg_path() {
+        let server = MockServer::start_async().await;
+
+        server.mock(|_, then| {
+            then.status(404)
+                .header("content-type", "application/json")
+                .json_body(json!({"detail": "not found"}));
+        });
+
+        let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
+
+        assert!(matches!(
+            client.package_deprecation("nope").await,
+            Err(VersionsError::NotFound)
+        ));
     }
 
     // region: Error response handling

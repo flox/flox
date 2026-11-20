@@ -71,6 +71,17 @@ cmd = "flox install cmake gnumake"
 pre_cmd = "flox init"
 cmd = "flox install curl hello"
 
+# Install a package the catalog reports as deprecated. The deprecation
+# lookup `flox install` makes afterwards is recorded in the same file.
+[resolve.php81]
+pre_cmd = "flox init"
+cmd = "flox install php81"
+
+# Deprecated with and without a replacement, next to a package that isn't.
+[resolve.php81_aria_hello]
+pre_cmd = "flox init"
+cmd = "flox install php81 aria hello"
+
 [resolve.curl_hello_bumped_revs]
 pre_cmd = "flox init"
 cmd = "flox install curl hello"

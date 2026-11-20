@@ -1,0 +1,72 @@
+when:
+  path: /api/v1/catalog/resolve
+  method: POST
+  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"aria","install_id":"aria","systems":["aarch64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"aria","install_id":"aria","systems":["aarch64-linux"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"aria","install_id":"aria","systems":["x86_64-linux"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"hello","install_id":"hello","systems":["aarch64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"hello","install_id":"hello","systems":["aarch64-linux"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"hello","install_id":"hello","systems":["x86_64-linux"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"php81","install_id":"php81","systems":["aarch64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"php81","install_id":"php81","systems":["aarch64-linux"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"php81","install_id":"php81","systems":["x86_64-linux"]}],"name":"toplevel"}]}'
+then:
+  status: 200
+  header:
+  - name: date
+    value: Fri, 20 Nov 2026 21:13:52 GMT
+  - name: content-type
+    value: application/json
+  - name: content-length
+    value: '8810'
+  - name: server
+    value: uvicorn
+  - name: apigw-requestid
+    value: HKGygit9oAMEaqA=
+  body: '{"items":[{"name":"toplevel","page":{"page":870157,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"aria","pkg_path":"aria","derivation":"/nix/store/0nn8ijg7765syvcd4yj1vmf27i47847c-aria2-1.37.0.drv","name":"aria2-1.37.0","pname":"aria","version":"aria2-1.37.0","system":"aarch64-darwin","outputs":[{"name":"bin","store_path":"/nix/store/kwm69l8k14j2gww0262nk6h8qpi60zid-aria2-1.37.0-bin"},{"name":"dev","store_path":"/nix/store/0qkf6lpbdyr1m2z4dgz0hwdmi22r25hl-aria2-1.37.0-dev"},{"name":"doc","store_path":"/nix/store/r1r679maxiy8a02cxb9q7k6041qnarja-aria2-1.37.0-doc"},{"name":"man","store_path":"/nix/store/3vsgdja0c5ymyb1mxrq4lsw0q51h2kcz-aria2-1.37.0-man"},{"name":"out","store_path":"/nix/store/fl2kybkb7mgsm0nsl8pzwm2ya9ka6sm5-aria2-1.37.0"}],"outputs_to_install":["bin","man"],"description":"Lightweight, multi-protocol, multi-source, command-line download utility","license":"GPL-2.0-or-later","locked_url":"https://github.com/flox/nixpkgs?rev=7df7ff7d8e00218376575f0acdcc5d66741351ee","rev":"7df7ff7d8e00218376575f0acdcc5d66741351ee","rev_count":870157,"rev_date":"2025-10-02T04:57:58Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["staging","unstable"],"scrape_date":"2025-10-03T04:40:08.404486Z","cache_uri":null,"install_id":"aria"},{"catalog":"nixpkgs","attr_path":"aria","pkg_path":"aria","derivation":"/nix/store/yq6vfki38d17lm9d117v45i4c4brz3h3-aria2-1.37.0.drv","name":"aria2-1.37.0","pname":"aria","version":"aria2-1.37.0","system":"aarch64-linux","outputs":[{"name":"bin","store_path":"/nix/store/km6m0ma766b9iis2ij87kqi7k5ip171y-aria2-1.37.0-bin"},{"name":"dev","store_path":"/nix/store/hy18pkb4xp19j58kady4q192zkxkz0fn-aria2-1.37.0-dev"},{"name":"doc","store_path":"/nix/store/fcs134kc1g9vxw3g0y4i0ip30yz1i6md-aria2-1.37.0-doc"},{"name":"man","store_path":"/nix/store/a6sp7is25hxn47siq8w3cd7g8p6dwcvw-aria2-1.37.0-man"},{"name":"out","store_path":"/nix/store/j2rqdpyfl8j415rxvxfan3zapi0l3xqn-aria2-1.37.0"}],"outputs_to_install":["bin","man"],"description":"Lightweight, multi-protocol, multi-source, command-line download utility","license":"GPL-2.0-or-later","locked_url":"https://github.com/flox/nixpkgs?rev=7df7ff7d8e00218376575f0acdcc5d66741351ee","rev":"7df7ff7d8e00218376575f0acdcc5d66741351ee","rev_count":870157,"rev_date":"2025-10-02T04:57:58Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["staging","unstable"],"scrape_date":"2025-10-03T04:56:37.935391Z","cache_uri":null,"install_id":"aria"},{"catalog":"nixpkgs","attr_path":"aria","pkg_path":"aria","derivation":"/nix/store/bcrjnq0wbj0zr00wwicl6w2b4garxp26-aria2-1.37.0.drv","name":"aria2-1.37.0","pname":"aria","version":"aria2-1.37.0","system":"x86_64-linux","outputs":[{"name":"bin","store_path":"/nix/store/c1xhnkm6rhncrsbllsjz99zwv4cfvzrz-aria2-1.37.0-bin"},{"name":"dev","store_path":"/nix/store/jbcp371c0aj8cy4isrckahj488jk7p5p-aria2-1.37.0-dev"},{"name":"doc","store_path":"/nix/store/066xs07ncyf8hlxiznp92pwfsbw30q97-aria2-1.37.0-doc"},{"name":"man","store_path":"/nix/store/0q1sksi97i0rcrxbbxp2i9f8ganiazh3-aria2-1.37.0-man"},{"name":"out","store_path":"/nix/store/dg4pvvv5xhqc7dhxgyfz64s2pdbrzsvx-aria2-1.37.0"}],"outputs_to_install":["bin","man"],"description":"Lightweight, multi-protocol, multi-source, command-line download utility","license":"GPL-2.0-or-later","locked_url":"https://github.com/flox/nixpkgs?rev=7df7ff7d8e00218376575f0acdcc5d66741351ee","rev":"7df7ff7d8e00218376575f0acdcc5d66741351ee","rev_count":870157,"rev_date":"2025-10-02T04:57:58Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["staging","unstable"],"scrape_date":"2025-10-03T05:27:31.294413Z","cache_uri":null,"install_id":"aria"},{"catalog":"nixpkgs","attr_path":"hello","pkg_path":"hello","derivation":"/nix/store/551sfblw8glv3lk5qscsm3kdpg8d32jh-hello-2.12.2.drv","name":"hello-2.12.2","pname":"hello","version":"2.12.2","system":"aarch64-darwin","outputs":[{"name":"out","store_path":"/nix/store/ci364cgbwbpww272shfz5mj3y019r9fd-hello-2.12.2"}],"outputs_to_install":["out"],"description":"Program that produces a familiar, friendly greeting","license":"GPL-3.0-or-later","locked_url":"https://github.com/flox/nixpkgs?rev=7df7ff7d8e00218376575f0acdcc5d66741351ee","rev":"7df7ff7d8e00218376575f0acdcc5d66741351ee","rev_count":870157,"rev_date":"2025-10-02T04:57:58Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["staging","unstable"],"scrape_date":"2025-10-03T04:40:22.600059Z","cache_uri":null,"install_id":"hello"},{"catalog":"nixpkgs","attr_path":"hello","pkg_path":"hello","derivation":"/nix/store/3qjcyjfsn2vbrvjy4pp90ca069bmz396-hello-2.12.2.drv","name":"hello-2.12.2","pname":"hello","version":"2.12.2","system":"aarch64-linux","outputs":[{"name":"out","store_path":"/nix/store/srcdq2gbiwyqv68cfm26mkmcdhniw7ki-hello-2.12.2"}],"outputs_to_install":["out"],"description":"Program that produces a familiar, friendly greeting","license":"GPL-3.0-or-later","locked_url":"https://github.com/flox/nixpkgs?rev=7df7ff7d8e00218376575f0acdcc5d66741351ee","rev":"7df7ff7d8e00218376575f0acdcc5d66741351ee","rev_count":870157,"rev_date":"2025-10-02T04:57:58Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["staging","unstable"],"scrape_date":"2025-10-03T04:56:55.726723Z","cache_uri":null,"install_id":"hello"},{"catalog":"nixpkgs","attr_path":"hello","pkg_path":"hello","derivation":"/nix/store/x80j8hd76ca0yx7d8k4qn8fpqgbraqav-hello-2.12.2.drv","name":"hello-2.12.2","pname":"hello","version":"2.12.2","system":"x86_64-linux","outputs":[{"name":"out","store_path":"/nix/store/b1ayn0ln6n8bm2spz441csqc2ss66az3-hello-2.12.2"}],"outputs_to_install":["out"],"description":"Program that produces a familiar, friendly greeting","license":"GPL-3.0-or-later","locked_url":"https://github.com/flox/nixpkgs?rev=7df7ff7d8e00218376575f0acdcc5d66741351ee","rev":"7df7ff7d8e00218376575f0acdcc5d66741351ee","rev_count":870157,"rev_date":"2025-10-02T04:57:58Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["staging","unstable"],"scrape_date":"2025-10-03T05:27:50.319609Z","cache_uri":null,"install_id":"hello"},{"catalog":"nixpkgs","attr_path":"php81","pkg_path":"php81","derivation":"/nix/store/h39gwzv0vn0bc072fypd6kfb4yfr5x9k-php-with-extensions-8.1.33.drv","name":"php-with-extensions-8.1.33","pname":"php81","version":"8.1.33","system":"aarch64-darwin","outputs":[{"name":"out","store_path":"/nix/store/5mvm0axpavpnpfvnf18fccj8bdsvqjl4-php-with-extensions-8.1.33"}],"outputs_to_install":["out"],"description":"HTML-embedded scripting language","license":"PHP-3.01","locked_url":"https://github.com/flox/nixpkgs?rev=7df7ff7d8e00218376575f0acdcc5d66741351ee","rev":"7df7ff7d8e00218376575f0acdcc5d66741351ee","rev_count":870157,"rev_date":"2025-10-02T04:57:58Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["staging","unstable"],"scrape_date":"2025-10-03T04:40:45.694970Z","cache_uri":null,"install_id":"php81"},{"catalog":"nixpkgs","attr_path":"php81","pkg_path":"php81","derivation":"/nix/store/h1haqf5ms8y7icccvz2p57s62k90icam-php-with-extensions-8.1.33.drv","name":"php-with-extensions-8.1.33","pname":"php81","version":"8.1.33","system":"aarch64-linux","outputs":[{"name":"out","store_path":"/nix/store/bsaibik63rfhg4l269pcm11n5q2kap64-php-with-extensions-8.1.33"}],"outputs_to_install":["out"],"description":"HTML-embedded scripting language","license":"PHP-3.01","locked_url":"https://github.com/flox/nixpkgs?rev=7df7ff7d8e00218376575f0acdcc5d66741351ee","rev":"7df7ff7d8e00218376575f0acdcc5d66741351ee","rev_count":870157,"rev_date":"2025-10-02T04:57:58Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["staging","unstable"],"scrape_date":"2025-10-03T04:57:35.054247Z","cache_uri":null,"install_id":"php81"},{"catalog":"nixpkgs","attr_path":"php81","pkg_path":"php81","derivation":"/nix/store/jwnpw20cxdvac606zwff887cvj20nn1k-php-with-extensions-8.1.33.drv","name":"php-with-extensions-8.1.33","pname":"php81","version":"8.1.33","system":"x86_64-linux","outputs":[{"name":"out","store_path":"/nix/store/6xal8z90ap7vms9znlbgcmg46yg5j0f9-php-with-extensions-8.1.33"}],"outputs_to_install":["out"],"description":"HTML-embedded scripting language","license":"PHP-3.01","locked_url":"https://github.com/flox/nixpkgs?rev=7df7ff7d8e00218376575f0acdcc5d66741351ee","rev":"7df7ff7d8e00218376575f0acdcc5d66741351ee","rev_count":870157,"rev_date":"2025-10-02T04:57:58Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["staging","unstable"],"scrape_date":"2025-10-03T05:28:32.301728Z","cache_uri":null,"install_id":"php81"}],"messages":[],"complete":true},"candidate_pages":null,"messages":[]}]}'
+---
+when:
+  path: /api/v1/catalog/packages/php81
+  method: GET
+then:
+  status: 200
+  header:
+  - name: date
+    value: Fri, 20 Nov 2026 21:13:52 GMT
+  - name: content-type
+    value: application/json
+  - name: content-length
+    value: '124'
+  - name: server
+    value: uvicorn
+  - name: apigw-requestid
+    value: HKGyojIaIAMEaPA=
+  body: '{"items":[],"total_count":108,"deprecation":{"kind":"removed","replacement":null,"message":"php81 is EOL"},"lifecycle":null}'
+---
+when:
+  path: /api/v1/catalog/packages/aria
+  method: GET
+then:
+  status: 200
+  header:
+  - name: date
+    value: Fri, 20 Nov 2026 21:13:52 GMT
+  - name: content-type
+    value: application/json
+  - name: content-length
+    value: '160'
+  - name: server
+    value: uvicorn
+  - name: apigw-requestid
+    value: HKGyogGToAMESSw=
+  body: '{"items":[],"total_count":12,"deprecation":{"kind":"removed","replacement":"aria2","message":"''aria'' has been renamed to/replaced by ''aria2''"},"lifecycle":null}'
+---
+when:
+  path: /api/v1/catalog/packages/hello
+  method: GET
+then:
+  status: 200
+  header:
+  - name: date
+    value: Fri, 20 Nov 2026 21:13:52 GMT
+  - name: content-type
+    value: application/json
+  - name: content-length
+    value: '65'
+  - name: server
+    value: uvicorn
+  - name: apigw-requestid
+    value: HKGyoi47oAMES1w=
+  body: '{"items":[],"total_count":20,"deprecation":null,"lifecycle":null}'

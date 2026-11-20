@@ -18,6 +18,7 @@ use floxhub_client::{
     CheckBuildQuery,
     CheckBuildResponse,
     DEFAULT_STABILITY,
+    DeprecationInfo,
     FloxhubClient,
     FloxhubClientConfig,
     FloxhubClientError,
@@ -293,6 +294,28 @@ impl CatalogClientTrait for MockClient {
             .pop_front();
         match mock_resp {
             Some(Response::Packages(resp)) => Ok(resp),
+            Some(Response::Error(err)) if err.status == 404 => Err(VersionsError::NotFound),
+            Some(Response::Error(err)) => Err(VersionsError::FloxhubClientError(
+                FloxhubClientError::APIError(floxhub_client::ApiError::ErrorResponse(
+                    err.try_into()
+                        .expect("couldn't convert mock error response"),
+                )),
+            )),
+            _ => panic!("expected packages response, found {:?}", &mock_resp),
+        }
+    }
+
+    async fn package_deprecation(
+        &self,
+        _attr_path: impl AsRef<str> + Send + Sync,
+    ) -> Result<Option<DeprecationInfo>, VersionsError> {
+        let mock_resp = self
+            .mock_responses
+            .lock()
+            .expect("couldn't acquire mock lock")
+            .pop_front();
+        match mock_resp {
+            Some(Response::Packages(resp)) => Ok(resp.deprecation),
             Some(Response::Error(err)) if err.status == 404 => Err(VersionsError::NotFound),
             Some(Response::Error(err)) => Err(VersionsError::FloxhubClientError(
                 FloxhubClientError::APIError(floxhub_client::ApiError::ErrorResponse(

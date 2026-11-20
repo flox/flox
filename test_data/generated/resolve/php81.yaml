@@ -1,0 +1,36 @@
+when:
+  path: /api/v1/catalog/resolve
+  method: POST
+  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"php81","install_id":"php81","systems":["aarch64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"php81","install_id":"php81","systems":["aarch64-linux"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"php81","install_id":"php81","systems":["x86_64-linux"]}],"name":"toplevel"}]}'
+then:
+  status: 200
+  header:
+  - name: date
+    value: Fri, 20 Nov 2026 21:13:52 GMT
+  - name: content-type
+    value: application/json
+  - name: content-length
+    value: '2669'
+  - name: server
+    value: uvicorn
+  - name: apigw-requestid
+    value: HKGytiWaoAMESYw=
+  body: '{"items":[{"name":"toplevel","page":{"page":870157,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"php81","pkg_path":"php81","derivation":"/nix/store/h39gwzv0vn0bc072fypd6kfb4yfr5x9k-php-with-extensions-8.1.33.drv","name":"php-with-extensions-8.1.33","pname":"php81","version":"8.1.33","system":"aarch64-darwin","outputs":[{"name":"out","store_path":"/nix/store/5mvm0axpavpnpfvnf18fccj8bdsvqjl4-php-with-extensions-8.1.33"}],"outputs_to_install":["out"],"description":"HTML-embedded scripting language","license":"PHP-3.01","locked_url":"https://github.com/flox/nixpkgs?rev=7df7ff7d8e00218376575f0acdcc5d66741351ee","rev":"7df7ff7d8e00218376575f0acdcc5d66741351ee","rev_count":870157,"rev_date":"2025-10-02T04:57:58Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["staging","unstable"],"scrape_date":"2025-10-03T04:40:45.694970Z","cache_uri":null,"install_id":"php81"},{"catalog":"nixpkgs","attr_path":"php81","pkg_path":"php81","derivation":"/nix/store/h1haqf5ms8y7icccvz2p57s62k90icam-php-with-extensions-8.1.33.drv","name":"php-with-extensions-8.1.33","pname":"php81","version":"8.1.33","system":"aarch64-linux","outputs":[{"name":"out","store_path":"/nix/store/bsaibik63rfhg4l269pcm11n5q2kap64-php-with-extensions-8.1.33"}],"outputs_to_install":["out"],"description":"HTML-embedded scripting language","license":"PHP-3.01","locked_url":"https://github.com/flox/nixpkgs?rev=7df7ff7d8e00218376575f0acdcc5d66741351ee","rev":"7df7ff7d8e00218376575f0acdcc5d66741351ee","rev_count":870157,"rev_date":"2025-10-02T04:57:58Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["staging","unstable"],"scrape_date":"2025-10-03T04:57:35.054247Z","cache_uri":null,"install_id":"php81"},{"catalog":"nixpkgs","attr_path":"php81","pkg_path":"php81","derivation":"/nix/store/jwnpw20cxdvac606zwff887cvj20nn1k-php-with-extensions-8.1.33.drv","name":"php-with-extensions-8.1.33","pname":"php81","version":"8.1.33","system":"x86_64-linux","outputs":[{"name":"out","store_path":"/nix/store/6xal8z90ap7vms9znlbgcmg46yg5j0f9-php-with-extensions-8.1.33"}],"outputs_to_install":["out"],"description":"HTML-embedded scripting language","license":"PHP-3.01","locked_url":"https://github.com/flox/nixpkgs?rev=7df7ff7d8e00218376575f0acdcc5d66741351ee","rev":"7df7ff7d8e00218376575f0acdcc5d66741351ee","rev_count":870157,"rev_date":"2025-10-02T04:57:58Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["staging","unstable"],"scrape_date":"2025-10-03T05:28:32.301728Z","cache_uri":null,"install_id":"php81"}],"messages":[],"complete":true},"candidate_pages":null,"messages":[]}]}'
+---
+when:
+  path: /api/v1/catalog/packages/php81
+  method: GET
+then:
+  status: 200
+  header:
+  - name: date
+    value: Fri, 20 Nov 2026 21:13:53 GMT
+  - name: content-type
+    value: application/json
+  - name: content-length
+    value: '124'
+  - name: server
+    value: uvicorn
+  - name: apigw-requestid
+    value: HKGyxjQNIAMESug=
+  body: '{"items":[],"total_count":108,"deprecation":{"kind":"removed","replacement":null,"message":"php81 is EOL"},"lifecycle":null}'
