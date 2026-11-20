@@ -148,3 +148,114 @@ EOF
 }
 
 # ---------------------------------------------------------------------------- #
+
+# Install the build_with_requests fixture (python3 + requests, with a recorded
+# lockfile) and add builds that show what the wrapper does to PYTHONPATH. The
+# `[install]` section is unchanged from the fixture so the lockfile is reused
+# without a catalog request.
+python_builds_setup() {
+  cp "$GENERATED_DATA"/envs/build_with_requests/* "$PROJECT_DIR/.flox/env"
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    schema-version = "1.19.0"
+
+    [install]
+    requests.pkg-path = "python314Packages.requests"
+    requests.outputs = "all"
+    python3.pkg-path = "python3"
+    python3.outputs = "all"
+
+    [build.print-PYTHONPATH]
+    command = '''
+      mkdir -p "$out/bin"
+      cat > "$out/bin/print-PYTHONPATH" <<'EOT'
+#!/usr/bin/env bash
+echo "PYTHONPATH is ${PYTHONPATH-unset}"
+EOT
+      chmod +x "$out/bin/print-PYTHONPATH"
+    '''
+
+    # A venv-shaped output: $out/pyvenv.cfg exists and $out/bin/python3 is the
+    # venv's interpreter, which only sees the venv's own site-packages.
+    [build.venv-app]
+    command = '''
+      python3 -m venv --without-pip "$out"
+      cat > "$out/bin/venv-app" <<EOT
+#!/usr/bin/env bash
+echo "PYTHONPATH is \${PYTHONPATH-unset}"
+exec "$out/bin/python3" -c 'import sys
+print("prefix is", sys.prefix)
+try:
+    import requests
+    print("requests from", requests.__path__)
+except ImportError:
+    print("Cannot import requests")'
+EOT
+      chmod +x "$out/bin/venv-app"
+    '''
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+}
+
+# A library in runtime-packages is on PYTHONPATH for a non-venv output.
+@test "Build wrapper sets PYTHONPATH to the runtime environment's site-packages" {
+  skip_x86_64_darwin_replay
+  python_builds_setup
+
+  "$FLOX_BIN" build print-PYTHONPATH
+
+  run ./result-print-PYTHONPATH/bin/print-PYTHONPATH
+  assert_success
+  assert_output --regexp "^PYTHONPATH is /nix/store/[^:/]*-environment-build-print-PYTHONPATH/lib/python3.14/site-packages$"
+}
+
+# A wrapped program sees only its build's runtime modules, never the caller's.
+@test "Build wrapper replaces the caller's PYTHONPATH" {
+  skip_x86_64_darwin_replay
+  python_builds_setup
+
+  "$FLOX_BIN" build print-PYTHONPATH
+
+  PYTHONPATH="/some/other/pythonpath" run ./result-print-PYTHONPATH/bin/print-PYTHONPATH
+  assert_success
+  assert_output --regexp "^PYTHONPATH is /nix/store/[^:/]*-environment-build-print-PYTHONPATH/lib/python3.14/site-packages$"
+}
+
+# PYTHONPATH precedes site-packages on sys.path, so setting it for a venv would
+# put the runtime environment's requests ahead of whatever the venv installed.
+# The caller's value is removed too, as it is for every other output.
+@test "Build wrapper unsets PYTHONPATH for a venv-shaped output" {
+  skip_x86_64_darwin_replay
+  python_builds_setup
+
+  "$FLOX_BIN" build venv-app
+
+  PYTHONPATH="/some/other/pythonpath" run ./result-venv-app/bin/venv-app
+  assert_success
+  assert_line "PYTHONPATH is unset"
+  assert_line --regexp "^prefix is /nix/store/[^/]*-venv-app-[0-9.]+$"
+  assert_line "Cannot import requests"
+}
+
+# No mocked catalog package ships an interpreter without site-packages, so
+# fabricate one, as the profile.d test above does.
+@test "Build wrapper unsets PYTHONPATH when the environment has no site-packages" {
+  _wrapper="${FLOX_INTERPRETER_WRAPPER?}"
+
+  fake_env="$BATS_TEST_TMPDIR/env"
+  mkdir -p "$fake_env/bin" "$fake_env/etc/profile.d"
+  cp -RL "$_wrapper/etc/profile.d/." "$fake_env/etc/profile.d/"
+  # Stands in for python3's version query; the env has no lib/python3.99.
+  cat > "$fake_env/bin/python3" <<'EOF'
+#!/usr/bin/env bash
+echo "3.99"
+EOF
+  chmod +x "$fake_env/bin/python3"
+
+  PYTHONPATH="/some/other/pythonpath" run "$_wrapper/wrapper" --env "$fake_env" -- \
+    bash -c 'echo "PYTHONPATH is ${PYTHONPATH-unset}"'
+  assert_success
+  assert_output "PYTHONPATH is unset"
+}
+
+# ---------------------------------------------------------------------------- #
