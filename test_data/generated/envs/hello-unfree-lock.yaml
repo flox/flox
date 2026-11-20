@@ -14,17 +14,17 @@
     {
       "attr_path": "hello-unfree",
       "broken": false,
-      "derivation": "/nix/store/gamqi8z22ras3jbizb0g6yqxkcyia6l9-example-unfree-package-1.0.drv",
+      "derivation": "/nix/store/xj1zpiq3qcwc9ry6kxfnrizg5164wyai-example-unfree-package-1.0.drv",
       "description": "Example package with unfree license (for testing)",
       "install_id": "hello-unfree",
       "license": "Unfree",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=04906337b6d53e8bb0eaf0470ae9f070a4d4eb55",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=151fa4e8ddfdd8dd25d945ad94ed54a13de9f6e4",
       "name": "example-unfree-package-1.0",
       "pname": "hello-unfree",
-      "rev": "04906337b6d53e8bb0eaf0470ae9f070a4d4eb55",
-      "rev_count": 1122823,
-      "rev_date": "2026-11-17T04:43:17Z",
-      "scrape_date": "2026-11-19T05:47:33.216545Z",
+      "rev": "151fa4e8ddfdd8dd25d945ad94ed54a13de9f6e4",
+      "rev_count": 1086391,
+      "rev_date": "2026-10-06T04:29:54Z",
+      "scrape_date": "2026-10-07T04:59:53.190100Z",
       "stabilities": [
         "unstable"
       ],
@@ -34,7 +34,7 @@
         "out"
       ],
       "outputs": {
-        "out": "/nix/store/2g6xgy68v99id7pnz91rgfkangf8xshc-example-unfree-package-1.0"
+        "out": "/nix/store/8w49yqc04n3jyn4dabx7s4y61qjc9a6p-example-unfree-package-1.0"
       },
       "system": "aarch64-darwin",
       "group": "toplevel",
@@ -43,17 +43,17 @@
     {
       "attr_path": "hello-unfree",
       "broken": false,
-      "derivation": "/nix/store/95ynv8rl8z4wgq8z7krif5gaya6mhgzf-example-unfree-package-1.0.drv",
+      "derivation": "/nix/store/di5x5kcjx356azj21slvi70r2dckmsz9-example-unfree-package-1.0.drv",
       "description": "Example package with unfree license (for testing)",
       "install_id": "hello-unfree",
       "license": "Unfree",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=04906337b6d53e8bb0eaf0470ae9f070a4d4eb55",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=151fa4e8ddfdd8dd25d945ad94ed54a13de9f6e4",
       "name": "example-unfree-package-1.0",
       "pname": "hello-unfree",
-      "rev": "04906337b6d53e8bb0eaf0470ae9f070a4d4eb55",
-      "rev_count": 1122823,
-      "rev_date": "2026-11-17T04:43:17Z",
-      "scrape_date": "2026-11-19T06:14:10.545333Z",
+      "rev": "151fa4e8ddfdd8dd25d945ad94ed54a13de9f6e4",
+      "rev_count": 1086391,
+      "rev_date": "2026-10-06T04:29:54Z",
+      "scrape_date": "2026-10-07T05:32:12.629660Z",
       "stabilities": [
         "unstable"
       ],
@@ -63,7 +63,7 @@
         "out"
       ],
       "outputs": {
-        "out": "/nix/store/lycyd5j2h7j2q13ggam638bg56v1mfk7-example-unfree-package-1.0"
+        "out": "/nix/store/7203xbyfh69jkvr2jjcafdsxx97glvki-example-unfree-package-1.0"
       },
       "system": "aarch64-linux",
       "group": "toplevel",
@@ -72,17 +72,17 @@
     {
       "attr_path": "hello-unfree",
       "broken": false,
-      "derivation": "/nix/store/mscfaizxskh1rvqvmgjrbyqhy1qbhb29-example-unfree-package-1.0.drv",
+      "derivation": "/nix/store/br185pns5ax8fz94iiwxiyaq7q4bdj36-example-unfree-package-1.0.drv",
       "description": "Example package with unfree license (for testing)",
       "install_id": "hello-unfree",
       "license": "Unfree",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=04906337b6d53e8bb0eaf0470ae9f070a4d4eb55",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=151fa4e8ddfdd8dd25d945ad94ed54a13de9f6e4",
       "name": "example-unfree-package-1.0",
       "pname": "hello-unfree",
-      "rev": "04906337b6d53e8bb0eaf0470ae9f070a4d4eb55",
-      "rev_count": 1122823,
-      "rev_date": "2026-11-17T04:43:17Z",
-      "scrape_date": "2026-11-19T06:43:20.682631Z",
+      "rev": "151fa4e8ddfdd8dd25d945ad94ed54a13de9f6e4",
+      "rev_count": 1086391,
+      "rev_date": "2026-10-06T04:29:54Z",
+      "scrape_date": "2026-10-07T06:08:57.197332Z",
       "stabilities": [
         "unstable"
       ],
@@ -92,7 +92,7 @@
         "out"
       ],
       "outputs": {
-        "out": "/nix/store/9pi0ngnqava1b7g679l8gq3n8y02a3i2-example-unfree-package-1.0"
+        "out": "/nix/store/z4z3q7pqlcrgnpzqhaswf8pj20bz5hfa-example-unfree-package-1.0"
       },
       "system": "x86_64-linux",
       "group": "toplevel",
