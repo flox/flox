@@ -1076,76 +1076,13 @@ impl UpgradeResult {
     /// Return a map of packages that have upgrades in the format
     /// packages[install_id][system] = (old_package, new_package)
     pub fn diff(&self) -> UpgradeDiff {
-        // Record a nested map where you retrieve the locked package
-        // via pkgs[install_id][system]
-        let previous_packages = if let Some(ref lockfile) = self.old_lockfile {
-            let mut pkgs_by_id = BTreeMap::new();
-            lockfile.packages.iter().for_each(|pkg| {
-                let by_system = pkgs_by_id
-                    .entry(pkg.install_id().to_owned())
-                    .or_insert(BTreeMap::new());
-                by_system.entry(pkg.system().clone()).or_insert(pkg.clone());
-            });
-            pkgs_by_id
-        } else {
-            BTreeMap::new()
-        };
-
-        let mut pkgs_after_upgrade = {
-            let mut pkgs_by_id = BTreeMap::new();
-            self.new_lockfile.packages.iter().for_each(|pkg| {
-                let by_system = pkgs_by_id
-                    .entry(pkg.install_id().to_owned())
-                    .or_insert(BTreeMap::new());
-                by_system.entry(pkg.system().clone()).or_insert(pkg.clone());
-            });
-            pkgs_by_id
-        };
-
-        let mut packages_with_upgrades: UpgradeDiff = BTreeMap::new();
-
-        // In some cases you may encounter a package that was in the old lockfile
-        // and isn't in the new lockfile (or isn't present for a certain system).
-        // We've encountered this in production, which most likely means that the
-        // manifest that was present when initiating the upgrade check was out of
-        // sync with its lockfile (i.e. someone edited the manifest through means
-        // other than `flox edit`). In those cases we silently ignore the packages
-        // (or packages for a certain system) that are no longer present.
-        for (prev_install_id, prev_packages_by_system) in previous_packages.into_iter() {
-            if let Some(mut after_packages_by_system) = pkgs_after_upgrade.remove(&prev_install_id)
-            {
-                for (prev_system, prev_package) in prev_packages_by_system {
-                    if let Some(after_package) = after_packages_by_system.remove(&prev_system) {
-                        // Store paths return None for the derivation,
-                        // and we shouldn't say store paths have an upgrade.
-                        if prev_package.derivation().is_some()
-                            && after_package.derivation().is_some()
-                            && prev_package.derivation() != after_package.derivation()
-                        {
-                            let by_system = packages_with_upgrades
-                                .entry(prev_install_id.to_owned())
-                                .or_default();
-                            by_system.insert(prev_system.to_owned(), (prev_package, after_package));
-                        }
-                    }
-                }
-            }
-        }
-
-        packages_with_upgrades
+        diff_lockfiles(self.old_lockfile.as_ref(), &self.new_lockfile)
     }
 
     /// Return a map of packages that have upgrades in the format
     /// packages[install_id] = (old_package, new_package)
     pub fn diff_for_system(&self, system: &str) -> SingleSystemUpgradeDiff {
-        self.diff()
-            .into_iter()
-            .filter_map(|(install_id, mut by_system)| {
-                by_system
-                    .remove(system)
-                    .map(|(old_package, new_package)| (install_id, (old_package, new_package)))
-            })
-            .collect()
+        diff_lockfiles_for_system(self.old_lockfile.as_ref(), &self.new_lockfile, system)
     }
 
     /// Returns the names of includes that were changed
@@ -1179,6 +1116,87 @@ impl UpgradeResult {
             .map(|locked_include| locked_include.name.clone())
             .collect()
     }
+}
+
+/// Return the packages whose locked derivation differs between two lockfiles,
+/// in the format packages[install_id][system] = (old_package, new_package).
+///
+/// Shared by `flox upgrade` and `flox install`, which both report how a
+/// re-lock moved packages that were already locked.
+pub fn diff_lockfiles(old_lockfile: Option<&Lockfile>, new_lockfile: &Lockfile) -> UpgradeDiff {
+    // Record a nested map where you retrieve the locked package
+    // via pkgs[install_id][system]
+    let previous_packages = if let Some(lockfile) = old_lockfile {
+        let mut pkgs_by_id = BTreeMap::new();
+        lockfile.packages.iter().for_each(|pkg| {
+            let by_system = pkgs_by_id
+                .entry(pkg.install_id().to_owned())
+                .or_insert(BTreeMap::new());
+            by_system.entry(pkg.system().clone()).or_insert(pkg.clone());
+        });
+        pkgs_by_id
+    } else {
+        BTreeMap::new()
+    };
+
+    let mut pkgs_after_upgrade = {
+        let mut pkgs_by_id = BTreeMap::new();
+        new_lockfile.packages.iter().for_each(|pkg| {
+            let by_system = pkgs_by_id
+                .entry(pkg.install_id().to_owned())
+                .or_insert(BTreeMap::new());
+            by_system.entry(pkg.system().clone()).or_insert(pkg.clone());
+        });
+        pkgs_by_id
+    };
+
+    let mut packages_with_upgrades: UpgradeDiff = BTreeMap::new();
+
+    // In some cases you may encounter a package that was in the old lockfile
+    // and isn't in the new lockfile (or isn't present for a certain system).
+    // We've encountered this in production, which most likely means that the
+    // manifest that was present when initiating the upgrade check was out of
+    // sync with its lockfile (i.e. someone edited the manifest through means
+    // other than `flox edit`). In those cases we silently ignore the packages
+    // (or packages for a certain system) that are no longer present.
+    for (prev_install_id, prev_packages_by_system) in previous_packages.into_iter() {
+        if let Some(mut after_packages_by_system) = pkgs_after_upgrade.remove(&prev_install_id) {
+            for (prev_system, prev_package) in prev_packages_by_system {
+                if let Some(after_package) = after_packages_by_system.remove(&prev_system) {
+                    // Store paths return None for the derivation,
+                    // and we shouldn't say store paths have an upgrade.
+                    if prev_package.derivation().is_some()
+                        && after_package.derivation().is_some()
+                        && prev_package.derivation() != after_package.derivation()
+                    {
+                        let by_system = packages_with_upgrades
+                            .entry(prev_install_id.to_owned())
+                            .or_default();
+                        by_system.insert(prev_system.to_owned(), (prev_package, after_package));
+                    }
+                }
+            }
+        }
+    }
+
+    packages_with_upgrades
+}
+
+/// Like [diff_lockfiles], restricted to one system, in the format
+/// packages[install_id] = (old_package, new_package)
+pub fn diff_lockfiles_for_system(
+    old_lockfile: Option<&Lockfile>,
+    new_lockfile: &Lockfile,
+    system: &str,
+) -> SingleSystemUpgradeDiff {
+    diff_lockfiles(old_lockfile, new_lockfile)
+        .into_iter()
+        .filter_map(|(install_id, mut by_system)| {
+            by_system
+                .remove(system)
+                .map(|(old_package, new_package)| (install_id, (old_package, new_package)))
+        })
+        .collect()
 }
 
 #[derive(Debug, Error)]
