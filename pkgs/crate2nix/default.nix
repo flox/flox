@@ -30,6 +30,7 @@
   llvmPackages,
   nix,
   nixpkgsInputLockedURL,
+  nixpkgsLib,
   pkg-config,
   pkgsFor,
   process-compose,
@@ -63,6 +64,7 @@ let
     # mutable `build/` paths instead.
     flox-rust-sdk = {
       COMMON_NIXPKGS_URL = nixpkgsInputLockedURL inputs.nixpkgs;
+      NIXPKGS_LIB_URL = "path:${nixpkgsLib}";
       GIT_PKG = gitMinimal;
       GNUMAKE_BIN = "${gnumake}/bin/make";
       NIX_BIN = "${nix}/bin/nix";
