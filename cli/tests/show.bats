@@ -89,6 +89,53 @@ setup_file() {
   assert_equal "${lines[11]}" "    hello@2.10"
 }
 
+@test "'flox show' - no deprecation warning for a package that isn't deprecated" {
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/show/hello.yaml"
+  run --separate-stderr "$FLOX_BIN" show hello
+  assert_success
+  assert_equal "$stderr" ""
+}
+
+# ---------------------------------------------------------------------------- #
+
+# The catalog reports `php81` as deprecated with a message and no replacement.
+@test "'flox show' - deprecated package without a replacement" {
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/show/php81.yaml"
+  run --separate-stderr "$FLOX_BIN" show php81
+  assert_success
+  assert_equal "$stderr" "! php81 is EOL"
+  assert_equal "${lines[0]}" "php81 - HTML-embedded scripting language"
+  assert_equal "${lines[1]}" "Catalog: nixpkgs"
+  assert_equal "${lines[2]}" "Latest:  php81@8.1.33"
+
+  # The warning is after the version list, which can run to many screens, so
+  # a user at the end of the output sees it. This is the output as a terminal
+  # shows it, with stdout and stderr merged.
+  run "$FLOX_BIN" show php81
+  assert_success
+  assert_equal "${lines[-2]}" "    php81@8.1.1"
+  assert_equal "${lines[-1]}" "! php81 is EOL"
+}
+
+# The catalog reports `aria` as renamed to `aria2`.
+@test "'flox show' - deprecated package with a replacement" {
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/show/aria.yaml"
+  run --separate-stderr "$FLOX_BIN" show aria
+  assert_success
+  assert_equal "$stderr" "! 'aria' has been renamed to/replaced by 'aria2'"
+  assert_equal "${lines[0]}" "aria - Lightweight, multi-protocol, multi-source, command-line download utility"
+  assert_equal "${lines[2]}" "Latest:  aria@aria2-1.37.0"
+
+  # The warning is the last line of the output as a terminal shows it, with
+  # stdout and stderr merged.
+  run "$FLOX_BIN" show aria
+  assert_success
+  assert_equal "${lines[-2]}" "    aria@aria2-1.35.0"
+  assert_equal "${lines[-1]}" "! 'aria' has been renamed to/replaced by 'aria2'"
+}
+
+# ---------------------------------------------------------------------------- #
+
 # bats test_tags=python
 
 # Check pkg-path is handled correctly

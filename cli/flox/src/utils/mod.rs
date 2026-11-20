@@ -13,6 +13,7 @@ pub mod active_environments;
 pub mod catalog_lock;
 pub mod colors;
 pub mod credential_store;
+pub mod deprecation;
 pub mod detached;
 pub mod detect_shell;
 pub mod dialog;

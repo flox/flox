@@ -732,6 +732,12 @@ cmd = "flox show hello"
 [show.flask]
 cmd = "flox show python310Packages.flask"
 
+[show.php81]
+cmd = "flox show php81"
+
+[show.aria]
+cmd = "flox show aria"
+
 [init.go]
 files = ["init/go/common", "init/go/module"]
 pre_cmd = '''
