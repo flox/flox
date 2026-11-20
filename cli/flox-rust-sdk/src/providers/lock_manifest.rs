@@ -1172,9 +1172,7 @@ impl LockManifest {
                         tracing::debug!(kind = "version_not_found");
                         let Some(failure) = versions_at_other_stabilities.get(&inner.install_id)
                         else {
-                            failures.push(ResolutionFailure::FallbackMessage {
-                                msg: inner.msg.clone(),
-                            });
+                            Self::record_version_unavailable(&mut failures, inner, manifest);
                             continue;
                         };
                         // The catalog sends one message per system; report
@@ -1222,15 +1220,46 @@ impl LockManifest {
         Ok(failures)
     }
 
+    /// Adds the system a version is missing on to the failure for its install
+    /// ID, starting one if there is none.
+    ///
+    /// The catalog reports a missing version once per system, and its message
+    /// names the system, so those messages can't be shown as they are without
+    /// repeating the failure for each system.
+    fn record_version_unavailable(
+        failures: &mut Vec<ResolutionFailure>,
+        msg: &MsgVersionNotFound,
+        manifest: &ManifestLatest,
+    ) {
+        let reported = failures.iter_mut().find_map(|f| match f {
+            ResolutionFailure::VersionUnavailable(reported)
+                if reported.install_id == msg.install_id =>
+            {
+                Some(reported)
+            },
+            _ => None,
+        });
+        if let Some(reported) = reported {
+            reported.add_system(&msg.system);
+            return;
+        }
+        let failure = match VersionUnavailable::new(msg, manifest) {
+            Some(failure) => ResolutionFailure::VersionUnavailable(failure),
+            None => ResolutionFailure::FallbackMessage {
+                msg: msg.msg.clone(),
+            },
+        };
+        failures.push(failure);
+    }
+
     /// Versions that a group's stability lacks but another stability has,
     /// keyed by install ID.
     ///
     /// The catalog reports a missing version once per system, so this keeps
     /// the stabilities with a build on every system. A version that no
-    /// stability has on every system is left out, and its per-system messages
-    /// are reported as the catalog sent them. So is a version with a message
-    /// that doesn't name stabilities: stability advice would hide that
-    /// system's failure.
+    /// stability has on every system is left out, and is reported without
+    /// stability advice. So is a version with a message that doesn't name
+    /// stabilities: stability advice would hide that system's failure.
     fn versions_at_other_stabilities(
         msgs: &[ResolutionMessage],
         manifest: &ManifestLatest,
@@ -1528,6 +1557,7 @@ pub enum ResolutionFailure {
         invalid_systems: Vec<String>,
     },
     SystemsNotOnSamePage(MsgAttrPathNotFoundSystemsNotOnSamePage),
+    VersionUnavailable(VersionUnavailable),
     ConstraintsTooTight {
         catalog_message: MsgConstraintsTooTight,
         group: String,
@@ -1536,6 +1566,85 @@ pub enum ResolutionFailure {
     FallbackMessage {
         msg: String,
     },
+}
+
+/// A package with no build that satisfies its version constraint, on one or
+/// more of the systems requested for it.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct VersionUnavailable {
+    pub install_id: String,
+    pub pkg_path: String,
+    /// The version constraint from the manifest
+    pub version: Option<String>,
+    /// The systems the catalog reported the failure on, sorted
+    pub systems: Vec<String>,
+    /// The systems requested for the package, sorted
+    pub requested_systems: Vec<String>,
+}
+
+impl VersionUnavailable {
+    /// `None` when the manifest doesn't have the package or the catalog's
+    /// message doesn't say which system it is about, so there is nothing to
+    /// merge it with.
+    fn new(msg: &MsgVersionNotFound, manifest: &ManifestLatest) -> Option<Self> {
+        if msg.system.is_empty() {
+            return None;
+        }
+        let descriptor = manifest.catalog_descriptor_with_id(&msg.install_id)?;
+        let mut requested_systems = descriptor
+            .systems
+            .as_deref()
+            .or(manifest.options.systems.as_deref())
+            .unwrap_or(&DEFAULT_SYSTEMS_STR)
+            .to_vec();
+        requested_systems.sort();
+        Some(Self {
+            install_id: msg.install_id.clone(),
+            pkg_path: descriptor.pkg_path,
+            version: descriptor.version,
+            systems: vec![msg.system.clone()],
+            requested_systems,
+        })
+    }
+
+    fn add_system(&mut self, system: &str) {
+        if let Err(position) = self.systems.binary_search_by(|s| s.as_str().cmp(system)) {
+            self.systems.insert(position, system.to_string());
+        }
+    }
+
+    /// The systems to name, which is none when the failure is on every
+    /// system requested: the message would then only list what the user
+    /// asked for.
+    fn named_systems(&self) -> Option<&[String]> {
+        let on_every_requested_system = self
+            .requested_systems
+            .iter()
+            .all(|requested| self.systems.contains(requested));
+        (!on_every_requested_system).then_some(self.systems.as_slice())
+    }
+}
+
+impl Display for VersionUnavailable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let pkg_path = &self.pkg_path;
+        let on = self
+            .named_systems()
+            .map(|systems| {
+                format!(
+                    " on {}",
+                    systems.iter().map(|s| format!("'{s}'")).join(", ")
+                )
+            })
+            .unwrap_or_default();
+        match &self.version {
+            Some(version) => write!(
+                f,
+                "No version compatible with '{version}' found for '{pkg_path}'{on}."
+            ),
+            None => write!(f, "No version of '{pkg_path}' found{on}."),
+        }
+    }
 }
 
 /// A package, or a version of one, that has no build at the stability its
@@ -1720,6 +1829,13 @@ fn format_single_resolution_failure(failure: &ResolutionFailure, is_one_of_many:
             indent_by(extra_indent, msg)
         },
         ResolutionFailure::UnavailableAtStability(failure) => {
+            if is_one_of_many {
+                indent_by(2, failure.to_string())
+            } else {
+                format!("\n{failure}")
+            }
+        },
+        ResolutionFailure::VersionUnavailable(failure) => {
             if is_one_of_many {
                 indent_by(2, failure.to_string())
             } else {
@@ -4669,9 +4785,9 @@ mod tests {
     }
 
     /// Changing stability wouldn't help a version that no stability has on
-    /// every system, so its errors don't mention stability.
+    /// every system, so its failure doesn't mention stability.
     #[tokio::test]
-    async fn version_unavailable_at_every_stability_keeps_catalog_messages() {
+    async fn version_unavailable_at_every_stability_is_one_failure_without_stability_advice() {
         let failures = resolution_failures(
             indoc! {r#"
                 [install]
@@ -4695,19 +4811,30 @@ mod tests {
         .await;
 
         assert_eq!(failures, vec![
-            ResolutionFailure::FallbackMessage {
-                msg: "No version of 'python3' found on 'aarch64-darwin'.".to_string(),
-            },
-            ResolutionFailure::FallbackMessage {
-                msg: "No version of 'python3' found on 'x86_64-linux'.".to_string(),
-            },
-            ResolutionFailure::FallbackMessage {
-                msg: "No version of 'git' found on 'aarch64-darwin'.".to_string(),
-            },
-            ResolutionFailure::FallbackMessage {
-                msg: "No version of 'git' found on 'x86_64-linux'.".to_string(),
-            },
+            version_unavailable("python3", "3.13", &["aarch64-darwin", "x86_64-linux"], &[
+                "aarch64-darwin",
+                "x86_64-linux",
+            ]),
+            version_unavailable("git", "2.46", &["aarch64-darwin", "x86_64-linux"], &[
+                "aarch64-darwin",
+                "x86_64-linux",
+            ]),
         ]);
+    }
+
+    fn version_unavailable(
+        install_id: &str,
+        version: &str,
+        systems: &[&str],
+        requested_systems: &[&str],
+    ) -> ResolutionFailure {
+        ResolutionFailure::VersionUnavailable(VersionUnavailable {
+            install_id: install_id.to_string(),
+            pkg_path: install_id.to_string(),
+            version: Some(version.to_string()),
+            systems: systems.iter().map(|s| s.to_string()).collect(),
+            requested_systems: requested_systems.iter().map(|s| s.to_string()).collect(),
+        })
     }
 
     /// The message the catalog sends when `install_id` has no version on
@@ -4726,7 +4853,7 @@ mod tests {
     /// Changing stability can't fix a system whose failure the catalog didn't
     /// attribute to stability, and advice that only fixes the other systems
     /// would hide that failure. So one unannotated message for a package
-    /// keeps every message for it as the catalog sent it.
+    /// drops the stability advice for every system.
     #[tokio::test]
     async fn version_unavailable_on_a_system_for_another_reason_is_not_hidden() {
         let failures = resolution_failures(
@@ -4748,14 +4875,138 @@ mod tests {
         )
         .await;
 
-        assert_eq!(failures, vec![
-            ResolutionFailure::FallbackMessage {
-                msg: "No version of 'python3' found on 'aarch64-darwin'.".to_string(),
-            },
-            ResolutionFailure::FallbackMessage {
-                msg: "No version of 'python3' found on 'x86_64-linux'.".to_string(),
-            },
-        ]);
+        assert_eq!(failures, vec![version_unavailable(
+            "python3",
+            "3.12",
+            &["aarch64-darwin", "x86_64-linux"],
+            &["aarch64-darwin", "x86_64-linux"],
+        )]);
+    }
+
+    /// The catalog reports a missing version once per system; the manifest
+    /// asks for every default system, so one failure for all of them names none.
+    #[tokio::test]
+    async fn version_unavailable_on_every_requested_system_is_one_failure() {
+        let failures = resolution_failures(
+            indoc! {r#"
+                [install]
+                go.pkg-path = "go"
+                go.version = ">= 1.23"
+            "#},
+            DEFAULT_SYSTEMS_STR
+                .iter()
+                .map(|system| version_not_found_unannotated("go", system))
+                .collect(),
+        )
+        .await;
+        let requested = DEFAULT_SYSTEMS_STR
+            .iter()
+            .sorted()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+
+        assert_eq!(failures, vec![version_unavailable(
+            "go", ">= 1.23", &requested, &requested,
+        )]);
+        assert_eq!(
+            ResolutionFailures(failures).to_string(),
+            "\nNo version compatible with '>= 1.23' found for 'go'."
+        );
+    }
+
+    /// A system the package wasn't requested on can't fail, so a failure on
+    /// all the systems requested for it is on every system, whatever the
+    /// manifest requests for other packages.
+    #[tokio::test]
+    async fn version_unavailable_compares_with_the_systems_requested_for_the_package() {
+        let failures = resolution_failures(
+            indoc! {r#"
+                [install]
+                go.pkg-path = "go"
+                go.version = ">= 1.23"
+                go.systems = ["aarch64-linux", "x86_64-linux"]
+            "#},
+            vec![
+                version_not_found_unannotated("go", "x86_64-linux"),
+                version_not_found_unannotated("go", "aarch64-linux"),
+                // The same system again, as when the catalog repeats itself
+                version_not_found_unannotated("go", "aarch64-linux"),
+            ],
+        )
+        .await;
+
+        let systems = ["aarch64-linux", "x86_64-linux"];
+        assert_eq!(failures, vec![version_unavailable(
+            "go", ">= 1.23", &systems, &systems,
+        )]);
+        assert_eq!(
+            ResolutionFailures(failures).to_string(),
+            "\nNo version compatible with '>= 1.23' found for 'go'."
+        );
+    }
+
+    /// Naming the systems is how the user tells a package that is missing
+    /// everywhere from one missing on a platform they may not need.
+    #[tokio::test]
+    async fn version_unavailable_on_some_requested_systems_names_them() {
+        let failures = resolution_failures(
+            indoc! {r#"
+                [install]
+                go.pkg-path = "go"
+                go.version = ">= 1.23"
+
+                [options]
+                systems = ["aarch64-darwin", "aarch64-linux", "x86_64-linux"]
+            "#},
+            vec![
+                version_not_found_unannotated("go", "x86_64-linux"),
+                version_not_found_unannotated("go", "aarch64-darwin"),
+            ],
+        )
+        .await;
+
+        assert_eq!(failures, vec![version_unavailable(
+            "go",
+            ">= 1.23",
+            &["aarch64-darwin", "x86_64-linux"],
+            &["aarch64-darwin", "aarch64-linux", "x86_64-linux"],
+        )]);
+        assert_eq!(
+            ResolutionFailures(failures).to_string(),
+            "\nNo version compatible with '>= 1.23' found for 'go' on 'aarch64-darwin', 'x86_64-linux'."
+        );
+    }
+
+    /// Each package gets its own line, and a failure that isn't about a
+    /// version keeps its own.
+    #[tokio::test]
+    async fn version_unavailable_is_one_line_per_package_among_other_failures() {
+        let failures = resolution_failures(
+            indoc! {r#"
+                [install]
+                go.pkg-path = "go"
+                go.version = ">= 1.23"
+                node.pkg-path = "nodejs"
+                node.version = "99"
+
+                [options]
+                systems = ["aarch64-darwin", "x86_64-linux"]
+            "#},
+            vec![
+                version_not_found_unannotated("go", "aarch64-darwin"),
+                version_not_found_unannotated("node", "aarch64-darwin"),
+                version_not_found_unannotated("go", "x86_64-linux"),
+                version_not_found_unannotated("node", "x86_64-linux"),
+                not_in_catalog("nope"),
+            ],
+        )
+        .await;
+
+        assert_eq!(ResolutionFailures(failures).to_string(), indoc! {"
+                multiple resolution failures:
+                - No version compatible with '>= 1.23' found for 'go'.
+                - No version compatible with '99' found for 'nodejs'.
+                - could not find package 'nope'."});
     }
 
     /// A package with builds only at other stabilities is reported as such,
