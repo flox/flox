@@ -55,6 +55,14 @@ use indoc::formatdoc;
 pub fn bash_hook(flox_bin: &str) -> String {
     let flox_bin = shell_escape::escape(Cow::Borrowed(flox_bin));
     let marker = prompt_hook_marker_value(true);
+    // Bash 5.1+ runs every element of a PROMPT_COMMAND array, so there the
+    // hook counts as registered in any element and is added as its own element,
+    // which keeps `$_` and PIPESTATUS intact for the user's callbacks. Older
+    // Bash runs only element zero, so there the hook counts only in element
+    // zero and is added by prefixing that element's text; a scalar assignment
+    // to an array replaces element zero and keeps the later elements. The
+    // helpers are unset before assigning so a readonly PROMPT_COMMAND, whose
+    // assignment error aborts the block, does not leave them behind.
     formatdoc!(
         r#"
         export {PROMPT_HOOK_VERSION_ENV}={marker};
@@ -67,12 +75,21 @@ pub fn bash_hook(flox_bin: &str) -> String {
           trap - SIGINT;
           return $_prev_exit;
         }};
-        if [[ ";${{PROMPT_COMMAND[*]:-}};" != *";_flox_hook;"* ]]; then
-          if [[ "$(declare -p PROMPT_COMMAND 2>&1)" == "declare -a"* ]]; then
+        if [[ "$(declare -p PROMPT_COMMAND 2>&1)" == "declare -a"* ]] && (( BASH_VERSINFO[0] * 100 + BASH_VERSINFO[1] >= 501 )); then
+          _flox_hook_registered=;
+          for _flox_prompt_command in "${{PROMPT_COMMAND[@]:-}}"; do
+            if [[ ";$_flox_prompt_command;" == *";_flox_hook;"* ]]; then
+              _flox_hook_registered=1;
+              break;
+            fi;
+          done;
+          if [[ -z $_flox_hook_registered ]]; then
+            unset _flox_hook_registered _flox_prompt_command;
             PROMPT_COMMAND=(_flox_hook "${{PROMPT_COMMAND[@]}}");
-          else
-            PROMPT_COMMAND="_flox_hook${{PROMPT_COMMAND:+;$PROMPT_COMMAND}}";
           fi;
+          unset _flox_hook_registered _flox_prompt_command;
+        elif [[ ";${{PROMPT_COMMAND:-}};" != *";_flox_hook;"* ]]; then
+          PROMPT_COMMAND="_flox_hook${{PROMPT_COMMAND:+;$PROMPT_COMMAND}}";
         fi;
         "#
     )
