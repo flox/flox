@@ -235,3 +235,51 @@ EOF
   run "$FLOX_BIN" activate -c '[ -d "$FLOX_ENV/lib" ] && [ -d "$FLOX_ENV/include" ]'
   assert_success
 }
+
+# ---------------------------------------------------------------------------- #
+
+# Run mode never sets PYTHONPATH, so a Python library installed to the
+# environment is present on disk but not importable. The activation warns
+# once, names the library, and leaves dev mode and library-free environments
+# alone.
+
+@test "runtime: warns that installed Python packages will not import" {
+  skip_x86_64_darwin_replay
+  project_setup
+  cp "$GENERATED_DATA"/envs/build_with_requests/* "$PROJECT_DIR/.flox/env"
+
+  # The run build links only the requested packages, not their Python
+  # dependencies, so the import fails somewhere in the dependency chain
+  # (here urllib3) rather than on requests itself.
+  run "$FLOX_BIN" activate -m run -- python3 -c 'import requests'
+  assert_failure
+  assert_output --partial "ModuleNotFoundError"
+  assert_line "WARNING: this environment is activated in run mode, which does not set PYTHONPATH."
+  assert_line "Python packages installed in it (requests) will not import."
+  assert_line "Build your app with a [build] section and install the result, or activate in dev mode."
+  assert_line "See https://flox.dev/docs/concepts/activation"
+  # Printed once per activation.
+  assert_equal "$(grep -c 'WARNING: this environment is activated in run mode' <<< "$output")" 1
+}
+
+@test "runtime: does not warn when only a Python interpreter is installed" {
+  skip_x86_64_darwin_replay
+  project_setup
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/python3.yaml" "$FLOX_BIN" install python3
+
+  # The interpreter is in the run environment, so its absence is not what
+  # keeps the warning quiet.
+  FLOX_SHELL=bash run "$FLOX_BIN" activate -m run -c '[ -x "$FLOX_ENV/bin/python3" ]'
+  assert_success
+  refute_output --partial "WARNING: this environment is activated in run mode"
+}
+
+@test "dev: does not warn about installed Python packages" {
+  skip_x86_64_darwin_replay
+  project_setup
+  cp "$GENERATED_DATA"/envs/build_with_requests/* "$PROJECT_DIR/.flox/env"
+
+  run "$FLOX_BIN" activate -m dev -- python3 -c 'import requests'
+  assert_success
+  refute_output --partial "WARNING: this environment is activated in run mode"
+}
