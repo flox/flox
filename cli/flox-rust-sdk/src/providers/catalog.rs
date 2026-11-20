@@ -22,7 +22,6 @@ use floxhub_client::{
     FloxhubClientConfig,
     FloxhubClientError,
     FloxhubMockMode,
-    LockedSourceItem,
     PackageDetails,
     PackageGroup,
     PackageSystem,
@@ -30,7 +29,6 @@ use floxhub_client::{
     PublishResponse,
     ResolveError,
     ResolvedPackageGroup,
-    ResultsPage,
     SearchError,
     SearchLimit,
     SearchResults,
@@ -415,13 +413,6 @@ impl CatalogClientTrait for MockClient {
             )),
             _ => panic!("expected get_base_catalog response, found {:?}", &mock_resp),
         }
-    }
-
-    async fn get_catalog_locked_sources(
-        &self,
-        _catalog_name: impl AsRef<str> + Send + Sync,
-    ) -> Result<ResultsPage<LockedSourceItem>, FloxhubClientError> {
-        unimplemented!("get_catalog_locked_sources not implemented for MockClient")
     }
 
     async fn build_inputs_lookup(
