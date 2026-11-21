@@ -1,12 +1,13 @@
+use std::fmt;
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 
 use flox_core::features::Features;
 use flox_core::floxhub::Floxhub;
 use flox_core::vars::FLOX_VERSION_STRING;
 pub use floxhub_client::{AccessToken, AuthContext, AuthFailure, FloxhubToken, UserIdentity};
-use floxhub_client::{FloxhubClient, FloxhubClientError};
+use floxhub_client::{FloxhubClient, FloxhubClientError, ResolutionMessage};
 use url::Url;
 use uuid::Uuid;
 
@@ -23,6 +24,42 @@ pub static FLOX_VERSION: LazyLock<FloxVersion> = LazyLock::new(|| {
     };
     version
 });
+
+/// Where an operation hands the catalog's warnings about packages it resolved
+/// to the caller, as soon as they are known.
+///
+/// Building an environment can take long and can fail, and the warnings may be
+/// what explains that, so returning them with the final result would be too
+/// late. Doing nothing is the default, so operations that the user didn't ask
+/// to change the lock stay silent.
+#[derive(Clone, Default)]
+pub struct ResolutionWarningSink(Option<Arc<ResolutionWarningHandler>>);
+
+type ResolutionWarningHandler = dyn Fn(&[ResolutionMessage]) + Send + Sync;
+
+impl ResolutionWarningSink {
+    pub fn new(handler: impl Fn(&[ResolutionMessage]) + Send + Sync + 'static) -> Self {
+        Self(Some(Arc::new(handler)))
+    }
+
+    /// Hand over `warnings`, unless there are none.
+    pub fn send(&self, warnings: &[ResolutionMessage]) {
+        match &self.0 {
+            Some(handler) if !warnings.is_empty() => handler(warnings),
+            _ => {},
+        }
+    }
+}
+
+impl fmt::Debug for ResolutionWarningSink {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(if self.0.is_some() {
+            "ResolutionWarningSink(set)"
+        } else {
+            "ResolutionWarningSink(unset)"
+        })
+    }
+}
 
 /// The main API struct for our flox implementation
 ///
@@ -74,6 +111,10 @@ pub struct Flox {
     /// Device UUID for telemetry correlation.
     /// None when metrics are disabled.
     pub metrics_device_uuid: Option<Uuid>,
+
+    /// Receives the warnings from locking done for `install`, `edit`,
+    /// `upgrade` and `include upgrade`.
+    pub resolution_warnings: ResolutionWarningSink,
 }
 
 impl Flox {
@@ -258,6 +299,7 @@ pub mod test_helpers {
             verbosity: 0,
             retain_diagnostic_tempfiles: false,
             metrics_device_uuid: None,
+            resolution_warnings: Default::default(),
         };
 
         (flox, tempdir_handle)

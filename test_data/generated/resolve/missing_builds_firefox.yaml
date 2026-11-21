@@ -1,0 +1,18 @@
+when:
+  path: /api/v1/catalog/resolve
+  method: POST
+  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"firefox","install_id":"firefox","systems":["aarch64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"firefox","install_id":"firefox","systems":["aarch64-linux"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"firefox","install_id":"firefox","systems":["x86_64-linux"]}],"name":"toplevel"}]}'
+then:
+  status: 200
+  header:
+  - name: date
+    value: Fri, 20 Nov 2026 23:58:14 GMT
+  - name: content-type
+    value: application/json
+  - name: content-length
+    value: '2855'
+  - name: server
+    value: uvicorn
+  - name: apigw-requestid
+    value: HKe3fiD_oAMEVaQ=
+  body: '{"items":[{"name":"toplevel","page":{"page":1122823,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"firefox","pkg_path":"firefox","derivation":"/nix/store/5lfrmwx0ymvbnm53scfhk64h0gql4kjp-firefox-160.0.drv","name":"firefox-160.0","pname":"firefox","version":"160.0","system":"aarch64-darwin","outputs":[{"name":"out","store_path":"/nix/store/yp76ah63c5pf40p5jin9azvabyblj2ff-firefox-160.0"}],"outputs_to_install":["out"],"description":"Web browser built from Firefox source tree","license":"MPL-2.0","locked_url":"https://github.com/flox/nixpkgs?rev=04906337b6d53e8bb0eaf0470ae9f070a4d4eb55","rev":"04906337b6d53e8bb0eaf0470ae9f070a4d4eb55","rev_count":1122823,"rev_date":"2026-11-17T04:43:17Z","broken":false,"insecure":false,"unfree":false,"missing_builds":true,"stabilities":["unstable"],"scrape_date":"2026-11-19T05:47:33.130902Z","cache_uri":null,"install_id":"firefox"},{"catalog":"nixpkgs","attr_path":"firefox","pkg_path":"firefox","derivation":"/nix/store/k2915wmyvv1k3786rp9xk16ahqh08023-firefox-160.0.drv","name":"firefox-160.0","pname":"firefox","version":"160.0","system":"aarch64-linux","outputs":[{"name":"out","store_path":"/nix/store/pqwa87q0ck06m346b83qwmmxnax3jrpd-firefox-160.0"}],"outputs_to_install":["out"],"description":"Web browser built from Firefox source tree","license":"MPL-2.0","locked_url":"https://github.com/flox/nixpkgs?rev=04906337b6d53e8bb0eaf0470ae9f070a4d4eb55","rev":"04906337b6d53e8bb0eaf0470ae9f070a4d4eb55","rev_count":1122823,"rev_date":"2026-11-17T04:43:17Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2026-11-19T06:14:10.438531Z","cache_uri":null,"install_id":"firefox"},{"catalog":"nixpkgs","attr_path":"firefox","pkg_path":"firefox","derivation":"/nix/store/3vj7dm0iab1f3k174p8c1cq1i8mjdkqs-firefox-160.0.drv","name":"firefox-160.0","pname":"firefox","version":"160.0","system":"x86_64-linux","outputs":[{"name":"out","store_path":"/nix/store/yw59xgd672kliw9mf3kx7md4jywgni11-firefox-160.0"}],"outputs_to_install":["out"],"description":"Web browser built from Firefox source tree","license":"MPL-2.0","locked_url":"https://github.com/flox/nixpkgs?rev=04906337b6d53e8bb0eaf0470ae9f070a4d4eb55","rev":"04906337b6d53e8bb0eaf0470ae9f070a4d4eb55","rev_count":1122823,"rev_date":"2026-11-17T04:43:17Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2026-11-19T06:43:20.578991Z","cache_uri":null,"install_id":"firefox"}],"messages":[{"level":"warning","type":"missing_builds","message":"The package for install_id ''firefox'' expected to have known build info, but no build can be confirmed. Flox may attempt to build locally, possibly taking a long time, and possibly still fail.","context":{"install_id":"firefox"}}],"complete":true},"candidate_pages":null,"messages":[]}]}'

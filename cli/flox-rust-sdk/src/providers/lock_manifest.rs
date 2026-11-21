@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::Display;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -270,6 +270,36 @@ impl From<LockResult> for Lockfile {
     }
 }
 
+/// A lockfile together with what the catalog said about the groups it
+/// resolved to produce it.
+///
+/// Locking only returns the messages; whether to show them depends on whether
+/// the user asked for the lock to change, which the caller knows.
+#[derive(Debug, Clone)]
+pub struct LockOutcome {
+    pub lockfile: Lockfile,
+    /// Warning-level messages from groups that resolved, about packages that
+    /// are new or changed in the lockfile on any of its systems.
+    /// The same text about the same install ID is kept once however many
+    /// systems it applied to.
+    /// A [ResolutionMessage::MissingBuilds] is also kept once for each install
+    /// ID and lists only the new or changed systems it applies to.
+    /// Empty when nothing was resolved, e.g. because everything was already
+    /// locked.
+    pub resolution_warnings: Vec<ResolutionMessage>,
+}
+
+/// The packages locked by [LockManifest::resolve_manifest] and the warnings
+/// the catalog attached to them.
+#[derive(Debug, Clone)]
+struct Resolution {
+    packages: Vec<LockedPackage>,
+    warnings: Vec<ResolutionMessage>,
+    /// The (install ID, system) pairs the catalog resolved to a package
+    /// without a confirmed pre-built copy, for systems it expects one on.
+    missing_builds: BTreeSet<(String, String)>,
+}
+
 /// A provider responsible for operations responsible for locking manifests,
 /// which includes extracting and organizing constraints from the manifest
 /// and an optionally pre-existing lockfile.
@@ -418,6 +448,7 @@ impl LockManifest {
     }
 
     /// Merge included environments, resolve the merged manifest, and return the resulting lockfile
+    /// along with the warnings the catalog attached to what it resolved.
     ///
     /// Already resolved packages will not be re-resolved,
     /// and already fetched includes will not be re-fetched.
@@ -426,7 +457,7 @@ impl LockManifest {
         manifest: &Manifest<MigratedTypedOnly>,
         seed_lockfile: Option<&Lockfile>,
         include_fetcher: &IncludeFetcher,
-    ) -> Result<Lockfile, EnvironmentError> {
+    ) -> Result<LockOutcome, EnvironmentError> {
         Self::lock_manifest_with_include_upgrades(
             flox,
             manifest,
@@ -456,7 +487,7 @@ impl LockManifest {
         seed_lockfile: Option<&Lockfile>,
         include_fetcher: &IncludeFetcher,
         to_upgrade: Option<Vec<String>>,
-    ) -> Result<Lockfile, EnvironmentError> {
+    ) -> Result<LockOutcome, EnvironmentError> {
         // Attempt the merge once, then do the backwards compatibility test
         let (merged, mut compose) = Self::merge_manifest(
             flox,
@@ -469,11 +500,14 @@ impl LockManifest {
         .map_err(EnvironmentError::Recoverable)?;
 
         let catalog = &flox.floxhub_client;
-        let packages =
-            Self::resolve_manifest(&merged, seed_lockfile, catalog, &flox.installable_locker)
-                .await
-                .map_err(|err| Self::mark_included_stability(err, manifest.as_latest_schema()))
-                .map_err(|e| EnvironmentError::Core(CoreEnvironmentError::Resolve(e)))?;
+        let Resolution {
+            packages,
+            warnings,
+            missing_builds,
+        } = Self::resolve_manifest(&merged, seed_lockfile, catalog, &flox.installable_locker)
+            .await
+            .map_err(|err| Self::mark_included_stability(err, manifest.as_latest_schema()))
+            .map_err(|e| EnvironmentError::Core(CoreEnvironmentError::Resolve(e)))?;
 
         let proposed_lockfile = Lockfile {
             version: Version,
@@ -510,7 +544,16 @@ impl LockManifest {
             compose,
         };
 
-        Ok(lockfile)
+        let warnings = Self::with_missing_build_systems(warnings, &missing_builds);
+        let resolution_warnings = Self::with_pkg_paths(
+            Self::warnings_for_changes(warnings, seed_lockfile, &lockfile.packages),
+            &merged,
+        );
+
+        Ok(LockOutcome {
+            lockfile,
+            resolution_warnings,
+        })
     }
 
     /// Fetch included environments and merge them with the manifest, returning
@@ -749,7 +792,7 @@ impl LockManifest {
         seed_lockfile: Option<&Lockfile>,
         client: &impl floxhub_client::CatalogClientTrait,
         installable_locker: &impl InstallableLocker,
-    ) -> Result<Vec<LockedPackage>, ResolveError> {
+    ) -> Result<Resolution, ResolveError> {
         let catalog_groups = Self::collect_resolution_package_groups(manifest, seed_lockfile)?;
         let (mut already_locked_packages, groups_to_lock) =
             Self::split_fully_locked_groups(catalog_groups, seed_lockfile)?;
@@ -778,12 +821,16 @@ impl LockManifest {
 
         if groups_to_lock.is_empty() && installables_to_lock.is_empty() {
             debug!("All packages are already locked, skipping resolution");
-            return Ok([
-                locked_store_paths,
-                already_locked_packages,
-                already_locked_installables,
-            ]
-            .concat());
+            return Ok(Resolution {
+                packages: [
+                    locked_store_paths,
+                    already_locked_packages,
+                    already_locked_installables,
+                ]
+                .concat(),
+                warnings: vec![],
+                missing_builds: BTreeSet::new(),
+            });
         }
 
         // lock packages
@@ -810,6 +857,9 @@ impl LockManifest {
             vec![]
         };
 
+        let warnings = Self::collect_warnings(&resolved);
+        let missing_builds = Self::collect_missing_builds(&resolved);
+
         // unpack locked packages from response
         let locked_packages: Vec<LockedPackage> =
             Self::locked_packages_from_resolution(manifest, resolved)?
@@ -833,14 +883,18 @@ impl LockManifest {
             &manifest.options.allow,
         )?;
 
-        Ok([
-            locked_store_paths,
-            already_locked_packages,
-            locked_packages,
-            already_locked_installables,
-            locked_installables,
-        ]
-        .concat())
+        Ok(Resolution {
+            packages: [
+                locked_store_paths,
+                already_locked_packages,
+                locked_packages,
+                already_locked_installables,
+                locked_installables,
+            ]
+            .concat(),
+            warnings,
+            missing_builds,
+        })
     }
 
     /// Explain a failed resolve request that set a stability the Flox Catalog
@@ -1206,6 +1260,12 @@ impl LockManifest {
                             group: group.name.clone(),
                         }
                     },
+                    ResolutionMessage::MissingBuilds(inner) => {
+                        tracing::debug!(kind = "missing_builds");
+                        ResolutionFailure::FallbackMessage {
+                            msg: inner.msg.clone(),
+                        }
+                    },
                     ResolutionMessage::Unknown(inner) => {
                         tracing::debug!(
                             kind = "unknown",
@@ -1296,6 +1356,160 @@ impl LockManifest {
         let requested_systems = pkg_systems.unwrap_or(manifest_systems);
         let difference = &requested_systems - &valid_systems;
         Ok(Vec::from_iter(difference.into_iter().cloned()))
+    }
+
+    /// Warning-level messages the catalog attached to resolved groups, on
+    /// the group or on its page.
+    ///
+    /// The catalog repeats a message for each system it applies to, so a
+    /// message with the same text about the same install ID is kept once.
+    /// Messages that differ in text, such as ones naming the system, are all
+    /// kept. If a group failed to resolve, the resolution returns an error and
+    /// the warnings collected here are discarded with it.
+    fn collect_warnings(groups: &[ResolvedPackageGroup]) -> Vec<ResolutionMessage> {
+        let mut seen = HashSet::new();
+        groups
+            .iter()
+            .flat_map(|group| {
+                let page_msgs = group.page.iter().flat_map(|page| page.msgs.iter());
+                group.msgs.iter().chain(page_msgs)
+            })
+            .filter(|msg| msg.level() == MessageLevel::Warning)
+            .filter(|msg| seen.insert((msg.install_id().map(str::to_owned), msg.msg().to_owned())))
+            .cloned()
+            .collect()
+    }
+
+    /// The (install ID, system) pairs of resolved packages that the catalog
+    /// flags as lacking a confirmed pre-built copy, for systems where it
+    /// expects one.
+    ///
+    /// The catalog sets `missing_builds` on a package that is unfree, insecure
+    /// or broken as well, but it expects a build only for one that is none of
+    /// those (a flag it hasn't set counts as false), and sends its
+    /// missing-builds message on that basis
+    /// (`Checker.check_missing_builds` in flox/floxhub at
+    /// src/catalog-server/catalog_server/core/resolver.py).
+    /// Naming such a system would warn about a build nobody asked for.
+    fn collect_missing_builds(groups: &[ResolvedPackageGroup]) -> BTreeSet<(String, String)> {
+        groups
+            .iter()
+            .flat_map(|group| group.packages())
+            .filter(|package| package.missing_builds == Some(true))
+            .filter(|package| {
+                !package.unfree.unwrap_or(false)
+                    && !package.insecure.unwrap_or(false)
+                    && !package.broken.unwrap_or(false)
+            })
+            .map(|package| (package.install_id, package.system.to_string()))
+            .collect()
+    }
+
+    /// Set the systems of each missing-builds warning from `missing_builds`,
+    /// and keep one warning for each install ID.
+    ///
+    /// The catalog's message names an install ID but no system, and it is sent
+    /// when the package lacks a pre-built copy on any requested system. The
+    /// systems come from the resolved packages instead, sorted.
+    /// A warning for an install ID with no system in `missing_builds` is
+    /// dropped, because no system is expected to build it.
+    fn with_missing_build_systems(
+        warnings: Vec<ResolutionMessage>,
+        missing_builds: &BTreeSet<(String, String)>,
+    ) -> Vec<ResolutionMessage> {
+        let mut seen = HashSet::new();
+        warnings
+            .into_iter()
+            .filter_map(|warning| match warning {
+                ResolutionMessage::MissingBuilds(mut inner) => {
+                    inner.systems = missing_builds
+                        .iter()
+                        .filter(|(install_id, _)| *install_id == inner.install_id)
+                        .map(|(_, system)| system.clone())
+                        .collect();
+                    let keep = !inner.systems.is_empty() && seen.insert(inner.install_id.clone());
+                    keep.then_some(ResolutionMessage::MissingBuilds(inner))
+                },
+                other => Some(other),
+            })
+            .collect()
+    }
+
+    /// Fill in the `pkg-path` that `manifest` has for the install ID of each
+    /// missing-builds warning.
+    ///
+    /// The catalog names only the install ID, which users can choose to be
+    /// different from the package's path.
+    /// A warning whose install ID has no catalog entry in `manifest` is left
+    /// without one.
+    fn with_pkg_paths(
+        warnings: Vec<ResolutionMessage>,
+        manifest: &ManifestLatest,
+    ) -> Vec<ResolutionMessage> {
+        warnings
+            .into_iter()
+            .map(|warning| match warning {
+                ResolutionMessage::MissingBuilds(mut inner) => {
+                    inner.pkg_path = manifest
+                        .catalog_descriptor_with_id(&inner.install_id)
+                        .map(|descriptor| descriptor.pkg_path);
+                    ResolutionMessage::MissingBuilds(inner)
+                },
+                other => other,
+            })
+            .collect()
+    }
+
+    /// Keep the warnings about packages that are new or different in
+    /// `packages` compared to `previous`, on any system.
+    ///
+    /// The catalog re-sends a whole group when one of its packages needs
+    /// resolving, and repeats its warnings for packages that were already
+    /// locked and haven't changed. A warning that names no install ID is kept
+    /// if any package changed.
+    /// A missing-builds warning is cut down to the systems whose package
+    /// changed, and dropped if none did, so a system that was already locked
+    /// isn't named again.
+    pub fn warnings_for_changes(
+        warnings: Vec<ResolutionMessage>,
+        previous: Option<&Lockfile>,
+        packages: &[LockedPackage],
+    ) -> Vec<ResolutionMessage> {
+        let previously_locked = previous
+            .into_iter()
+            .flat_map(|lockfile| &lockfile.packages)
+            .filter_map(LockedPackage::as_catalog_package_ref)
+            .collect::<Vec<_>>();
+        let changed = packages
+            .iter()
+            .filter_map(LockedPackage::as_catalog_package_ref)
+            .filter(|package| {
+                !previously_locked.iter().any(|old| {
+                    old.install_id == package.install_id
+                        && old.system == package.system
+                        && old.derivation == package.derivation
+                })
+            })
+            .map(|package| (package.install_id.as_str(), package.system.as_str()))
+            .collect::<HashSet<_>>();
+        warnings
+            .into_iter()
+            .filter_map(|warning| match warning {
+                ResolutionMessage::MissingBuilds(mut inner) => {
+                    inner.systems.retain(|system| {
+                        changed.contains(&(inner.install_id.as_str(), system.as_str()))
+                    });
+                    (!inner.systems.is_empty()).then_some(ResolutionMessage::MissingBuilds(inner))
+                },
+                other => {
+                    let is_changed = match other.install_id() {
+                        Some(install_id) => changed.iter().any(|(id, _)| *id == install_id),
+                        None => !changed.is_empty(),
+                    };
+                    is_changed.then_some(other)
+                },
+            })
+            .collect()
     }
 
     /// Detects whether any groups failed to resolve
@@ -1776,6 +1990,8 @@ mod tests {
         BaseCatalogInfo,
         CatalogPage,
         MsgAttrPathNotFoundNotOnCurrentStability,
+        MsgGeneral,
+        MsgMissingBuilds,
         MsgVersionNotFound,
         PackageDescriptor,
         PackageOutput,
@@ -2943,7 +3159,8 @@ mod tests {
             &InstallableLockerMock::new(),
         )
         .await
-        .unwrap();
+        .unwrap()
+        .packages;
 
         assert_eq!(&resolved_packages, &[foo_locked.into()]);
     }
@@ -3386,7 +3603,8 @@ mod tests {
             },
         )
         .await
-        .unwrap();
+        .unwrap()
+        .lockfile;
 
         assert_eq!(locked_manifest, locked);
     }
@@ -3417,13 +3635,13 @@ mod tests {
                 base_directory: Some(tempdir.path().to_path_buf()),
             })
             .block_on()
-            .unwrap();
+            .unwrap().lockfile;
 
             // Lock again with a mock_include_fetcher
             let lockfile_2 =
                 LockManifest::lock_manifest(&flox, &manifest.as_migrated_typed_only(), Some(&lockfile), &mock_include_fetcher())
                     .block_on()
-                    .unwrap();
+                    .unwrap().lockfile;
 
             prop_assert_eq!(lockfile, lockfile_2);
         }
@@ -3472,7 +3690,8 @@ mod tests {
             &PanickingLocker,
         )
         .await
-        .unwrap();
+        .unwrap()
+        .packages;
 
         assert_eq!(resolved_packages.len(), 2, "{:#?}", resolved_packages);
     }
@@ -3512,7 +3731,8 @@ mod tests {
             &locker_mock,
         )
         .await
-        .unwrap();
+        .unwrap()
+        .packages;
 
         assert_eq!(resolved_packages.len(), 2, "{:#?}", resolved_packages);
     }
@@ -3557,7 +3777,8 @@ mod tests {
             &locker_mock,
         )
         .await
-        .unwrap();
+        .unwrap()
+        .packages;
 
         assert_eq!(resolved_packages.as_slice(), &[
             foo_locked_priority_after.into()
@@ -3823,6 +4044,497 @@ mod tests {
             .unwrap_err(),
             ResolveError::UnfreeNotAllowed { .. }
         ));
+    }
+
+    /// The catalog sends its warning once for each system, three times here,
+    /// and it is reported once, naming every system.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn lock_warns_once_naming_every_system_without_prebuilt_copy() {
+        let (mut flox, _tempdir) = flox_instance();
+        flox.system = "x86_64-linux".to_string();
+        flox.floxhub_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/missing_builds_thunderbird.yaml"))
+                .await;
+        let manifest = Manifest::parse_and_migrate(
+            indoc! {r#"
+                version = 1
+                install.thunderbird.pkg-path = "thunderbird"
+            "#},
+            None,
+        )
+        .unwrap();
+        let outcome = LockManifest::lock_manifest(
+            &flox,
+            &manifest.as_migrated_typed_only(),
+            None,
+            &IncludeFetcher {
+                base_directory: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(outcome.resolution_warnings, vec![
+            ResolutionMessage::MissingBuilds(MsgMissingBuilds {
+                level: MessageLevel::Warning,
+                msg: "The package for install_id 'thunderbird' expected to have known build info, but no build can be confirmed. Flox may attempt to build locally, possibly taking a long time, and possibly still fail.".to_string(),
+                install_id: "thunderbird".to_string(),
+                pkg_path: Some("thunderbird".to_string()),
+                systems: vec![
+                    "aarch64-darwin".to_string(),
+                    "aarch64-linux".to_string(),
+                    "x86_64-linux".to_string(),
+                ],
+            })
+        ]);
+    }
+
+    /// Firefox has a pre-built copy for x86_64-linux but not for
+    /// aarch64-darwin, where whoever activates the environment builds it.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn lock_warns_when_prebuilt_copy_missing_only_on_another_system() {
+        let (mut flox, _tempdir) = flox_instance();
+        flox.system = "x86_64-linux".to_string();
+        flox.floxhub_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/missing_builds_firefox.yaml")).await;
+        let manifest = Manifest::parse_and_migrate(
+            indoc! {r#"
+                version = 1
+                install.firefox.pkg-path = "firefox"
+            "#},
+            None,
+        )
+        .unwrap();
+        let outcome = LockManifest::lock_manifest(
+            &flox,
+            &manifest.as_migrated_typed_only(),
+            None,
+            &IncludeFetcher {
+                base_directory: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(outcome.resolution_warnings, vec![
+            ResolutionMessage::MissingBuilds(MsgMissingBuilds {
+                level: MessageLevel::Warning,
+                msg: "The package for install_id 'firefox' expected to have known build info, but no build can be confirmed. Flox may attempt to build locally, possibly taking a long time, and possibly still fail.".to_string(),
+                install_id: "firefox".to_string(),
+                pkg_path: Some("firefox".to_string()),
+                systems: vec!["aarch64-darwin".to_string()],
+            })
+        ]);
+    }
+
+    /// Adding jq to a group makes the catalog resolve the whole group again and
+    /// repeat the warning about thunderbird, which was already locked.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn lock_does_not_repeat_warning_for_package_that_was_already_locked() {
+        let (mut flox, _tempdir) = flox_instance();
+        flox.system = "x86_64-linux".to_string();
+        flox.floxhub_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/missing_builds_thunderbird.yaml"))
+                .await;
+        let manifest = Manifest::parse_and_migrate(
+            indoc! {r#"
+                version = 1
+                install.thunderbird.pkg-path = "thunderbird"
+            "#},
+            None,
+        )
+        .unwrap();
+        let thunderbird_only = LockManifest::lock_manifest(
+            &flox,
+            &manifest.as_migrated_typed_only(),
+            None,
+            &IncludeFetcher {
+                base_directory: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let (mut flox, _tempdir) = flox_instance();
+        flox.system = "x86_64-linux".to_string();
+        flox.floxhub_client = catalog_replay_client(
+            GENERATED_DATA.join("resolve/missing_builds_thunderbird_jq.yaml"),
+        )
+        .await;
+        let manifest = Manifest::parse_and_migrate(
+            indoc! {r#"
+                version = 1
+                install.thunderbird.pkg-path = "thunderbird"
+                install.jq.pkg-path = "jq"
+            "#},
+            None,
+        )
+        .unwrap();
+        let with_jq = LockManifest::lock_manifest(
+            &flox,
+            &manifest.as_migrated_typed_only(),
+            Some(&thunderbird_only.lockfile),
+            &IncludeFetcher {
+                base_directory: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(with_jq.resolution_warnings, vec![]);
+    }
+
+    /// The catalog sets `missing_builds` on packages it expects no build of,
+    /// because they are unfree, insecure or broken, and those systems aren't
+    /// named. A flag it didn't set counts as false.
+    #[test]
+    fn collect_missing_builds_skips_systems_without_expected_build() {
+        let package = PackageResolutionInfo {
+            catalog: None,
+            attr_path: "foo".to_string(),
+            pkg_path: "foo".to_string(),
+            broken: None,
+            derivation: "derivation".to_string(),
+            description: None,
+            insecure: None,
+            install_id: "foo_install_id".to_string(),
+            license: None,
+            locked_url: "locked_url".to_string(),
+            name: "foo".to_string(),
+            outputs: PackageOutputs(vec![PackageOutput {
+                name: "name".to_string(),
+                store_path: "store_path".to_string(),
+            }]),
+            outputs_to_install: None,
+            pname: "foo".to_string(),
+            rev: "rev".to_string(),
+            rev_count: 1,
+            rev_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
+                .unwrap()
+                .with_timezone(&chrono::offset::Utc),
+            scrape_date: None,
+            stabilities: None,
+            unfree: None,
+            version: "version".to_string(),
+            system: PackageSystem::X8664Linux,
+            cache_uri: None,
+            missing_builds: Some(true),
+        };
+        let groups = vec![ResolvedPackageGroup {
+            page: Some(CatalogPage {
+                page: 1,
+                complete: true,
+                url: "url".to_string(),
+                packages: Some(vec![
+                    PackageResolutionInfo {
+                        system: PackageSystem::Aarch64Darwin,
+                        unfree: Some(true),
+                        ..package.clone()
+                    },
+                    PackageResolutionInfo {
+                        system: PackageSystem::Aarch64Linux,
+                        insecure: Some(true),
+                        ..package.clone()
+                    },
+                    PackageResolutionInfo {
+                        system: PackageSystem::X8664Darwin,
+                        broken: Some(true),
+                        ..package.clone()
+                    },
+                    package.clone(),
+                ]),
+                msgs: vec![],
+            }),
+            name: "group".to_string(),
+            msgs: vec![],
+        }];
+
+        assert_eq!(
+            LockManifest::collect_missing_builds(&groups),
+            BTreeSet::from([("foo_install_id".to_string(), "x86_64-linux".to_string())])
+        );
+    }
+
+    /// The catalog's message names no system, so the systems come from the
+    /// resolved packages, and one warning is kept for each install ID.
+    #[test]
+    fn with_missing_build_systems_sorts_systems_and_drops_unflagged_install_ids() {
+        let missing_builds = BTreeSet::from([
+            ("tb".to_string(), "x86_64-linux".to_string()),
+            ("tb".to_string(), "aarch64-darwin".to_string()),
+        ]);
+
+        let warnings = LockManifest::with_missing_build_systems(
+            vec![
+                ResolutionMessage::MissingBuilds(MsgMissingBuilds {
+                    level: MessageLevel::Warning,
+                    msg: "no build of tb".to_string(),
+                    install_id: "tb".to_string(),
+                    pkg_path: None,
+                    systems: vec![],
+                }),
+                ResolutionMessage::MissingBuilds(MsgMissingBuilds {
+                    level: MessageLevel::Warning,
+                    msg: "no build of tb on x86_64-linux".to_string(),
+                    install_id: "tb".to_string(),
+                    pkg_path: None,
+                    systems: vec![],
+                }),
+                ResolutionMessage::MissingBuilds(MsgMissingBuilds {
+                    level: MessageLevel::Warning,
+                    msg: "no build of unfree".to_string(),
+                    install_id: "unfree".to_string(),
+                    pkg_path: None,
+                    systems: vec![],
+                }),
+            ],
+            &missing_builds,
+        );
+
+        assert_eq!(warnings, vec![ResolutionMessage::MissingBuilds(
+            MsgMissingBuilds {
+                level: MessageLevel::Warning,
+                msg: "no build of tb".to_string(),
+                install_id: "tb".to_string(),
+                pkg_path: None,
+                systems: vec!["aarch64-darwin".to_string(), "x86_64-linux".to_string()],
+            }
+        )]);
+    }
+
+    /// Upgrading only changed foo on aarch64-darwin, so only that system is
+    /// named even though x86_64-linux, which didn't change, is also flagged.
+    #[test]
+    fn warnings_for_changes_names_only_systems_whose_package_changed() {
+        let (_, _, foo_darwin_before) = fake_catalog_package_lock("foo", None);
+        let mut foo_darwin_after = foo_darwin_before.clone();
+        foo_darwin_after.derivation = "other derivation".to_string();
+        let mut foo_linux = foo_darwin_before.clone();
+        foo_linux.system = "x86_64-linux".to_string();
+        let previous = Lockfile {
+            version: Version::<1>,
+            manifest: mk_test_manifest_from_contents(with_latest_schema("")).as_typed_only(),
+            packages: vec![foo_darwin_before.into(), foo_linux.clone().into()],
+            compose: None,
+        };
+
+        let kept = LockManifest::warnings_for_changes(
+            vec![ResolutionMessage::MissingBuilds(MsgMissingBuilds {
+                level: MessageLevel::Warning,
+                msg: "no build of foo".to_string(),
+                install_id: "foo_install_id".to_string(),
+                pkg_path: None,
+                systems: vec!["aarch64-darwin".to_string(), "x86_64-linux".to_string()],
+            })],
+            Some(&previous),
+            &[foo_darwin_after.into(), foo_linux.into()],
+        );
+
+        assert_eq!(kept, vec![ResolutionMessage::MissingBuilds(
+            MsgMissingBuilds {
+                level: MessageLevel::Warning,
+                msg: "no build of foo".to_string(),
+                install_id: "foo_install_id".to_string(),
+                pkg_path: None,
+                systems: vec!["aarch64-darwin".to_string()],
+            }
+        )]);
+    }
+
+    /// Only warnings are kept, from the group and from its page, and the
+    /// catalog's repeats of one are kept once.
+    #[test]
+    fn collect_warnings_keeps_group_and_page_warnings_once() {
+        let groups = vec![ResolvedPackageGroup {
+            page: Some(CatalogPage {
+                page: 1,
+                complete: true,
+                url: "url".to_string(),
+                packages: None,
+                msgs: vec![
+                    ResolutionMessage::MissingBuilds(MsgMissingBuilds {
+                        level: MessageLevel::Warning,
+                        msg: "no build of tb".to_string(),
+                        install_id: "tb".to_string(),
+                        pkg_path: None,
+                        systems: vec![],
+                    }),
+                    ResolutionMessage::MissingBuilds(MsgMissingBuilds {
+                        level: MessageLevel::Warning,
+                        msg: "no build of tb".to_string(),
+                        install_id: "tb".to_string(),
+                        pkg_path: None,
+                        systems: vec![],
+                    }),
+                    ResolutionMessage::ConstraintsTooTight(MsgConstraintsTooTight {
+                        level: MessageLevel::Error,
+                        msg: "constraints too tight".to_string(),
+                    }),
+                ],
+            }),
+            name: "group".to_string(),
+            msgs: vec![
+                ResolutionMessage::General(MsgGeneral {
+                    level: MessageLevel::Warning,
+                    msg: "a warning about the group".to_string(),
+                    install_id: None,
+                }),
+                ResolutionMessage::General(MsgGeneral {
+                    level: MessageLevel::Trace,
+                    msg: "a trace of the resolution".to_string(),
+                    install_id: None,
+                }),
+            ],
+        }];
+
+        assert_eq!(LockManifest::collect_warnings(&groups), vec![
+            ResolutionMessage::General(MsgGeneral {
+                level: MessageLevel::Warning,
+                msg: "a warning about the group".to_string(),
+                install_id: None,
+            }),
+            ResolutionMessage::MissingBuilds(MsgMissingBuilds {
+                level: MessageLevel::Warning,
+                msg: "no build of tb".to_string(),
+                install_id: "tb".to_string(),
+                pkg_path: None,
+                systems: vec![],
+            }),
+        ]);
+    }
+
+    /// An upgrade locks with the upgraded packages removed from the seed, so
+    /// the catalog's answer looks new to the lock even when it is the same.
+    /// A package that changed on a system other than the first still counts,
+    /// and a warning that names no install ID is kept when any package changed.
+    #[test]
+    fn warnings_for_changes_keeps_other_warning_only_for_changed_package() {
+        let (_, _, foo_before) = fake_catalog_package_lock("foo", None);
+        let mut foo_linux_before = foo_before.clone();
+        foo_linux_before.system = "x86_64-linux".to_string();
+        let mut foo_linux_after = foo_linux_before.clone();
+        foo_linux_after.derivation = "other derivation".to_string();
+        let (_, _, bar) = fake_catalog_package_lock("bar", None);
+        let previous = Lockfile {
+            version: Version::<1>,
+            manifest: mk_test_manifest_from_contents(with_latest_schema("")).as_typed_only(),
+            packages: vec![
+                foo_before.clone().into(),
+                foo_linux_before.into(),
+                bar.clone().into(),
+            ],
+            compose: None,
+        };
+
+        let kept = LockManifest::warnings_for_changes(
+            vec![
+                ResolutionMessage::General(MsgGeneral {
+                    level: MessageLevel::Warning,
+                    msg: "foo is from an older lineage".to_string(),
+                    install_id: Some("foo_install_id".to_string()),
+                }),
+                ResolutionMessage::General(MsgGeneral {
+                    level: MessageLevel::Warning,
+                    msg: "bar is from an older lineage".to_string(),
+                    install_id: Some("bar_install_id".to_string()),
+                }),
+                ResolutionMessage::General(MsgGeneral {
+                    level: MessageLevel::Warning,
+                    msg: "a warning about the request".to_string(),
+                    install_id: None,
+                }),
+            ],
+            Some(&previous),
+            &[foo_before.into(), foo_linux_after.into(), bar.into()],
+        );
+
+        assert_eq!(kept, vec![
+            ResolutionMessage::General(MsgGeneral {
+                level: MessageLevel::Warning,
+                msg: "foo is from an older lineage".to_string(),
+                install_id: Some("foo_install_id".to_string()),
+            }),
+            ResolutionMessage::General(MsgGeneral {
+                level: MessageLevel::Warning,
+                msg: "a warning about the request".to_string(),
+                install_id: None,
+            }),
+        ]);
+    }
+
+    /// Nothing changed, so the catalog repeating a warning that names no
+    /// install ID is not news.
+    #[test]
+    fn warnings_for_changes_drops_warning_without_install_id_when_nothing_changed() {
+        let (_, _, foo) = fake_catalog_package_lock("foo", None);
+        let previous = Lockfile {
+            version: Version::<1>,
+            manifest: mk_test_manifest_from_contents(with_latest_schema("")).as_typed_only(),
+            packages: vec![foo.clone().into()],
+            compose: None,
+        };
+
+        let kept = LockManifest::warnings_for_changes(
+            vec![ResolutionMessage::General(MsgGeneral {
+                level: MessageLevel::Warning,
+                msg: "a warning about the request".to_string(),
+                install_id: None,
+            })],
+            Some(&previous),
+            &[foo.into()],
+        );
+
+        assert_eq!(kept, vec![]);
+    }
+
+    /// The catalog names the install ID, and `flox show` needs the pkg-path.
+    #[test]
+    fn with_pkg_paths_reads_pkg_path_from_manifest_entry_for_install_id() {
+        let manifest = Manifest::parse_and_migrate(
+            indoc! {r#"
+                version = 1
+                install.tb.pkg-path = "thunderbird"
+            "#},
+            None,
+        )
+        .unwrap();
+
+        let located = LockManifest::with_pkg_paths(
+            vec![
+                ResolutionMessage::MissingBuilds(MsgMissingBuilds {
+                    level: MessageLevel::Warning,
+                    msg: "no build of tb".to_string(),
+                    install_id: "tb".to_string(),
+                    pkg_path: None,
+                    systems: vec![],
+                }),
+                ResolutionMessage::MissingBuilds(MsgMissingBuilds {
+                    level: MessageLevel::Warning,
+                    msg: "no build of not_in_manifest".to_string(),
+                    install_id: "not_in_manifest".to_string(),
+                    pkg_path: None,
+                    systems: vec![],
+                }),
+            ],
+            manifest.as_latest_schema(),
+        );
+
+        assert_eq!(located, vec![
+            ResolutionMessage::MissingBuilds(MsgMissingBuilds {
+                level: MessageLevel::Warning,
+                msg: "no build of tb".to_string(),
+                install_id: "tb".to_string(),
+                pkg_path: Some("thunderbird".to_string()),
+                systems: vec![],
+            }),
+            ResolutionMessage::MissingBuilds(MsgMissingBuilds {
+                level: MessageLevel::Warning,
+                msg: "no build of not_in_manifest".to_string(),
+                install_id: "not_in_manifest".to_string(),
+                pkg_path: None,
+                systems: vec![],
+            }),
+        ]);
     }
 
     /// [Lockfile::check_packages_are_allowed] returns an error
@@ -4164,7 +4876,8 @@ mod tests {
             &include_fetcher,
         )
         .await
-        .unwrap();
+        .unwrap()
+        .lockfile;
 
         // Edit manifest to include two more includes
         let manifest_contents = with_latest_schema(indoc! {r#"
@@ -4276,7 +4989,8 @@ mod tests {
             &include_fetcher,
         )
         .await
-        .unwrap();
+        .unwrap()
+        .lockfile;
 
         assert_eq!(
             lockfile.manifest,
@@ -4394,7 +5108,8 @@ mod tests {
             &include_fetcher,
         )
         .await
-        .unwrap();
+        .unwrap()
+        .lockfile;
 
         assert_eq!(
             lockfile.manifest,

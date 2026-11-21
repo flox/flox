@@ -65,7 +65,8 @@ impl LockManifest {
             },
         )
         .await
-        .context("Failed to lock the manifest")?;
+        .context("Failed to lock the manifest")?
+        .lockfile;
 
         serde_json::to_writer_pretty(std::io::stdout(), &lockfile)
             .context("failed to write lockfile to stdout")?;

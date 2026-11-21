@@ -29,6 +29,8 @@ pub enum MessageType {
     AttrPathNotFoundNotFoundForAllSystems,
     #[serde(rename = "version_not_found")]
     VersionNotFound,
+    #[serde(rename = "missing_builds")]
+    MissingBuilds,
     // Although attr_path_not_found is in the API, the catalog server should
     // never return it,
     // so we'll let that fall through to Unknown.

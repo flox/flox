@@ -353,6 +353,44 @@ cmd = "flox install fish@3.2.2"
 pre_cmd = "flox init"
 cmd = "flox install hello"
 
+# Packages the catalog can't confirm a pre-built copy of. These lock rather
+# than install because installing would build the package from source.
+
+# Thunderbird has no pre-built copy on any system.
+[resolve.missing_builds_thunderbird]
+cmd = '''
+echo '
+version = 1
+install.thunderbird.pkg-path = "thunderbird"
+' | flox lock-manifest - > /dev/null
+'''
+
+# Firefox has no pre-built copy on aarch64-darwin only.
+[resolve.missing_builds_firefox]
+cmd = '''
+echo '
+version = 1
+install.firefox.pkg-path = "firefox"
+' | flox lock-manifest - > /dev/null
+'''
+
+# Add a package to a group that already holds one without a pre-built copy,
+# so the catalog resolves the whole group again.
+[resolve.missing_builds_thunderbird_jq]
+pre_cmd = '''
+echo '
+version = 1
+install.thunderbird.pkg-path = "thunderbird"
+' | flox lock-manifest - > thunderbird.lock
+'''
+cmd = '''
+echo '
+version = 1
+install.thunderbird.pkg-path = "thunderbird"
+install.jq.pkg-path = "jq"
+' | flox lock-manifest --lockfile thunderbird.lock - > /dev/null
+'''
+
 # The catalog's 401 for an anonymous CLI at 1.19.0 or later. mk_data always sends
 # the recording token for resolve jobs, so the token and version are overridden
 # inline. The recorded `when.body` is stripped so the mock matches any resolve

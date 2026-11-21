@@ -135,6 +135,10 @@ impl From<PackageBuildResponse> for PublishReceipt {
 pub struct MsgGeneral {
     pub level: MessageLevel,
     pub msg: String,
+    /// The install ID the catalog attached to the message, if any.
+    /// Most general messages are about the request as a whole and have none.
+    #[serde(default)]
+    pub install_id: Option<String>,
 }
 
 /// The stability a pkg-group resolved at, and the stabilities that have a
@@ -208,6 +212,29 @@ pub struct MsgConstraintsTooTight {
     pub msg: String,
 }
 
+/// A message indicating the catalog can't confirm a pre-built copy of a
+/// package on at least one of the requested systems.
+///
+/// It names no system, so which systems it applies to has to come from the
+/// resolved packages' `missing_builds` field.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MsgMissingBuilds {
+    pub level: MessageLevel,
+    pub msg: String,
+    pub install_id: String,
+    /// The `pkg-path` of the manifest entry for `install_id`, which can differ
+    /// from the install ID.
+    /// The catalog doesn't send it; locking fills it in from the manifest.
+    #[serde(default)]
+    pub pkg_path: Option<String>,
+    /// The systems, sorted, that the package has no confirmed pre-built copy
+    /// for and that the catalog expects one for.
+    /// The catalog doesn't send it; locking fills it in from the resolved
+    /// packages.
+    #[serde(default)]
+    pub systems: Vec<String>,
+}
+
 /// A (yet) unknown message type.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MsgUnknown {
@@ -230,6 +257,7 @@ pub enum ResolutionMessage {
     AttrPathNotFoundNotFoundForAllSystems(MsgAttrPathNotFoundNotFoundForAllSystems),
     VersionNotFound(MsgVersionNotFound),
     ConstraintsTooTight(MsgConstraintsTooTight),
+    MissingBuilds(MsgMissingBuilds),
     Unknown(MsgUnknown),
 }
 
@@ -243,6 +271,7 @@ impl ResolutionMessage {
             ResolutionMessage::AttrPathNotFoundNotFoundForAllSystems(msg) => &msg.msg,
             ResolutionMessage::VersionNotFound(msg) => &msg.msg,
             ResolutionMessage::ConstraintsTooTight(msg) => &msg.msg,
+            ResolutionMessage::MissingBuilds(msg) => &msg.msg,
             ResolutionMessage::Unknown(msg) => &msg.msg,
         }
     }
@@ -256,7 +285,26 @@ impl ResolutionMessage {
             ResolutionMessage::AttrPathNotFoundNotFoundForAllSystems(msg) => msg.level,
             ResolutionMessage::VersionNotFound(msg) => msg.level,
             ResolutionMessage::ConstraintsTooTight(msg) => msg.level,
+            ResolutionMessage::MissingBuilds(msg) => msg.level,
             ResolutionMessage::Unknown(msg) => msg.level,
+        }
+    }
+
+    /// The install ID the message is about, if the catalog named one.
+    ///
+    /// Unmodeled message types carry it in their context, so a message of a
+    /// type this client has never seen can still be attributed to a package.
+    pub fn install_id(&self) -> Option<&str> {
+        match self {
+            ResolutionMessage::General(msg) => msg.install_id.as_deref(),
+            ResolutionMessage::ConstraintsTooTight(_) => None,
+            ResolutionMessage::AttrPathNotFoundNotInCatalog(msg) => Some(&msg.install_id),
+            ResolutionMessage::AttrPathNotFoundNotOnCurrentStability(msg) => Some(&msg.install_id),
+            ResolutionMessage::AttrPathNotFoundSystemsNotOnSamePage(msg) => Some(&msg.install_id),
+            ResolutionMessage::AttrPathNotFoundNotFoundForAllSystems(msg) => Some(&msg.install_id),
+            ResolutionMessage::VersionNotFound(msg) => Some(&msg.install_id),
+            ResolutionMessage::MissingBuilds(msg) => Some(&msg.install_id),
+            ResolutionMessage::Unknown(msg) => msg.context.get("install_id").map(String::as_str),
         }
     }
 
@@ -309,10 +357,12 @@ impl From<api_types::ResolutionMessageGeneral> for ResolutionMessage {
             api_types::MessageType::General => ResolutionMessage::General(MsgGeneral {
                 level: r_msg.level,
                 msg: r_msg.message,
+                install_id: r_msg.context.get("install_id").cloned(),
             }),
             api_types::MessageType::ResolutionTrace => ResolutionMessage::General(MsgGeneral {
                 level: MessageLevel::Trace,
                 msg: r_msg.message,
+                install_id: r_msg.context.get("install_id").cloned(),
             }),
             api_types::MessageType::AttrPathNotFoundNotInCatalog => {
                 ResolutionMessage::AttrPathNotFoundNotInCatalog(MsgAttrPathNotFoundNotInCatalog {
@@ -391,6 +441,15 @@ impl From<api_types::ResolutionMessageGeneral> for ResolutionMessage {
                 ResolutionMessage::ConstraintsTooTight(MsgConstraintsTooTight {
                     level: r_msg.level,
                     msg: r_msg.message,
+                })
+            },
+            api_types::MessageType::MissingBuilds => {
+                ResolutionMessage::MissingBuilds(MsgMissingBuilds {
+                    level: r_msg.level,
+                    msg: r_msg.message,
+                    install_id: Self::install_id_from_context(&r_msg.context),
+                    pkg_path: None,
+                    systems: vec![],
                 })
             },
             api_types::MessageType::Unknown(message_type) => {
@@ -896,5 +955,46 @@ mod tests {
                 stability: None,
             });
         });
+    }
+
+    /// The catalog's lineage-fallback warning is a general message about one
+    /// package, so it has to be attributed to that package's install ID.
+    #[test]
+    fn general_message_keeps_install_id_from_context() {
+        let message = ResolutionMessage::from(api_types::ResolutionMessageGeneral {
+            context: HashMap::from([
+                ("install_id".to_string(), "foo".to_string()),
+                (
+                    "message".to_string(),
+                    "resolved from an older lineage".to_string(),
+                ),
+            ]),
+            level: MessageLevel::Warning,
+            message: "".to_string(),
+            type_: api_types::MessageType::General,
+        });
+
+        assert_eq!(
+            message,
+            ResolutionMessage::General(MsgGeneral {
+                level: MessageLevel::Warning,
+                msg: "".to_string(),
+                install_id: Some("foo".to_string()),
+            })
+        );
+        assert_eq!(message.install_id(), Some("foo"));
+    }
+
+    /// A message about the request as a whole names no package.
+    #[test]
+    fn general_message_without_install_id_names_no_package() {
+        let message = ResolutionMessage::from(api_types::ResolutionMessageGeneral {
+            context: HashMap::new(),
+            level: MessageLevel::Warning,
+            message: "the request is slow".to_string(),
+            type_: api_types::MessageType::General,
+        });
+
+        assert_eq!(message.install_id(), None);
     }
 }

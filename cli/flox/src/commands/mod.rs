@@ -504,6 +504,7 @@ impl FloxArgs {
             verbosity: self.verbosity.to_i32(),
             retain_diagnostic_tempfiles: retain_tempfiles,
             metrics_device_uuid,
+            resolution_warnings: Default::default(),
         };
         debug!(
             configured = ?flox.features,

@@ -47,7 +47,13 @@ use crate::data::CanonicalPath;
 use crate::flox::Flox;
 use crate::models::environment::install::compute_install_modifications;
 use crate::providers::buildenv::{BuildEnv, BuildEnvError, BuildEnvNix, BuildEnvOutputs};
-use crate::providers::lock_manifest::{LockManifest, LockResult, ResolutionFailure, ResolveError};
+use crate::providers::lock_manifest::{
+    LockManifest,
+    LockOutcome,
+    LockResult,
+    ResolutionFailure,
+    ResolveError,
+};
 use crate::providers::nix_auth::{AuthError, NixAuth};
 use crate::providers::services::process_compose::{ServiceError, maybe_make_service_config_file};
 
@@ -208,13 +214,22 @@ impl<State> CoreEnvironment<State> {
         // This is `mut` because we may need to update the on-disk manifest to match the
         // schema of the merged manifest, and then we'll also have to update the
         // `compose.composer` to match.
-        let mut lockfile = LockManifest::lock_manifest(
+        //
+        let LockOutcome {
+            mut lockfile,
+            resolution_warnings,
+        } = LockManifest::lock_manifest(
             flox,
             &migrated_manifest_for_locking,
             existing_lockfile.as_ref(),
             &self.include_fetcher,
         )
         .block_on()?;
+        // A missing or stale lockfile is locked here before the lock that the
+        // command asked for, and whatever gets locked is built all the same.
+        // Activation and background checks lock too, but they leave the sink
+        // unset.
+        flox.resolution_warnings.send(&resolution_warnings);
 
         // Now that we have an up to date lockfile, we check the schema version of its manifest
         // and ensure that the manifest on disk and the manifest in the lockfile are all in sync.
@@ -256,21 +271,15 @@ impl<State> CoreEnvironment<State> {
         flox: &Flox,
         manifest: &Manifest<Migrated>,
         existing_lockfile: Option<&Lockfile>,
-    ) -> Result<LockResult, EnvironmentError> {
+    ) -> Result<LockOutcome, EnvironmentError> {
         // If a lockfile exists, it is used as a base.
-        let lockfile = LockManifest::lock_manifest(
+        LockManifest::lock_manifest(
             flox,
             &manifest.as_migrated_typed_only(),
             existing_lockfile,
             &self.include_fetcher,
         )
-        .block_on()?;
-
-        if Some(&lockfile) == existing_lockfile {
-            return Ok(LockResult::Unchanged(lockfile));
-        }
-
-        Ok(LockResult::Changed(lockfile))
+        .block_on()
     }
 
     /// Build the environment.
@@ -362,15 +371,16 @@ impl CoreEnvironment<ReadOnly> {
             // for packages on the add path (not yet in the old lockfile), then
             // hand the same lockfile to the transaction so it doesn't re-lock.
             let existing_lockfile = self.existing_lockfile()?;
-            let new_lockfile: Lockfile = self
-                .lock_without_writing(flox, &new_manifest, existing_lockfile.as_ref())?
-                .into();
-            validate_outputs_against_lockfile(packages, &new_lockfile)?;
+            let new_lock =
+                self.lock_without_writing(flox, &new_manifest, existing_lockfile.as_ref())?;
+            validate_outputs_against_lockfile(packages, &new_lock.lockfile)?;
+            // Before the build, which is slow and may fail.
+            flox.resolution_warnings.send(&new_lock.resolution_warnings);
             let (built_environments, _) = self.transact_with_manifest(
                 &new_manifest,
                 flox,
                 out_link_prefix,
-                Some(new_lockfile),
+                Some(new_lock.lockfile),
             )?;
             Some(built_environments)
         };
@@ -485,6 +495,7 @@ impl CoreEnvironment<ReadOnly> {
     /// Atomically edit this environment, without checking that it still builds
     ///
     /// This is unsafe as it can create broken environments!
+    /// It locks with [Self::lock], so it doesn't send resolution warnings.
     /// Used by the implementation of <https://github.com/flox/flox/issues/823>
     /// and may be removed in the future in favor of something like <https://github.com/flox/flox/pull/681>
     pub(crate) fn edit_unsafe(
@@ -681,7 +692,7 @@ impl CoreEnvironment<ReadOnly> {
             lockfile
         });
 
-        let upgraded_lockfile = LockManifest::lock_manifest(
+        let upgraded = LockManifest::lock_manifest(
             flox,
             &manifest.as_migrated_typed_only(),
             seed_lockfile.as_ref(),
@@ -689,9 +700,20 @@ impl CoreEnvironment<ReadOnly> {
         )
         .block_on()?;
 
+        // The seed had the upgraded packages unlocked, so everything the catalog
+        // resolved looks new to the lock. Only packages that differ from what
+        // was locked before the upgrade are worth a warning.
+        let resolution_warnings = LockManifest::warnings_for_changes(
+            upgraded.resolution_warnings,
+            existing_lockfile.as_ref(),
+            &upgraded.lockfile.packages,
+        );
+        // Before any build, and for a dry run too.
+        flox.resolution_warnings.send(&resolution_warnings);
+
         let result = UpgradeResult {
             old_lockfile: existing_lockfile,
-            new_lockfile: upgraded_lockfile,
+            new_lockfile: upgraded.lockfile,
             store_path: None,
         };
 
@@ -735,7 +757,10 @@ impl CoreEnvironment<ReadOnly> {
         // This is `mut` because we may need to update the on-disk manifest to match the
         // schema of the merged manifest, and then we'll also have to update the
         // `compose.composer` to match.
-        let mut new_lockfile = LockManifest::lock_manifest_with_include_upgrades(
+        let LockOutcome {
+            lockfile: mut new_lockfile,
+            resolution_warnings,
+        } = LockManifest::lock_manifest_with_include_upgrades(
             flox,
             &manifest.as_migrated_typed_only(),
             existing_lockfile.as_ref(),
@@ -743,6 +768,8 @@ impl CoreEnvironment<ReadOnly> {
             Some(to_upgrade),
         )
         .block_on()?;
+        // Before the build.
+        flox.resolution_warnings.send(&resolution_warnings);
 
         // If the merged manifest required a newer schema than the composer's
         // on-disk manifest (due to composition introducing features like
@@ -890,9 +917,11 @@ impl CoreEnvironment<ReadOnly> {
             None => {
                 debug!("transaction: locking environment");
                 let existing_lockfile = temp_env.existing_lockfile()?;
-                temp_env
-                    .lock_without_writing(flox, manifest, existing_lockfile.as_ref())?
-                    .into()
+                let lock =
+                    temp_env.lock_without_writing(flox, manifest, existing_lockfile.as_ref())?;
+                // Before the build, which is slow and may fail.
+                flox.resolution_warnings.send(&lock.resolution_warnings);
+                lock.lockfile
             },
         };
 
@@ -1408,6 +1437,7 @@ mod tests {
     use std::fs::OpenOptions;
     use std::io::Write;
     use std::os::unix::fs::PermissionsExt;
+    use std::sync::{Arc, Mutex};
 
     use flox_core::activate::mode::ActivateMode;
     use flox_manifest::interfaces::AsLatestSchema;
@@ -1415,6 +1445,7 @@ mod tests {
     use flox_manifest::raw::CatalogPackage;
     use flox_manifest::test_helpers::{with_latest_schema, with_schema};
     use flox_test_utils::{GENERATED_DATA, MANUALLY_GENERATED};
+    use floxhub_client::{MessageLevel, MsgMissingBuilds, ResolutionMessage};
     use indoc::{formatdoc, indoc};
     use pretty_assertions::assert_eq;
     use tempfile::{TempDir, tempdir_in};
@@ -1422,6 +1453,7 @@ mod tests {
 
     use self::test_helpers::new_core_environment;
     use super::*;
+    use crate::flox::ResolutionWarningSink;
     use crate::flox::test_helpers::flox_instance;
     use crate::models::environment::Environment;
     use crate::models::environment::path_environment::test_helpers::new_path_environment_in;
@@ -1583,6 +1615,250 @@ mod tests {
 
         assert!(matches!(result, EditResult::Changed { .. }));
         assert!(!result.reactivate_required().unwrap());
+    }
+
+    /// The catalog lists no pre-built copy of thunderbird. The build is made to
+    /// fail by vars that reference each other, without fetching or building
+    /// anything, and the warning has to be handed over before it.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn install_sends_resolution_warnings_before_building() {
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        let mut env_view = new_core_environment(&flox, indoc! {r#"
+                version = 1
+
+                [vars]
+                a = "$b"
+                b = "$a"
+            "#});
+        flox.system = "x86_64-linux".to_string();
+        let sent = Arc::new(Mutex::new(Vec::new()));
+        let sink = sent.clone();
+        flox.resolution_warnings = ResolutionWarningSink::new(move |warnings| {
+            sink.lock().unwrap().extend(warnings.to_vec())
+        });
+        flox.floxhub_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/missing_builds_thunderbird.yaml"))
+                .await;
+
+        let result = env_view.install(
+            &[PackageToInstall::parse(&flox.system, "thunderbird").unwrap()],
+            &flox,
+            None,
+        );
+
+        assert!(matches!(
+            result,
+            Err(EnvironmentError::Core(CoreEnvironmentError::BuildEnv(
+                BuildEnvError::VarsCycle { .. }
+            )))
+        ));
+        assert_eq!(*sent.lock().unwrap(), vec![ResolutionMessage::MissingBuilds(
+            MsgMissingBuilds {
+                level: MessageLevel::Warning,
+                msg: "The package for install_id 'thunderbird' expected to have known build info, but no build can be confirmed. Flox may attempt to build locally, possibly taking a long time, and possibly still fail.".to_string(),
+                install_id: "thunderbird".to_string(),
+                pkg_path: Some("thunderbird".to_string()),
+                systems: vec![
+                    "aarch64-darwin".to_string(),
+                    "aarch64-linux".to_string(),
+                    "x86_64-linux".to_string(),
+                ],
+            }
+        )]);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn edit_sends_resolution_warnings_before_building() {
+        let (mut env_view, mut flox, _temp_dir_handle) = empty_core_environment();
+        flox.system = "x86_64-linux".to_string();
+        let sent = Arc::new(Mutex::new(Vec::new()));
+        let sink = sent.clone();
+        flox.resolution_warnings = ResolutionWarningSink::new(move |warnings| {
+            sink.lock().unwrap().extend(warnings.to_vec())
+        });
+        flox.floxhub_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/missing_builds_thunderbird.yaml"))
+                .await;
+
+        let result = env_view.edit(
+            &flox,
+            indoc! {r#"
+                version = 1
+                install.thunderbird.pkg-path = "thunderbird"
+
+                [vars]
+                a = "$b"
+                b = "$a"
+            "#}
+            .to_string(),
+            None,
+        );
+
+        assert!(matches!(
+            result,
+            Err(EnvironmentError::Core(CoreEnvironmentError::BuildEnv(
+                BuildEnvError::VarsCycle { .. }
+            )))
+        ));
+        assert_eq!(*sent.lock().unwrap(), vec![ResolutionMessage::MissingBuilds(
+            MsgMissingBuilds {
+                level: MessageLevel::Warning,
+                msg: "The package for install_id 'thunderbird' expected to have known build info, but no build can be confirmed. Flox may attempt to build locally, possibly taking a long time, and possibly still fail.".to_string(),
+                install_id: "thunderbird".to_string(),
+                pkg_path: Some("thunderbird".to_string()),
+                systems: vec![
+                    "aarch64-darwin".to_string(),
+                    "aarch64-linux".to_string(),
+                    "x86_64-linux".to_string(),
+                ],
+            }
+        )]);
+    }
+
+    /// Locking a missing lockfile resolves, and later builds, packages that
+    /// the command being run didn't ask for, such as thunderbird when
+    /// installing jq.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn lock_sends_resolution_warnings_for_missing_lockfile() {
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        flox.system = "x86_64-linux".to_string();
+        let sent = Arc::new(Mutex::new(Vec::new()));
+        let sink = sent.clone();
+        flox.resolution_warnings = ResolutionWarningSink::new(move |warnings| {
+            sink.lock().unwrap().extend(warnings.to_vec())
+        });
+        flox.floxhub_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/missing_builds_thunderbird.yaml"))
+                .await;
+        let mut env_view = new_core_environment(&flox, indoc! {r#"
+                version = 1
+                install.thunderbird.pkg-path = "thunderbird"
+            "#});
+
+        env_view.lock(&flox).unwrap();
+
+        assert_eq!(*sent.lock().unwrap(), vec![ResolutionMessage::MissingBuilds(
+            MsgMissingBuilds {
+                level: MessageLevel::Warning,
+                msg: "The package for install_id 'thunderbird' expected to have known build info, but no build can be confirmed. Flox may attempt to build locally, possibly taking a long time, and possibly still fail.".to_string(),
+                install_id: "thunderbird".to_string(),
+                pkg_path: Some("thunderbird".to_string()),
+                systems: vec![
+                    "aarch64-darwin".to_string(),
+                    "aarch64-linux".to_string(),
+                    "x86_64-linux".to_string(),
+                ],
+            }
+        )]);
+    }
+
+    /// The locked thunderbird is made to differ from what the catalog answers,
+    /// so the upgrade changes it. A dry run doesn't build, and still warns.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn upgrade_sends_resolution_warnings_for_upgraded_package() {
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        flox.system = "x86_64-linux".to_string();
+        flox.floxhub_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/missing_builds_thunderbird.yaml"))
+                .await;
+        let mut env_view = new_core_environment(&flox, indoc! {r#"
+                version = 1
+                install.thunderbird.pkg-path = "thunderbird"
+            "#});
+        env_view.lock(&flox).unwrap();
+        let lockfile = fs::read_to_string(env_view.lockfile_path()).unwrap();
+        fs::write(
+            env_view.lockfile_path(),
+            lockfile.replace("-thunderbird-160.0.drv", "-thunderbird-159.0.drv"),
+        )
+        .unwrap();
+        let sent = Arc::new(Mutex::new(Vec::new()));
+        let sink = sent.clone();
+        flox.resolution_warnings = ResolutionWarningSink::new(move |warnings| {
+            sink.lock().unwrap().extend(warnings.to_vec())
+        });
+
+        env_view.upgrade(&flox, &[], false, None).unwrap();
+
+        assert_eq!(*sent.lock().unwrap(), vec![ResolutionMessage::MissingBuilds(
+            MsgMissingBuilds {
+                level: MessageLevel::Warning,
+                msg: "The package for install_id 'thunderbird' expected to have known build info, but no build can be confirmed. Flox may attempt to build locally, possibly taking a long time, and possibly still fail.".to_string(),
+                install_id: "thunderbird".to_string(),
+                pkg_path: Some("thunderbird".to_string()),
+                systems: vec![
+                    "aarch64-darwin".to_string(),
+                    "aarch64-linux".to_string(),
+                    "x86_64-linux".to_string(),
+                ],
+            }
+        )]);
+    }
+
+    /// Upgrading the include brings in a thunderbird that the lockfile
+    /// doesn't have, and the build is made to fail by vars that reference each
+    /// other, so the warning has to be handed over before it.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn include_upgrade_sends_resolution_warnings_before_building() {
+        let (mut flox, tempdir) = flox_instance();
+        flox.system = "x86_64-linux".to_string();
+        flox.floxhub_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/missing_builds_thunderbird.yaml"))
+                .await;
+        let dep_path = tempdir.path().join("dep");
+        fs::create_dir(&dep_path).unwrap();
+        let mut dep = new_path_environment_in(&flox, &with_latest_schema(""), &dep_path);
+        dep.lockfile(&flox).unwrap();
+        let mut composer = new_path_environment_in(
+            &flox,
+            &with_latest_schema(indoc! {r#"
+                [include]
+                environments = [
+                  { dir = "dep" },
+                ]
+
+                [vars]
+                a = "$b"
+                b = "$a"
+            "#}),
+            tempdir.path(),
+        );
+        composer.lockfile(&flox).unwrap();
+        fs::write(
+            dep.manifest_path(&flox).unwrap(),
+            with_latest_schema(indoc! {r#"
+                install.thunderbird.pkg-path = "thunderbird"
+            "#}),
+        )
+        .unwrap();
+        dep.lockfile(&flox).unwrap();
+        let sent = Arc::new(Mutex::new(Vec::new()));
+        let sink = sent.clone();
+        flox.resolution_warnings = ResolutionWarningSink::new(move |warnings| {
+            sink.lock().unwrap().extend(warnings.to_vec())
+        });
+
+        let result = composer.include_upgrade(&flox, vec!["dep".to_string()]);
+
+        assert!(matches!(
+            result,
+            Err(EnvironmentError::Core(CoreEnvironmentError::BuildEnv(
+                BuildEnvError::VarsCycle { .. }
+            )))
+        ));
+        assert_eq!(*sent.lock().unwrap(), vec![ResolutionMessage::MissingBuilds(
+            MsgMissingBuilds {
+                level: MessageLevel::Warning,
+                msg: "The package for install_id 'thunderbird' expected to have known build info, but no build can be confirmed. Flox may attempt to build locally, possibly taking a long time, and possibly still fail.".to_string(),
+                install_id: "thunderbird".to_string(),
+                pkg_path: Some("thunderbird".to_string()),
+                systems: vec![
+                    "aarch64-darwin".to_string(),
+                    "aarch64-linux".to_string(),
+                    "x86_64-linux".to_string(),
+                ],
+            }
+        )]);
     }
 
     /// After adding a hook with edit, reactivate_required returns true
