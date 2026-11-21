@@ -82,6 +82,8 @@ pub enum EditAction {
 impl Edit {
     #[instrument(name = "edit", skip_all)]
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
+        flox.resolution_warnings = message::resolution_warning_sink(&flox.system);
+
         // Record subcommand metric prior to environment_subcommand_metric below
         // in case we error before then
         subcommand_metric!("edit");
@@ -496,8 +498,10 @@ mod tests {
         new_path_environment,
         new_path_environment_in,
     };
+    use flox_rust_sdk::providers::catalog::test_helpers::catalog_replay_client;
     use flox_rust_sdk::providers::lock_manifest::{ResolutionFailures, ResolveError};
     use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
+    use flox_test_utils::GENERATED_DATA;
     use indoc::{formatdoc, indoc};
     use pretty_assertions::assert_eq;
     use serde::de::Error;
@@ -851,6 +855,51 @@ mod tests {
         assert!(tmp1.path().is_dir());
         assert!(tmp2.path().is_dir());
         assert!(tmp3.path().is_dir());
+    }
+
+    /// The catalog lists no pre-built copy of thunderbird. The build is made to
+    /// fail by vars that reference each other, so the warning is all that is
+    /// printed before the error.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn warns_about_package_without_prebuilt_copy_before_building() {
+        let (mut flox, tempdir) = flox_instance();
+        flox.system = "x86_64-linux".to_string();
+        let (subscriber, writer) = test_subscriber_message_only();
+        let environment = new_path_environment(&flox, "version = 1");
+        flox.floxhub_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/missing_builds_thunderbird.yaml"))
+                .await;
+        let new_manifest_path = tempdir.path().join("new-manifest.toml");
+        fs::write(&new_manifest_path, indoc! {r#"
+                version = 1
+                install.thunderbird.pkg-path = "thunderbird"
+
+                [vars]
+                a = "$b"
+                b = "$a"
+            "#})
+        .unwrap();
+
+        let result = Edit {
+            environment: EnvironmentSelect::Dir(environment.parent_path().unwrap()),
+            action: EditAction::EditManifest {
+                file: Some(new_manifest_path),
+            },
+        }
+        .handle(flox)
+        .with_subscriber(subscriber)
+        .await;
+
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Found a reference cycle in the '[vars]' section: a → b → a.\nRemove one of these references so the variables no longer form a loop."
+        );
+        assert_eq!(writer.to_string(), indoc! {"
+            ! The Flox Catalog lists no pre-built copy of 'thunderbird' for:
+              aarch64-darwin, aarch64-linux, x86_64-linux (this system)
+            It is built from source there, which can take a long time and may fail.
+            A different version may have one: see 'flox show thunderbird'.
+        "});
     }
 
     /// If no no manifest file or contents are provided,

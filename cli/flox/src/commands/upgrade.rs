@@ -52,6 +52,8 @@ impl Upgrade {
             ensure_auth(&mut flox).await?;
         };
 
+        flox.resolution_warnings = message::resolution_warning_sink(&flox.system);
+
         let mut concrete_environment = self
             .environment
             .detect_concrete_environment(&mut flox, "Upgrade")
@@ -215,6 +217,7 @@ fn upgrade_payload(
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
     use std::sync::{Arc, Mutex};
 
     use flox_events::test_helpers::MockEventsConnection;
@@ -425,6 +428,99 @@ mod tests {
         let printed = writer.to_string();
 
         assert_eq!(printed, "No upgrades available for packages in 'name'.\n");
+    }
+
+    /// Upgrading re-resolves thunderbird, of which the catalog lists no
+    /// pre-built copy, but the result is the same package, so there is nothing
+    /// to warn about.
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial(global_events_client)]
+    async fn no_warning_when_nothing_upgrades() {
+        let (mut flox, _tempdir) = flox_instance();
+        flox.system = "x86_64-linux".to_string();
+        let (subscriber, writer) = test_subscriber_message_only();
+        let mut environment = new_named_path_environment(
+            &flox,
+            indoc! {r#"
+                version = 1
+                install.thunderbird.pkg-path = "thunderbird"
+            "#},
+            "name",
+        );
+        flox.floxhub_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/missing_builds_thunderbird.yaml"))
+                .await;
+        environment.lockfile(&flox).unwrap();
+
+        Upgrade {
+            environment: EnvironmentSelect::Dir(environment.parent_path().unwrap()),
+            dry_run: true,
+            groups_or_iids: Vec::new(),
+        }
+        .handle(flox)
+        .with_subscriber(subscriber)
+        .await
+        .unwrap();
+
+        assert_eq!(
+            writer.to_string(),
+            "No upgrades available for packages in 'name'.\n"
+        );
+    }
+
+    /// The locked thunderbird is made to differ from what the catalog answers,
+    /// so the upgrade changes it, and the catalog lists no pre-built copy of
+    /// it. The build is made to fail by vars that reference each other, so the
+    /// warning is all that is printed before the error.
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial(global_events_client)]
+    async fn warns_about_upgraded_package_without_prebuilt_copy() {
+        let (mut flox, _tempdir) = flox_instance();
+        flox.system = "x86_64-linux".to_string();
+        let (subscriber, writer) = test_subscriber_message_only();
+        let mut environment = new_named_path_environment(
+            &flox,
+            indoc! {r#"
+                version = 1
+                install.thunderbird.pkg-path = "thunderbird"
+
+                [vars]
+                a = "$b"
+                b = "$a"
+            "#},
+            "name",
+        );
+        flox.floxhub_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/missing_builds_thunderbird.yaml"))
+                .await;
+        environment.lockfile(&flox).unwrap();
+        let lockfile_path = environment.lockfile_path(&flox).unwrap();
+        let lockfile = fs::read_to_string(&lockfile_path).unwrap();
+        fs::write(
+            &lockfile_path,
+            lockfile.replace("-thunderbird-160.0.drv", "-thunderbird-159.0.drv"),
+        )
+        .unwrap();
+
+        let result = Upgrade {
+            environment: EnvironmentSelect::Dir(environment.parent_path().unwrap()),
+            dry_run: false,
+            groups_or_iids: Vec::new(),
+        }
+        .handle(flox)
+        .with_subscriber(subscriber)
+        .await;
+
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Found a reference cycle in the '[vars]' section: a → b → a.\nRemove one of these references so the variables no longer form a loop."
+        );
+        assert_eq!(writer.to_string(), indoc! {"
+            ! The Flox Catalog lists no pre-built copy of 'thunderbird' for:
+              aarch64-darwin, aarch64-linux, x86_64-linux (this system)
+            It is built from source there, which can take a long time and may fail.
+            A different version may have one: see 'flox show thunderbird'.
+        "});
     }
 
     /// Run an upgrade of an environment that only has upgrades on other systems

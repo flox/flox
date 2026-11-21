@@ -159,6 +159,8 @@ impl Install {
             bail!("Must specify at least one package");
         }
 
+        flox.resolution_warnings = message::resolution_warning_sink(&flox.system);
+
         let mut concrete_environment = match self
             .environment
             .detect_concrete_environment(&mut flox, "Install to")
@@ -834,6 +836,7 @@ mod tests {
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::models::environment::Environment;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::{
+        new_named_path_environment,
         new_named_path_environment_from_env_files,
         new_path_environment_in,
     };
@@ -842,7 +845,7 @@ mod tests {
     use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use flox_test_utils::GENERATED_DATA;
     use flox_test_utils::manifests::EMPTY_ALL_SYSTEMS;
-    use indoc::formatdoc;
+    use indoc::{formatdoc, indoc};
     use tracing::instrument::WithSubscriber;
 
     use super::{add_activation_to_rc_file, ensure_rc_file_exists};
@@ -1056,6 +1059,51 @@ mod tests {
              ! '{install_id}' installed only for the following systems: {installed_systems}
         "};
         assert_eq!(writer.to_string(), expected);
+    }
+
+    /// The catalog lists no pre-built copy of thunderbird, and the warning is
+    /// shown before the build. The build is made to fail by vars that
+    /// reference each other, so nothing is fetched or built, and the warning
+    /// is all that is printed.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn warns_about_package_without_prebuilt_copy_before_building() {
+        let (mut flox, _tempdir) = flox_instance();
+        flox.system = "x86_64-linux".to_string();
+        let (subscriber, writer) = test_subscriber_message_only();
+        let environment = new_named_path_environment(
+            &flox,
+            indoc! {r#"
+                version = 1
+
+                [vars]
+                a = "$b"
+                b = "$a"
+            "#},
+            "name",
+        );
+        flox.floxhub_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/missing_builds_thunderbird.yaml"))
+                .await;
+
+        let result = Install {
+            environment: EnvironmentSelect::Dir(environment.parent_path().unwrap()),
+            id: vec![],
+            packages: vec!["thunderbird".to_string()],
+        }
+        .handle(flox)
+        .with_subscriber(subscriber)
+        .await;
+
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Found a reference cycle in the '[vars]' section: a → b → a.\nRemove one of these references so the variables no longer form a loop."
+        );
+        assert_eq!(writer.to_string(), indoc! {"
+            ! The Flox Catalog lists no pre-built copy of 'thunderbird' for:
+              aarch64-darwin, aarch64-linux, x86_64-linux (this system)
+            It is built from source there, which can take a long time and may fail.
+            A different version may have one: see 'flox show thunderbird'.
+        "});
     }
 
     /// Re-locking an environment locked by a Flox version with a different

@@ -1572,3 +1572,76 @@ mod upgrade_notification_tests {
         assert!(printed.is_empty(), "printed: {printed}");
     }
 }
+
+#[cfg(test)]
+mod resolution_warning_tests {
+    use flox_config::FloxConfig;
+    use flox_rust_sdk::flox::test_helpers::flox_instance;
+    use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment;
+    use flox_rust_sdk::providers::catalog::test_helpers::catalog_replay_client;
+    use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
+    use flox_test_utils::GENERATED_DATA;
+    use indoc::indoc;
+    use pretty_assertions::assert_eq;
+    use tracing::instrument::WithSubscriber;
+
+    use super::*;
+
+    /// Activating locks the environment, and so resolves thunderbird, which
+    /// the user didn't ask to resolve, so the catalog's warning about it isn't
+    /// shown. The build is made to fail by vars that reference each other.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn does_not_warn_about_package_locked_on_the_way() {
+        let (mut flox, tempdir) = flox_instance();
+        flox.system = "x86_64-linux".to_string();
+        let (subscriber, writer) = test_subscriber_message_only();
+        let environment = new_path_environment(&flox, indoc! {r#"
+            version = 1
+            install.thunderbird.pkg-path = "thunderbird"
+
+            [vars]
+            a = "$b"
+            b = "$a"
+        "#});
+        flox.floxhub_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/missing_builds_thunderbird.yaml"))
+                .await;
+        #[allow(deprecated)]
+        let config = Config {
+            flox: FloxConfig {
+                cache_dir: tempdir.path().join("cache"),
+                data_dir: tempdir.path().join("data"),
+                disable_metrics: true,
+                ..FloxConfig::default()
+            },
+            features: None,
+        };
+
+        let result = ActivateOptions {
+            trust: false,
+            print_script: false,
+            start_services: false,
+            no_start_services: false,
+            add_sbin: false,
+            mode: None,
+            generation: None,
+            command: None,
+        }
+        .activate(
+            config,
+            flox,
+            ConcreteEnvironment::Path(environment),
+            InvocationType::InPlace,
+            Vec::new(),
+            None,
+        )
+        .with_subscriber(subscriber)
+        .await;
+
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Found a reference cycle in the '[vars]' section: a → b → a.\nRemove one of these references so the variables no longer form a loop."
+        );
+        assert_eq!(writer.to_string(), "");
+    }
+}

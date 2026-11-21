@@ -214,6 +214,7 @@ pub fn spawn_detached_check_for_upgrades_process(
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
 
     use flox_rust_sdk::flox::test_helpers::{flox_instance, set_test_auth};
     use flox_rust_sdk::models::environment::UpgradeResult;
@@ -222,10 +223,53 @@ mod tests {
         new_path_environment_from_env_files,
     };
     use flox_rust_sdk::providers::catalog::test_helpers::catalog_replay_client;
+    use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use flox_test_utils::GENERATED_DATA;
     use flox_test_utils::manifests::HELLO;
+    use indoc::indoc;
+    use pretty_assertions::assert_eq;
+    use tracing::instrument::WithSubscriber;
 
     use super::*;
+
+    /// The locked thunderbird is made to differ from what the catalog answers,
+    /// and the catalog lists no pre-built copy of it, but a background check
+    /// is not something the user asked for, so nothing is shown.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn does_not_warn_about_upgraded_package_without_prebuilt_copy() {
+        let (mut flox, _tempdir) = flox_instance();
+        flox.system = "x86_64-linux".to_string();
+        set_test_auth(&mut flox, "test");
+        let (subscriber, writer) = test_subscriber_message_only();
+        let mut environment = new_path_environment(&flox, indoc! {r#"
+            version = 1
+            install.thunderbird.pkg-path = "thunderbird"
+        "#});
+        flox.floxhub_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/missing_builds_thunderbird.yaml"))
+                .await;
+        environment.lockfile(&flox).unwrap();
+        let lockfile_path = environment.lockfile_path(&flox).unwrap();
+        let lockfile = fs::read_to_string(&lockfile_path).unwrap();
+        fs::write(
+            &lockfile_path,
+            lockfile.replace("-thunderbird-160.0.drv", "-thunderbird-159.0.drv"),
+        )
+        .unwrap();
+
+        CheckForUpgrades {
+            check_timeout: 0,
+            environment: UninitializedEnvironment::from_concrete_environment(
+                &ConcreteEnvironment::Path(environment),
+            ),
+        }
+        .handle(flox)
+        .with_subscriber(subscriber)
+        .await
+        .unwrap();
+
+        assert_eq!(writer.to_string(), "");
+    }
 
     #[test]
     fn skips_if_recently_checked() {

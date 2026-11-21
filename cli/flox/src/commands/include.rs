@@ -67,6 +67,8 @@ impl IncludeCommands {
 impl Upgrade {
     #[instrument(name = "upgrade", skip_all)]
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
+        flox.resolution_warnings = message::resolution_warning_sink(&flox.system);
+
         let mut environment = self
             .environment
             .detect_concrete_environment(
@@ -126,5 +128,84 @@ impl Upgrade {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use flox_manifest::test_helpers::with_latest_schema;
+    use flox_rust_sdk::flox::test_helpers::flox_instance;
+    use flox_rust_sdk::models::environment::Environment;
+    use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment_in;
+    use flox_rust_sdk::providers::catalog::test_helpers::catalog_replay_client;
+    use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
+    use flox_test_utils::GENERATED_DATA;
+    use indoc::indoc;
+    use pretty_assertions::assert_eq;
+    use tracing::instrument::WithSubscriber;
+
+    use super::*;
+    use crate::commands::EnvironmentSelect;
+
+    /// Upgrading the include brings in a thunderbird that the lockfile doesn't
+    /// have, of which the catalog lists no pre-built copy. The build is made
+    /// to fail by vars that reference each other, so the warning is all that
+    /// is printed before the error.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn warns_about_package_without_prebuilt_copy_before_building() {
+        let (mut flox, tempdir) = flox_instance();
+        flox.system = "x86_64-linux".to_string();
+        let (subscriber, writer) = test_subscriber_message_only();
+        flox.floxhub_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/missing_builds_thunderbird.yaml"))
+                .await;
+        let dep_path = tempdir.path().join("dep");
+        fs::create_dir(&dep_path).unwrap();
+        let mut dep = new_path_environment_in(&flox, &with_latest_schema(""), &dep_path);
+        dep.lockfile(&flox).unwrap();
+        let mut composer = new_path_environment_in(
+            &flox,
+            &with_latest_schema(indoc! {r#"
+                [include]
+                environments = [
+                  { dir = "dep" },
+                ]
+
+                [vars]
+                a = "$b"
+                b = "$a"
+            "#}),
+            tempdir.path(),
+        );
+        composer.lockfile(&flox).unwrap();
+        fs::write(
+            dep.manifest_path(&flox).unwrap(),
+            with_latest_schema(indoc! {r#"
+                install.thunderbird.pkg-path = "thunderbird"
+            "#}),
+        )
+        .unwrap();
+        dep.lockfile(&flox).unwrap();
+
+        let result = Upgrade {
+            environment: EnvironmentSelect::Dir(composer.parent_path().unwrap()),
+            to_upgrade: vec!["dep".to_string()],
+        }
+        .handle(flox)
+        .with_subscriber(subscriber)
+        .await;
+
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Found a reference cycle in the '[vars]' section: a → b → a.\nRemove one of these references so the variables no longer form a loop."
+        );
+        assert_eq!(writer.to_string(), indoc! {"
+            ! The Flox Catalog lists no pre-built copy of 'thunderbird' for:
+              aarch64-darwin, aarch64-linux, x86_64-linux (this system)
+            It is built from source there, which can take a long time and may fail.
+            A different version may have one: see 'flox show thunderbird'.
+        "});
     }
 }

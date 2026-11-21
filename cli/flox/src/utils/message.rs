@@ -1,6 +1,7 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::fmt::Display;
 use std::io::Write;
+use std::sync::Mutex;
 
 use crossterm::style::Stylize;
 use flox_core::data::System;
@@ -13,6 +14,8 @@ use flox_manifest::parsed::Inner;
 use flox_manifest::parsed::common::DEFAULT_GROUP_NAME;
 use flox_manifest::parsed::latest::{PkgGroups, SelectedOutputs};
 use flox_manifest::raw::PackageToInstall;
+use flox_rust_sdk::flox::ResolutionWarningSink;
+use floxhub_client::{MsgMissingBuilds, ResolutionMessage};
 use indoc::formatdoc;
 use minus::{ExitStrategy, Pager, page_all};
 use tracing::{debug, info};
@@ -107,6 +110,63 @@ pub(crate) fn warning_to_buffer(out: &mut impl Write, v: impl Display) {
         "!".to_string()
     };
     print_message_to_buffer(out, std::format_args!("{icon} {v}"));
+}
+
+/// A sink that shows the catalog's warnings for Flox running on `system`,
+/// and shows a warning once.
+///
+/// A command can lock more than once, and `flox edit` locks again when the
+/// user retries after a failed build, which would show the same warning each
+/// time. A warning that differs, such as one naming other systems, is shown.
+///
+/// Warnings that Flox knows how to explain are reworded for the user. Any
+/// other is shown as the catalog sent it and labeled as such, so a new
+/// warning type reaches the user without a release.
+pub(crate) fn resolution_warning_sink(system: &str) -> ResolutionWarningSink {
+    let system = system.to_string();
+    let shown = Mutex::new(HashSet::new());
+    ResolutionWarningSink::new(move |warnings| {
+        for warning_msg in warnings {
+            let text = resolution_warning_text(warning_msg, &system);
+            if shown.lock().unwrap().insert(text.clone()) {
+                warning(text);
+            }
+        }
+    })
+}
+
+fn resolution_warning_text(warning_msg: &ResolutionMessage, system: &str) -> String {
+    match warning_msg {
+        ResolutionMessage::MissingBuilds(MsgMissingBuilds {
+            install_id,
+            pkg_path,
+            systems,
+            ..
+        }) => {
+            let systems = systems
+                .iter()
+                .map(|listed| {
+                    if listed == system {
+                        format!("{listed} (this system)")
+                    } else {
+                        listed.clone()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            let mut text = formatdoc! {"
+                The Flox Catalog lists no pre-built copy of '{install_id}' for:
+                  {systems}
+                It is built from source there, which can take a long time and may fail."};
+            if let Some(pkg_path) = pkg_path {
+                text.push_str(&format!(
+                    "\nA different version may have one: see 'flox show {pkg_path}'."
+                ));
+            }
+            text
+        },
+        other => format!("Message from the Flox Catalog: {}", other.msg()),
+    }
 }
 
 pub(crate) fn package_installed(pkg: &PackageToInstall, environment_description: &str) {
@@ -410,6 +470,8 @@ pub(crate) fn print_default_systems_changed(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use flox_core::Version;
     use flox_manifest::interfaces::AsTypedOnlyManifest;
     use flox_manifest::lockfile::test_helpers::fake_catalog_package_lock;
@@ -421,11 +483,158 @@ mod tests {
     use flox_rust_sdk::models::environment::Environment;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment;
     use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
+    use floxhub_client::{MessageLevel, MsgUnknown};
     use indoc::indoc;
     use pretty_assertions::assert_eq;
     use tracing::instrument::WithSubscriber;
 
     use super::*;
+
+    /// The wording for a warning Flox explains, and the label on one it doesn't.
+    /// This system is marked because it is one of the flagged systems.
+    #[test]
+    fn resolution_warnings_explain_missing_builds_and_label_unknown_types() {
+        let (subscriber, writer) = test_subscriber_message_only();
+
+        tracing::subscriber::with_default(subscriber, || {
+            resolution_warning_sink("x86_64-linux").send(&[
+                ResolutionMessage::MissingBuilds(MsgMissingBuilds {
+                    level: MessageLevel::Warning,
+                    msg: "The package for install_id 'thunderbird' expected to have known build info, but no build can be confirmed. Flox may attempt to build locally, possibly taking a long time, and possibly still fail.".to_string(),
+                    install_id: "thunderbird".to_string(),
+                    pkg_path: Some("thunderbird".to_string()),
+                    systems: vec!["aarch64-darwin".to_string(), "aarch64-linux".to_string(), "x86_64-linux".to_string()],
+                }),
+                ResolutionMessage::Unknown(MsgUnknown {
+                    msg_type: "held_back".to_string(),
+                    level: MessageLevel::Warning,
+                    msg: "'jq' was held back by 'thunderbird'.".to_string(),
+                    context: HashMap::new(),
+                }),
+            ]);
+        });
+
+        assert_eq!(writer.to_string(), indoc! {"
+            ! The Flox Catalog lists no pre-built copy of 'thunderbird' for:
+              aarch64-darwin, aarch64-linux, x86_64-linux (this system)
+            It is built from source there, which can take a long time and may fail.
+            A different version may have one: see 'flox show thunderbird'.
+            ! Message from the Flox Catalog: 'jq' was held back by 'thunderbird'.
+        "});
+    }
+
+    /// Firefox is flagged on aarch64-darwin only, so nothing is built on
+    /// x86_64-linux.
+    #[test]
+    fn resolution_warnings_do_not_mark_this_system_when_it_is_not_flagged() {
+        let (subscriber, writer) = test_subscriber_message_only();
+
+        tracing::subscriber::with_default(subscriber, || {
+            resolution_warning_sink("x86_64-linux").send(&[ResolutionMessage::MissingBuilds(MsgMissingBuilds {
+                    level: MessageLevel::Warning,
+                    msg: "The package for install_id 'firefox' expected to have known build info, but no build can be confirmed. Flox may attempt to build locally, possibly taking a long time, and possibly still fail.".to_string(),
+                    install_id: "firefox".to_string(),
+                    pkg_path: Some("firefox".to_string()),
+                    systems: vec!["aarch64-darwin".to_string()],
+                })]);
+        });
+
+        assert_eq!(writer.to_string(), indoc! {"
+            ! The Flox Catalog lists no pre-built copy of 'firefox' for:
+              aarch64-darwin
+            It is built from source there, which can take a long time and may fail.
+            A different version may have one: see 'flox show firefox'.
+        "});
+    }
+
+    /// `flox show` takes a pkg-path, so the warning names the pkg-path there
+    /// and the install ID in the sentence about the package in the environment.
+    #[test]
+    fn resolution_warnings_name_pkg_path_when_install_id_differs() {
+        let (subscriber, writer) = test_subscriber_message_only();
+
+        tracing::subscriber::with_default(subscriber, || {
+            resolution_warning_sink("x86_64-linux").send(&[ResolutionMessage::MissingBuilds(MsgMissingBuilds {
+                    level: MessageLevel::Warning,
+                    msg: "The package for install_id 'tb' expected to have known build info, but no build can be confirmed. Flox may attempt to build locally, possibly taking a long time, and possibly still fail.".to_string(),
+                    install_id: "tb".to_string(),
+                    pkg_path: Some("thunderbird".to_string()),
+                    systems: vec!["x86_64-linux".to_string()],
+                })]);
+        });
+
+        assert_eq!(writer.to_string(), indoc! {"
+            ! The Flox Catalog lists no pre-built copy of 'tb' for:
+              x86_64-linux (this system)
+            It is built from source there, which can take a long time and may fail.
+            A different version may have one: see 'flox show thunderbird'.
+        "});
+    }
+
+    /// No `flox show` line is better than one that names a guess.
+    #[test]
+    fn resolution_warnings_omit_flox_show_without_pkg_path() {
+        let (subscriber, writer) = test_subscriber_message_only();
+
+        tracing::subscriber::with_default(subscriber, || {
+            resolution_warning_sink("x86_64-linux").send(&[ResolutionMessage::MissingBuilds(MsgMissingBuilds {
+                    level: MessageLevel::Warning,
+                    msg: "The package for install_id 'tb' expected to have known build info, but no build can be confirmed. Flox may attempt to build locally, possibly taking a long time, and possibly still fail.".to_string(),
+                    install_id: "tb".to_string(),
+                    pkg_path: None,
+                    systems: vec!["x86_64-linux".to_string()],
+                })]);
+        });
+
+        assert_eq!(writer.to_string(), indoc! {"
+            ! The Flox Catalog lists no pre-built copy of 'tb' for:
+              x86_64-linux (this system)
+            It is built from source there, which can take a long time and may fail.
+        "});
+    }
+
+    /// `flox edit` locks again when the user retries after a failed build. The
+    /// warning is not shown a second time, but one naming other systems is.
+    #[test]
+    fn resolution_warning_sink_shows_a_warning_once_unless_it_differs() {
+        let (subscriber, writer) = test_subscriber_message_only();
+
+        tracing::subscriber::with_default(subscriber, || {
+            let sink = resolution_warning_sink("x86_64-linux");
+            sink.send(&[ResolutionMessage::MissingBuilds(MsgMissingBuilds {
+                    level: MessageLevel::Warning,
+                    msg: "The package for install_id 'thunderbird' expected to have known build info, but no build can be confirmed. Flox may attempt to build locally, possibly taking a long time, and possibly still fail.".to_string(),
+                    install_id: "thunderbird".to_string(),
+                    pkg_path: Some("thunderbird".to_string()),
+                    systems: vec!["aarch64-darwin".to_string(), "aarch64-linux".to_string(), "x86_64-linux".to_string()],
+                })]);
+            sink.send(&[ResolutionMessage::MissingBuilds(MsgMissingBuilds {
+                    level: MessageLevel::Warning,
+                    msg: "The package for install_id 'thunderbird' expected to have known build info, but no build can be confirmed. Flox may attempt to build locally, possibly taking a long time, and possibly still fail.".to_string(),
+                    install_id: "thunderbird".to_string(),
+                    pkg_path: Some("thunderbird".to_string()),
+                    systems: vec!["aarch64-darwin".to_string(), "aarch64-linux".to_string(), "x86_64-linux".to_string()],
+                })]);
+            sink.send(&[ResolutionMessage::MissingBuilds(MsgMissingBuilds {
+                    level: MessageLevel::Warning,
+                    msg: "The package for install_id 'thunderbird' expected to have known build info, but no build can be confirmed. Flox may attempt to build locally, possibly taking a long time, and possibly still fail.".to_string(),
+                    install_id: "thunderbird".to_string(),
+                    pkg_path: Some("thunderbird".to_string()),
+                    systems: vec!["aarch64-darwin".to_string()],
+                })]);
+        });
+
+        assert_eq!(writer.to_string(), indoc! {"
+            ! The Flox Catalog lists no pre-built copy of 'thunderbird' for:
+              aarch64-darwin, aarch64-linux, x86_64-linux (this system)
+            It is built from source there, which can take a long time and may fail.
+            A different version may have one: see 'flox show thunderbird'.
+            ! The Flox Catalog lists no pre-built copy of 'thunderbird' for:
+              aarch64-darwin
+            It is built from source there, which can take a long time and may fail.
+            A different version may have one: see 'flox show thunderbird'.
+        "});
+    }
 
     /// Build a lockfile with a single catalog package locked for
     /// `locked_systems`, optionally with explicit `options.systems` in the
