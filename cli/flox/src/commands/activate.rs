@@ -1359,6 +1359,7 @@ mod upgrade_notification_tests {
 
                 store_path: None,
             },
+            check_failed: false,
         });
 
         locked.commit().unwrap();
@@ -1503,6 +1504,7 @@ mod upgrade_notification_tests {
 
                     store_path: None,
                 },
+                check_failed: false,
             });
 
             locked.commit().unwrap();
@@ -1551,6 +1553,7 @@ mod upgrade_notification_tests {
             let _ = locked.info_mut().insert(UpgradeInformation {
                 last_checked: OffsetDateTime::now_utc(),
                 upgrade_result,
+                check_failed: false,
             });
 
             locked.commit().unwrap();

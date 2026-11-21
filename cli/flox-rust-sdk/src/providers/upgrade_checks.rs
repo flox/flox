@@ -2,6 +2,7 @@ use std::fs::{self, File, TryLockError};
 use std::path::{Path, PathBuf};
 
 use flox_core::open_lock_file;
+use flox_manifest::lockfile::Lockfile;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use time::OffsetDateTime;
@@ -30,6 +31,33 @@ pub struct UpgradeInformation {
     pub last_checked: OffsetDateTime,
     /// The result of the last upgrade check
     pub upgrade_result: UpgradeResult,
+    /// Whether the last upgrade check failed.
+    ///
+    /// A failed check is still recorded so that the check is not retried
+    /// until `last_checked` has aged out.
+    /// Its `upgrade_result` is the current lockfile upgraded to itself,
+    /// so that it reports no upgrades.
+    /// CLI versions that predate this field ignore it and read the record as
+    /// a successful check that found no upgrades.
+    /// The field is omitted when `false`,
+    /// so that successful checks are written exactly as those versions write them.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub check_failed: bool,
+}
+
+impl UpgradeInformation {
+    /// Record a failed upgrade check of `lockfile`, checked now.
+    pub fn failed_check(lockfile: Lockfile) -> Self {
+        UpgradeInformation {
+            last_checked: OffsetDateTime::now_utc(),
+            upgrade_result: UpgradeResult {
+                old_lockfile: Some(lockfile.clone()),
+                new_lockfile: lockfile,
+                store_path: None,
+            },
+            check_failed: true,
+        }
+    }
 }
 
 /// A guard for a file containing upgrade information,
@@ -212,8 +240,6 @@ mod tests {
     use std::sync::mpsc;
     use std::time::Duration;
 
-    use flox_manifest::lockfile::Lockfile;
-
     use super::*;
 
     #[test]
@@ -289,6 +315,7 @@ mod tests {
                 new_lockfile: Lockfile::default(),
                 store_path: None,
             },
+            check_failed: false,
         });
 
         drop(locked);
@@ -310,6 +337,7 @@ mod tests {
                 new_lockfile: Lockfile::default(),
                 store_path: None,
             },
+            check_failed: false,
         };
         let _ = locked.info_mut().insert(info.clone());
         locked.commit().unwrap();
@@ -318,5 +346,70 @@ mod tests {
 
         let guard = UpgradeInformationGuard::read_in(temp_dir.path()).unwrap();
         assert_eq!(guard.info(), &Some(info));
+    }
+
+    /// A record of a successful check as every CLI version writes it, and as
+    /// versions without `check_failed` expect to read it.
+    fn successful_check_record(lockfile: &serde_json::Value) -> serde_json::Value {
+        serde_json::json!({
+            "last_checked": "+001970-01-01T00:00:00.000000000Z",
+            "upgrade_result": {
+                "old_lockfile": lockfile,
+                "new_lockfile": lockfile,
+                "store_path": null,
+            },
+        })
+    }
+
+    fn successful_check(lockfile: Lockfile) -> UpgradeInformation {
+        UpgradeInformation {
+            last_checked: OffsetDateTime::UNIX_EPOCH,
+            upgrade_result: UpgradeResult {
+                old_lockfile: Some(lockfile.clone()),
+                new_lockfile: lockfile,
+                store_path: None,
+            },
+            check_failed: false,
+        }
+    }
+
+    #[test]
+    fn reads_record_without_check_failed_as_successful_check() {
+        let lockfile = serde_json::to_value(Lockfile::default()).unwrap();
+
+        let info: UpgradeInformation =
+            serde_json::from_value(successful_check_record(&lockfile)).unwrap();
+
+        assert_eq!(info, successful_check(Lockfile::default()));
+    }
+
+    #[test]
+    fn writes_successful_check_without_check_failed() {
+        let lockfile = serde_json::to_value(Lockfile::default()).unwrap();
+
+        let written = serde_json::to_value(successful_check(Lockfile::default())).unwrap();
+
+        assert_eq!(written, successful_check_record(&lockfile));
+    }
+
+    #[test]
+    fn reads_record_with_check_failed_as_failed_check() {
+        let lockfile = serde_json::to_value(Lockfile::default()).unwrap();
+        let record = serde_json::json!({
+            "last_checked": "+001970-01-01T00:00:00.000000000Z",
+            "upgrade_result": {
+                "old_lockfile": lockfile,
+                "new_lockfile": lockfile,
+                "store_path": null,
+            },
+            "check_failed": true,
+        });
+
+        let info: UpgradeInformation = serde_json::from_value(record).unwrap();
+
+        assert_eq!(info, UpgradeInformation {
+            last_checked: OffsetDateTime::UNIX_EPOCH,
+            ..UpgradeInformation::failed_check(Lockfile::default())
+        });
     }
 }
