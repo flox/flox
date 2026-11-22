@@ -7,11 +7,10 @@
 }:
 
 let
-  inherit (config.programs.flox) package;
-  inherit (config.services.flox) enable metrics stateDir;
+  floxCfg = config.services.flox;
+  inherit (config.services.flox) enable stateDir;
   inherit (utils.systemdUtils.lib) makeJobScript;
   inherit (lib)
-    escapeShellArgs
     filterAttrs
     mapAttrs
     mapAttrsToList
@@ -19,12 +18,12 @@ let
     mkIf
     mkMerge
     mkOption
-    optionals
     types
     ;
 
   # Options common to both Flox module types.
   common = import ./common.nix { inherit lib; };
+  conf = import ./conf.nix { inherit lib; };
 
   # Function to calculate the working directory for a service.
   workingDirectory = name: "${stateDir}/${name}";
@@ -34,6 +33,31 @@ let
   # feeding it back into `systemd.services` would make the merge depend on
   # its own result.
   floxManagedServices = filterAttrs (_: svc: svc.flox.environment != null) config.systemd.services;
+
+  # The command the unit should run inside the activation. Prefer
+  # flox.execStart, then flox.script, then the unit's own script. The null
+  # case is rejected by an assertion below; the "false" placeholder only
+  # guards stray evaluations that bypass the assertion machinery.
+  #
+  # This is computed from the evaluated service rather than inside the
+  # submodule because it travels to the shared entry point through the
+  # service's conf file, which is rendered outside `systemd.services`.
+  mainCommand =
+    name: svc:
+    let
+      scriptText = if svc.flox.script != "" then svc.flox.script else svc.script;
+      jobScript = makeJobScript {
+        name = "${name}-flox-start";
+        text = scriptText;
+        inherit (svc) enableStrictShellChecks;
+      };
+    in
+    if svc.flox.execStart != "" then
+      svc.flox.execStart
+    else if scriptText != "" then
+      "${jobScript} ${svc.scriptArgs}"
+    else
+      "false";
 
   floxOverridesSubmodule =
     {
@@ -45,52 +69,28 @@ let
       fCfg = config.flox;
       WorkingDirectory = workingDirectory name;
 
-      scriptText = if fCfg.script != "" then fCfg.script else config.script;
-      jobScript = makeJobScript {
-        name = "${name}-flox-start";
-        text = scriptText;
-        inherit (config) enableStrictShellChecks;
-      };
-      # Prefer flox.execStart, then flox.script, then the unit's own script.
-      # The null case is rejected by an assertion in the top-level module;
-      # the "false" placeholder only guards stray evaluations that bypass
-      # the assertion machinery.
-      mainCommand =
-        if fCfg.execStart != "" then
-          fCfg.execStart
-        else if scriptText != "" then
-          "${jobScript} ${config.scriptArgs}"
-        else
-          "false";
-
-      activateCmd = escapeShellArgs (
-        [ "${package}/bin/flox" ]
-        ++ fCfg.extraFloxArgs
-        ++ [
-          "activate"
-          "--dir"
-          WorkingDirectory
-        ]
-        ++ optionals fCfg.trustEnvironment [ "--trust" ]
-        ++ fCfg.extraFloxActivateArgs
+      # This unit's configuration, named directly rather than looked up in the
+      # shared directory: that directory is built from `pull.configs`, which is
+      # derived from `systemd.services`, so reaching it from inside a unit
+      # would be self-referential.
+      confFile = pkgs.writeText "flox-service-${name}.conf" (
+        conf.mkConf {
+          inherit (fCfg)
+            environment
+            trustEnvironment
+            extraFloxArgs
+            extraFloxActivateArgs
+            extraFloxPullArgs
+            pullAtServiceStart
+            floxHubTokenFile
+            ;
+          unit = "${name}.service";
+          user = toString (config.serviceConfig.User or "root");
+          group = toString (config.serviceConfig.Group or "");
+          execStart = mainCommand name config;
+          autoRestart = fCfg.autoRestart.enable;
+        }
       );
-
-      # The FloxHub token, if any, is provided as a systemd credential and
-      # travels to flox only through the environment.
-      execStart = pkgs.writeShellScript "flox-exec-start-${name}" ''
-        set -euo pipefail
-        if [ -n "''${CREDENTIALS_DIRECTORY:-}" ] && [ -e "$CREDENTIALS_DIRECTORY/floxhub_token" ]; then
-          FLOX_FLOXHUB_TOKEN="$(cat "$CREDENTIALS_DIRECTORY/floxhub_token")"
-          export FLOX_FLOXHUB_TOKEN
-        fi
-        # By the time systemd runs ExecStart the previous instance's cgroup is
-        # gone, so any process-compose socket in this service's private cache
-        # is stale. Left in place it prevents services from starting again
-        # after an unclean shutdown.
-        rm -f ${WorkingDirectory}/.cache/flox/run/*.sock
-        exec ${activateCmd} -- ${mainCommand}
-      '';
-
     in
     {
       options = {
@@ -127,10 +127,10 @@ let
         requires = [ "flox-pull@${name}.service" ];
         serviceConfig = mkMerge [
           {
-            Environment = common.serviceEnvironment pkgs.runtimeShell WorkingDirectory (toString (
-              config.serviceConfig.User or "root"
-            )) metrics.enable;
-            ExecStart = mkForce "${execStart}";
+            # The shared entry point applies HOME, USER and the XDG variables
+            # itself, so they are not repeated here; see ../systemd/libexec.
+            Environment = floxCfg.staticScriptEnvironment ++ [ "FLOX_CONF_FILE=${confFile}" ];
+            ExecStart = mkForce "${floxCfg.libexec}/flox-exec-start ${name}";
             # Upstream modules commonly harden their units with
             # ProtectSystem=strict; the activation must still be able to
             # write the working directory and reach the nix daemon.
@@ -179,13 +179,15 @@ in
         user = toString (svc.serviceConfig.User or "root");
         group = toString (svc.serviceConfig.Group or "");
         environment = svc.flox.environment;
-        workingDirectory = workingDirectory name;
         inherit (svc.flox)
           extraFloxArgs
           extraFloxPullArgs
           pullAtServiceStart
           floxHubTokenFile
           ;
+        execStart = mainCommand name svc;
+        trustEnvironment = svc.flox.trustEnvironment;
+        extraFloxActivateArgs = svc.flox.extraFloxActivateArgs;
         autoPull = svc.flox.autoPull.enable;
         autoPullDates = svc.flox.autoPull.dates;
         autoRestart = svc.flox.autoRestart.enable;
