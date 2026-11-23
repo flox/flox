@@ -30,6 +30,22 @@ const CI_BUFFER_EXPIRY: Duration = Duration::seconds(10);
 const FIRST_SEND_MARKER_FILE_NAME: &str = "events-v2-first-send";
 pub const BATCH_SIZE: usize = 100;
 
+/// How long the oldest buffered event waits before the buffer is due, for
+/// an invocation launched as `invocation_sources` say: [`CI_BUFFER_EXPIRY`]
+/// when they include `ci` (or a `ci.*` sub-token), else
+/// [`DEFAULT_BUFFER_EXPIRY`].
+pub fn buffer_max_age(invocation_sources: &[String]) -> Duration {
+    let is_ci = invocation_sources.iter().any(|source| {
+        let source = source.to_ascii_lowercase();
+        source == "ci" || source.starts_with("ci.")
+    });
+    if is_ci {
+        CI_BUFFER_EXPIRY
+    } else {
+        DEFAULT_BUFFER_EXPIRY
+    }
+}
+
 /// Client that stamps v2 event metadata, buffers events, and flushes
 /// them through an [`EventsConnection`].
 ///
@@ -57,7 +73,7 @@ pub const BATCH_SIZE: usize = 100;
 /// A client of another producer `P` ([`EventsClient::for_producer`]) stamps
 /// `P`'s source and the producer version it is given, buffers at the
 /// location it is given, and is due after [`DEFAULT_BUFFER_EXPIRY`] unless
-/// its `max_age` is set.
+/// its `max_age` is set ([`buffer_max_age`]).
 #[derive(Debug)]
 pub struct EventsClient<P: Producer = Cli> {
     pub device_id: Uuid,
@@ -103,15 +119,7 @@ impl EventsClient<Cli> {
         shared_metadata: SharedMetadataTemplate,
         connection: impl EventsConnection + 'static,
     ) -> Self {
-        let is_ci = shared_metadata.invocation_sources.iter().any(|source| {
-            let source = source.to_ascii_lowercase();
-            source == "ci" || source.starts_with("ci.")
-        });
-        let max_age = if is_ci {
-            CI_BUFFER_EXPIRY
-        } else {
-            DEFAULT_BUFFER_EXPIRY
-        };
+        let max_age = buffer_max_age(&shared_metadata.invocation_sources);
         let producer_version = Some(shared_metadata.flox_version.clone());
         let mut client = Self::for_producer(
             device_id,

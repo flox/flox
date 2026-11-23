@@ -15,7 +15,7 @@ mod guard;
 mod hub;
 
 pub use buffer::{BufferLocation, EVENTS_BUFFER_FILE_NAME, EventsBuffer};
-pub use client::{BATCH_SIZE, EventsClient};
+pub use client::{BATCH_SIZE, EventsClient, buffer_max_age};
 pub use connection::{EventsConnection, EventsConnectionV2, TRAILING_NETWORK_CALL_TIMEOUT};
 pub use guard::{EventsGuard, force_flush_requested};
 pub use hub::EventsHub;
@@ -2909,5 +2909,17 @@ mod pipeline_tests {
             (DEVICE_ID, INVOCATION_ID)
         );
         assert_eq!(std::fs::read_to_string(location.file()).unwrap(), "");
+    }
+
+    #[test]
+    fn buffer_max_age_is_ten_seconds_in_ci() {
+        let sources = |s: &[&str]| s.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(buffer_max_age(&sources(&["ci"])), Duration::seconds(10));
+        assert_eq!(
+            buffer_max_age(&sources(&["CI.github-actions"])),
+            Duration::seconds(10)
+        );
+        assert_eq!(buffer_max_age(&sources(&["vscode"])), Duration::minutes(2));
+        assert_eq!(buffer_max_age(&[]), Duration::minutes(2));
     }
 }
