@@ -22,12 +22,13 @@ const DISABLE_METRICS_KEY: &str = "disable_metrics";
 /// `T` names the keys that are read:
 /// a key it does not have is passed over, whatever its value.
 pub fn parse<T: DeserializeOwned>() -> Result<T> {
+    let env = env::vars().collect::<Vec<_>>();
     let base_directories = BaseDirectories::with_prefix(FLOX_DIR_NAME);
     parse_with(
         &base_directories,
-        &locate_user_config_dir(&base_directories)?,
-        locate_system_config_dir()?.as_deref(),
-        env::vars(),
+        &locate_user_config_dir(&base_directories, &env)?,
+        locate_system_config_dir(&env)?.as_deref(),
+        env,
     )
 }
 
@@ -65,6 +66,13 @@ pub fn parse_with<T: DeserializeOwned>(
         .context("Could not parse config")
 }
 
+/// The value of the variable `name` in `env`.
+fn var<'a>(env: &'a [(String, String)], name: &str) -> Option<&'a str> {
+    env.iter()
+        .find(|(key, _)| key == name)
+        .map(|(_, value)| value.as_str())
+}
+
 /// Locates the system wide flox config dir.
 ///
 /// By default that is `/etc`.
@@ -72,10 +80,10 @@ pub fn parse_with<T: DeserializeOwned>(
 /// `$FLOX_SYSTEM_CONFIG_DIR`.
 ///
 /// IFF `$FLOX_SYSTEM_CONFIG_DIR` is set to an empty string, system config will be ignored.
-fn locate_system_config_dir() -> Result<Option<PathBuf>> {
+fn locate_system_config_dir(env: &[(String, String)]) -> Result<Option<PathBuf>> {
     // TODO: make constant
-    match env::var("FLOX_SYSTEM_CONFIG_DIR").ok() {
-        Some(path) if path.is_empty() => Ok(None),
+    match var(env, "FLOX_SYSTEM_CONFIG_DIR") {
+        Some("") => Ok(None),
         Some(path) => Ok(Some(path.into())),
         None => Ok(Some(PathBuf::from("/etc"))),
     }
@@ -92,13 +100,16 @@ fn locate_system_config_dir() -> Result<Option<PathBuf>> {
 ///
 /// IFF $FLOX_CONFIG_DIR is set to a non-empty string,
 /// its value will be used as the user config dir instead.
-fn locate_user_config_dir(flox_dirs: &BaseDirectories) -> Result<PathBuf> {
-    let user_config_dir = env::var(FLOX_CONFIG_DIR_VAR).ok();
+fn locate_user_config_dir(
+    flox_dirs: &BaseDirectories,
+    env: &[(String, String)],
+) -> Result<PathBuf> {
+    let user_config_dir = var(env, FLOX_CONFIG_DIR_VAR);
 
     let config_dir = match user_config_dir {
         Some(path) if !path.is_empty() => {
             debug!(?path, "Global config directory overridden");
-            fs::create_dir_all(&path)
+            fs::create_dir_all(path)
                 .context(format!("Could not create config directory: {path:?}"))?;
             path.into()
         },
@@ -418,6 +429,40 @@ mod tests {
         assert_eq!(config.flox.floxhub_url, Some(floxhub_url.parse().unwrap()));
         assert!(config.flox.disable_metrics);
         assert_eq!(config.flox.search_limit, Some(search_limit));
+    }
+
+    fn env_of(vars: &[(&str, &str)]) -> Vec<(String, String)> {
+        vars.iter()
+            .map(|(key, value)| (key.to_string(), value.to_string()))
+            .collect()
+    }
+
+    #[test]
+    fn system_config_dir_is_located_in_the_given_environment() {
+        assert_eq!(
+            locate_system_config_dir(&env_of(&[])).unwrap(),
+            Some(PathBuf::from("/etc"))
+        );
+        assert_eq!(
+            locate_system_config_dir(&env_of(&[("FLOX_SYSTEM_CONFIG_DIR", "")])).unwrap(),
+            None
+        );
+        assert_eq!(
+            locate_system_config_dir(&env_of(&[("FLOX_SYSTEM_CONFIG_DIR", "/system")])).unwrap(),
+            Some(PathBuf::from("/system"))
+        );
+    }
+
+    #[test]
+    fn user_config_dir_override_is_read_from_the_given_environment() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let config_dir = tempdir.path().join("config");
+        let env = env_of(&[(FLOX_CONFIG_DIR_VAR, config_dir.to_str().unwrap())]);
+
+        assert_eq!(
+            locate_user_config_dir(&mock_flox_dirs(), &env).unwrap(),
+            config_dir
+        );
     }
 
     /// Parse `disable_metrics` from a system and a user config file, each
