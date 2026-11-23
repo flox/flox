@@ -21,12 +21,35 @@ const DISABLE_METRICS_KEY: &str = "disable_metrics";
 ///
 /// `T` names the keys that are read:
 /// a key it does not have is passed over, whatever its value.
+///
+/// The user config dir is created if it is missing,
+/// and exported as `$FLOX_CONFIG_DIR` unless that variable named it.
+/// [parse_from] does neither.
 pub fn parse<T: DeserializeOwned>() -> Result<T> {
     let env = env::vars().collect::<Vec<_>>();
     let base_directories = BaseDirectories::with_prefix(FLOX_DIR_NAME);
+    let user_config_dir =
+        prepare_user_config_dir(locate_user_config_dir(&base_directories, &env)?)?;
     parse_with(
         &base_directories,
-        &locate_user_config_dir(&base_directories, &env)?,
+        &user_config_dir,
+        locate_system_config_dir(&env)?.as_deref(),
+        env,
+    )
+}
+
+/// Like [parse], for the environment `env`, and without changing anything:
+/// no directory is created and no variable is set.
+/// The process environment is not read.
+pub fn parse_from<T: DeserializeOwned>(
+    env: impl IntoIterator<Item = (String, String)>,
+) -> Result<T> {
+    let env = env.into_iter().collect::<Vec<_>>();
+    let base_directories = base_directories_from(&env);
+    let user_config_dir = locate_user_config_dir(&base_directories, &env)?.into_path();
+    parse_with(
+        &base_directories,
+        &user_config_dir,
         locate_system_config_dir(&env)?.as_deref(),
         env,
     )
@@ -131,7 +154,24 @@ fn locate_system_config_dir(env: &[(String, String)]) -> Result<Option<PathBuf>>
     }
 }
 
-/// Locates the user specific config dir.
+/// The user specific config dir, by where [locate_user_config_dir] found it.
+#[derive(Clone, Debug, PartialEq)]
+enum UserConfigDir {
+    /// Named by a non-empty `$FLOX_CONFIG_DIR`.
+    Overridden(PathBuf),
+    /// Found in, or defaulted to, the xdg dirs.
+    Xdg(PathBuf),
+}
+
+impl UserConfigDir {
+    fn into_path(self) -> PathBuf {
+        match self {
+            UserConfigDir::Overridden(path) | UserConfigDir::Xdg(path) => path,
+        }
+    }
+}
+
+/// Locates the user specific config dir, without creating it.
 ///
 /// The implementation probes for config files in relevant xdg dirs in order:
 /// $XDG_CONFIG_HOME/flox/flox.toml
@@ -145,15 +185,13 @@ fn locate_system_config_dir(env: &[(String, String)]) -> Result<Option<PathBuf>>
 fn locate_user_config_dir(
     flox_dirs: &BaseDirectories,
     env: &[(String, String)],
-) -> Result<PathBuf> {
+) -> Result<UserConfigDir> {
     let user_config_dir = var(env, FLOX_CONFIG_DIR_VAR);
 
     let config_dir = match user_config_dir {
         Some(path) if !path.is_empty() => {
             debug!(?path, "Global config directory overridden");
-            fs::create_dir_all(path)
-                .context(format!("Could not create config directory: {path:?}"))?;
-            path.into()
+            UserConfigDir::Overridden(path.into())
         },
         None | Some(_ /* empty */) => {
             let config_dir = if let Some(existing_xdg_based_config) =
@@ -170,7 +208,25 @@ fn locate_user_config_dir(
                 // fall back to `XDG_CONFIG_HOME/flox`
                 flox_dirs.get_config_home().context("$HOME not set")?
             };
+            UserConfigDir::Xdg(config_dir)
+        },
+    };
 
+    Ok(config_dir)
+}
+
+/// Creates the user specific config dir if it is missing.
+///
+/// One found in the xdg dirs is also canonicalized
+/// and exported as `$FLOX_CONFIG_DIR`.
+fn prepare_user_config_dir(located: UserConfigDir) -> Result<PathBuf> {
+    let config_dir = match located {
+        UserConfigDir::Overridden(path) => {
+            fs::create_dir_all(&path)
+                .context(format!("Could not create config directory: {path:?}"))?;
+            path
+        },
+        UserConfigDir::Xdg(config_dir) => {
             fs::create_dir_all(&config_dir)
                 .context(format!("Could not create config directory: {config_dir:?}"))?;
             let config_dir = config_dir
@@ -572,8 +628,81 @@ mod tests {
 
         assert_eq!(
             locate_user_config_dir(&mock_flox_dirs(), &env).unwrap(),
+            UserConfigDir::Overridden(config_dir.clone())
+        );
+        assert!(!config_dir.exists(), "locating must not create the dir");
+
+        assert_eq!(
+            prepare_user_config_dir(UserConfigDir::Overridden(config_dir.clone())).unwrap(),
             config_dir
         );
+        assert!(config_dir.is_dir(), "preparing creates the dir");
+    }
+
+    #[test]
+    fn parse_from_reads_the_files_of_the_given_environment() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let home = tempdir.path().join("home");
+        let system_config_dir = tempdir.path().join("system");
+        let user_config_dir = home.join(".config").join(FLOX_DIR_NAME);
+        for dir in [&system_config_dir, &user_config_dir] {
+            fs::create_dir_all(dir).unwrap();
+        }
+        fs::write(
+            system_config_dir.join(FLOX_CONFIG_FILE),
+            "disable_metrics = true\nsearch_limit = 24\n",
+        )
+        .unwrap();
+        fs::write(
+            user_config_dir.join(FLOX_CONFIG_FILE),
+            "search_limit = 42\n",
+        )
+        .unwrap();
+
+        let config: Config = parse_from(env_of(&[
+            ("HOME", home.to_str().unwrap()),
+            (
+                "FLOX_SYSTEM_CONFIG_DIR",
+                system_config_dir.to_str().unwrap(),
+            ),
+            ("FLOX_FLOXHUB_TOKEN_STORAGE", "plaintext"),
+        ]))
+        .unwrap();
+
+        assert!(config.flox.disable_metrics);
+        assert_eq!(config.flox.search_limit, NonZero::new(42));
+        assert_eq!(
+            config.flox.floxhub_token_storage,
+            TokenStorageMode::Plaintext
+        );
+    }
+
+    #[test]
+    fn parse_from_changes_neither_the_disk_nor_the_environment() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let home = tempdir.path().join("home");
+        fs::create_dir(&home).unwrap();
+
+        temp_env::with_var_unset(FLOX_CONFIG_DIR_VAR, || {
+            parse_from::<Config>(env_of(&[
+                ("HOME", home.to_str().unwrap()),
+                ("FLOX_SYSTEM_CONFIG_DIR", ""),
+            ]))
+            .unwrap();
+            assert_eq!(env::var_os(FLOX_CONFIG_DIR_VAR), None);
+
+            let overridden = tempdir.path().join("overridden");
+            parse_from::<Config>(env_of(&[
+                ("HOME", home.to_str().unwrap()),
+                ("FLOX_SYSTEM_CONFIG_DIR", ""),
+                (FLOX_CONFIG_DIR_VAR, overridden.to_str().unwrap()),
+            ]))
+            .unwrap();
+            assert!(!overridden.exists());
+            assert_eq!(env::var_os(FLOX_CONFIG_DIR_VAR), None);
+        });
+
+        assert_eq!(fs::read_dir(&home).unwrap().count(), 0);
     }
 
     /// Parse `disable_metrics` from a system and a user config file, each
