@@ -65,7 +65,7 @@ impl Stop {
         }
 
         if failed_count > 0 {
-            bail!("Failed to stop {failed_count} service(s)");
+            bail!("Failed to stop {failed_count} services.");
         }
 
         Ok(())

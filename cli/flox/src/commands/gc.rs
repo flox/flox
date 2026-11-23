@@ -329,7 +329,7 @@ fn run_store_gc() -> Result<String> {
             .wait()
             .context("Failed while waiting for GC process to exit")?;
         if !status.success() {
-            bail!("Nix store GC failed: {status}");
+            bail!("Nix store GC failed: {status}.");
         }
         debug!("joined gc reader thread");
         Ok::<String, anyhow::Error>(freed_msg)
