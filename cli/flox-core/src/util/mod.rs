@@ -3,6 +3,7 @@ pub mod message;
 use std::collections::HashMap;
 use std::env;
 use std::ffi::OsString;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
 
@@ -149,6 +150,33 @@ pub fn restore_startup_tls_env(command: &mut Command) {
             },
         }
     }
+}
+
+static NIX_CACHE_HOME_OVERRIDE: OnceLock<PathBuf> = OnceLock::new();
+
+/// Record the CLI cache setting without changing the process environment.
+pub fn set_nix_cache_home(path: PathBuf) {
+    if env::var_os("NIX_CACHE_HOME").is_none() {
+        let _ = NIX_CACHE_HOME_OVERRIDE.set(path);
+    }
+}
+
+pub fn nix_cache_home_override() -> Option<&'static Path> {
+    NIX_CACHE_HOME_OVERRIDE.get().map(PathBuf::as_path)
+}
+
+/// Construct a Nix command with the features and cache settings used by Flox.
+pub fn nix_command(binary: &Path) -> Command {
+    let mut command = Command::new(binary);
+    if let Some(cache_home) = nix_cache_home_override() {
+        command.env("NIX_CACHE_HOME", cache_home);
+    }
+    command.args([
+        "--option",
+        "extra-experimental-features",
+        "nix-command flakes",
+    ]);
+    command
 }
 
 #[cfg(test)]

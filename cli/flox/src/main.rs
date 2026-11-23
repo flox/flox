@@ -18,7 +18,7 @@ use commands::{
 };
 use flox_config::Config;
 use flox_core::sentry::init_sentry;
-use flox_core::util::capture_startup_tls_env;
+use flox_core::util::{capture_startup_tls_env, set_nix_cache_home};
 use flox_core::vars::{FLOX_VERSION_STRING, FLOX_VERSION_VAR};
 use flox_events::{EventsHub, LifecycleFields};
 use flox_rust_sdk::flox::FLOX_VERSION;
@@ -128,18 +128,13 @@ fn main() -> ExitCode {
             return ExitCode::from(1);
         },
     };
-    if env::var_os("NIX_CACHE_HOME").is_none()
-        && let Some(cache_home) = config
-            .flox
-            .nix
-            .as_ref()
-            .and_then(|nix| nix.cache_home.as_ref())
+    if let Some(cache_home) = config
+        .flox
+        .nix
+        .as_ref()
+        .and_then(|nix| nix.cache_home.clone())
     {
-        // Set the path once so all CLI subprocesses inherit the same Nix cache.
-        // SAFETY: The process is still single-threaded before telemetry and the runtime start.
-        unsafe {
-            env::set_var("NIX_CACHE_HOME", cache_home);
-        }
+        set_nix_cache_home(cache_home);
     }
     let args = commands::flox_cli().run_inner(Args::current_args());
     // Completion must not print the first-run notice or create its device ID.

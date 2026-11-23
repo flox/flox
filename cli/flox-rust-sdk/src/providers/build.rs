@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::LazyLock;
 
+use flox_core::util::nix_cache_home_override;
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::lockfile::Lockfile;
 use flox_manifest::parsed::Inner;
@@ -414,6 +415,16 @@ impl FloxBuildMk<'_> {
         // wrote into this process since startup.
         flox_core::util::restore_startup_tls_env(&mut command);
         command.env_remove("MAKEFLAGS");
+        // Make inserts this value into a Bash ANSI-C quoted string.
+        let cache_home = nix_cache_home_override()
+            .map(|path| {
+                path.as_os_str()
+                    .as_encoded_bytes()
+                    .escape_ascii()
+                    .to_string()
+            })
+            .unwrap_or_default();
+        command.env("_FLOX_NIX_CACHE_HOME", cache_home);
         command.arg(format!("NIXPKGS_LIB_URL={}", &*NIXPKGS_LIB_URL));
         command.arg("--file").arg(&*FLOX_BUILD_MK);
         command.arg("--directory").arg(base_dir); // Change dir before reading makefile.

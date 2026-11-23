@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::LazyLock;
 
+use flox_core::util::nix_command;
 use serde::Deserialize;
 use tracing::debug;
 
@@ -15,13 +16,7 @@ pub const NIX_VERSION: &str = env!("NIX_VERSION");
 
 /// Returns a `Command` for `nix` with a default set of features enabled.
 pub fn nix_base_command() -> Command {
-    let mut command = Command::new(&*NIX_BIN);
-    command.args([
-        "--option",
-        "extra-experimental-features",
-        "nix-command flakes",
-    ]);
-    command
+    nix_command(&NIX_BIN)
 }
 
 /// Raw shape of a single setting in `nix config show --json` output.
