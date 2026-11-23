@@ -26,4 +26,5 @@ pub use config::{
     TokenStorageMode,
     resolve_auto_activation_preference,
 };
+pub use load::base_directories_from;
 pub use write::ReadWriteError;

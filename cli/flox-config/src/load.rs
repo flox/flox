@@ -73,6 +73,48 @@ fn var<'a>(env: &'a [(String, String)], name: &str) -> Option<&'a str> {
         .map(|(_, value)| value.as_str())
 }
 
+/// flox's base directories as `env` names them.
+///
+/// These are the directories [BaseDirectories::with_prefix] reads from the
+/// process environment, by the same rules:
+/// a relative path counts as unset, and the defaults are under `$HOME`.
+/// Without a non-empty `HOME` in `env` they are unset;
+/// the user database is not asked.
+pub fn base_directories_from(env: &[(String, String)]) -> BaseDirectories {
+    let absolute = |name: &str| {
+        var(env, name)
+            .map(PathBuf::from)
+            .filter(|path| path.is_absolute())
+    };
+    let absolutes = |name: &str| {
+        var(env, name)
+            .map(|paths| {
+                env::split_paths(paths)
+                    .filter(|path| path.is_absolute())
+                    .collect::<Vec<_>>()
+            })
+            .filter(|paths| !paths.is_empty())
+    };
+    let home = var(env, "HOME")
+        .filter(|home| !home.is_empty())
+        .map(PathBuf::from);
+    let in_home = |dir: &str| home.as_ref().map(|home| home.join(dir));
+
+    // `BaseDirectories` is non-exhaustive and has no constructor that takes
+    // an environment, so every directory of one made from the process is
+    // replaced.
+    let mut dirs = BaseDirectories::with_prefix(FLOX_DIR_NAME);
+    dirs.data_home = absolute("XDG_DATA_HOME").or_else(|| in_home(".local/share"));
+    dirs.config_home = absolute("XDG_CONFIG_HOME").or_else(|| in_home(".config"));
+    dirs.cache_home = absolute("XDG_CACHE_HOME").or_else(|| in_home(".cache"));
+    dirs.state_home = absolute("XDG_STATE_HOME").or_else(|| in_home(".local/state"));
+    dirs.data_dirs = absolutes("XDG_DATA_DIRS")
+        .unwrap_or_else(|| vec!["/usr/local/share".into(), "/usr/share".into()]);
+    dirs.config_dirs = absolutes("XDG_CONFIG_DIRS").unwrap_or_else(|| vec!["/etc/xdg".into()]);
+    dirs.runtime_dir = absolute("XDG_RUNTIME_DIR");
+    dirs
+}
+
 /// Locates the system wide flox config dir.
 ///
 /// By default that is `/etc`.
@@ -243,9 +285,78 @@ mod tests {
     use super::*;
     use crate::config::{Config, TokenStorageMode};
 
-    // TODO: update the `xdg` crate and build `BaseDirectories` by hand with known (test) paths
+    /// Base directories under a home that does not exist,
+    /// whatever the environment of the test process holds.
     fn mock_flox_dirs() -> BaseDirectories {
-        BaseDirectories::new()
+        base_directories_from(&env_of(&[("HOME", "/home/user")]))
+    }
+
+    #[test]
+    fn base_directories_follow_the_given_environment() {
+        let dirs = base_directories_from(&env_of(&[
+            ("HOME", "/home/user"),
+            ("XDG_DATA_HOME", "/data"),
+            ("XDG_CACHE_HOME", "relative"),
+            ("XDG_CONFIG_DIRS", "/one::relative:/two"),
+        ]));
+
+        assert_eq!(dirs.get_data_home(), Some(PathBuf::from("/data/flox")));
+        assert_eq!(
+            dirs.get_config_home(),
+            Some(PathBuf::from("/home/user/.config/flox"))
+        );
+        assert_eq!(
+            dirs.get_cache_home(),
+            Some(PathBuf::from("/home/user/.cache/flox"))
+        );
+        assert_eq!(
+            dirs.get_state_home(),
+            Some(PathBuf::from("/home/user/.local/state/flox"))
+        );
+        assert_eq!(dirs.get_config_dirs(), [
+            PathBuf::from("/one/flox"),
+            PathBuf::from("/two/flox")
+        ]);
+    }
+
+    #[test]
+    fn base_directories_are_what_the_process_would_get() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let home = tempdir.path().to_str().unwrap();
+        let vars = [
+            ("HOME", Some(home)),
+            ("XDG_DATA_HOME", Some("/data")),
+            ("XDG_CONFIG_HOME", None),
+            ("XDG_CACHE_HOME", Some("relative")),
+            ("XDG_STATE_HOME", None),
+            ("XDG_DATA_DIRS", None),
+            ("XDG_CONFIG_DIRS", Some("/one::relative:/two")),
+            ("XDG_RUNTIME_DIR", None),
+        ];
+        let env = vars
+            .iter()
+            .filter_map(|(key, value)| Some((key.to_string(), (*value)?.to_string())))
+            .collect::<Vec<_>>();
+
+        let from_process =
+            temp_env::with_vars(vars, || BaseDirectories::with_prefix(FLOX_DIR_NAME));
+        let from_env = base_directories_from(&env);
+
+        assert_eq!(from_env.get_data_home(), from_process.get_data_home());
+        assert_eq!(from_env.get_config_home(), from_process.get_config_home());
+        assert_eq!(from_env.get_cache_home(), from_process.get_cache_home());
+        assert_eq!(from_env.get_state_home(), from_process.get_state_home());
+        assert_eq!(from_env.get_data_dirs(), from_process.get_data_dirs());
+        assert_eq!(from_env.get_config_dirs(), from_process.get_config_dirs());
+        assert_eq!(from_env.runtime_dir, from_process.runtime_dir);
+    }
+
+    #[test]
+    fn base_directories_without_home_are_unset() {
+        let dirs = base_directories_from(&env_of(&[("HOME", "")]));
+
+        assert_eq!(dirs.get_data_home(), None);
+        assert_eq!(dirs.get_config_home(), None);
     }
 
     #[test]
