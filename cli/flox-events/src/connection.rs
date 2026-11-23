@@ -116,8 +116,12 @@ impl<P: Producer> EventsConnection<P> for EventsConnectionV2 {
         let (sender, receiver) = std::sync::mpsc::sync_channel(1);
         std::thread::spawn(move || {
             let result = (|| {
+                // A redirect is not followed: x-api-key is a header of our
+                // own, which reqwest forwards to wherever a 307 or 308 points,
+                // together with the events.
                 let client = reqwest::blocking::ClientBuilder::new()
                     .timeout(thread_timeout)
+                    .redirect(reqwest::redirect::Policy::none())
                     .build()
                     .context("Could not build v2 events HTTP client")?;
                 client
@@ -146,6 +150,12 @@ impl<P: Producer> EventsConnection<P> for EventsConnectionV2 {
         };
 
         let status = response.status();
+        if status.is_redirection() {
+            debug!(%status, "V2 events endpoint redirected; not followed");
+            return Err(anyhow::anyhow!(
+                "v2 events endpoint answered {status}, a redirect, which is not followed"
+            ));
+        }
         match response.error_for_status() {
             Ok(_) => {
                 debug!(status = %status, event_count, "V2 events sent");
@@ -271,6 +281,28 @@ mod tests {
     }
 
     const OK: &str = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+
+    #[test]
+    fn a_redirect_is_not_followed_and_the_events_are_not_sent() {
+        let elsewhere = TcpListener::bind("127.0.0.1:0").expect("bind loopback");
+        elsewhere.set_nonblocking(true).expect("nonblocking");
+        let port = elsewhere.local_addr().expect("address").port();
+        let redirect: &'static str = format!(
+            "HTTP/1.1 307 Temporary Redirect\r\nLocation: http://127.0.0.1:{port}/ingest\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+        )
+        .leak();
+        let (url, request) = serve_once(redirect);
+        let mut connection = EventsConnectionV2::new(url, "key");
+
+        let sent = connection.send(vec![&event()]);
+        request.join().expect("the endpoint thread");
+        assert!(sent.is_err(), "a redirect counted as delivered");
+        let followed = elsewhere.accept();
+        assert!(
+            matches!(&followed, Err(err) if err.kind() == std::io::ErrorKind::WouldBlock),
+            "the redirect was followed: {followed:?}"
+        );
+    }
 
     #[test]
     fn the_cli_sends_its_own_user_agent() {
