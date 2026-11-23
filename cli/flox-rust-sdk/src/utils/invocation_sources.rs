@@ -93,7 +93,21 @@ pub fn detect_invocation_sources_from(var: impl Fn(&str) -> Option<String>) -> V
     // Apply all inference heuristics (CI, containerd, agentic tools, etc.)
     sources.extend(detect_heuristics(&var));
 
-    // Sort for consistent ordering
+    sorted(sources)
+}
+
+/// Detect the invocation sources that the heuristics infer, for the
+/// environment that `var` looks variables up in.
+///
+/// `FLOX_INVOCATION_SOURCE` is not read, so every source returned is a tag of
+/// [INFERENCE_HEURISTICS]. Deduplicated and sorted like
+/// [detect_invocation_sources].
+pub fn infer_invocation_sources_from(var: impl Fn(&str) -> Option<String>) -> Vec<String> {
+    sorted(detect_heuristics(var).collect())
+}
+
+/// Sort for consistent ordering
+fn sorted(sources: HashSet<String>) -> Vec<String> {
     let mut result: Vec<String> = sources.into_iter().collect();
     result.sort();
     result
@@ -147,6 +161,17 @@ mod tests {
             "agentic.kiro",
             "vscode.terminal"
         ]);
+    }
+
+    #[test]
+    fn test_infer_invocation_sources_leaves_explicit_unread() {
+        let var = |name: &str| match name {
+            "FLOX_INVOCATION_SOURCE" => Some("vscode.terminal,ci.github-actions".to_string()),
+            "CI" => Some("true".to_string()),
+            "CODEX_SANDBOX" | "CODEX_CI" => Some("1".to_string()),
+            _ => None,
+        };
+        assert_eq!(infer_invocation_sources_from(var), ["agentic.codex", "ci"]);
     }
 
     #[test]
