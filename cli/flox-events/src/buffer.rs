@@ -510,6 +510,7 @@ mod tests {
 
     impl Producer for Other {
         type Kind = crate::EventKind;
+        type Metadata = ();
 
         const SOURCE: &'static str = "other";
     }

@@ -4,19 +4,22 @@ use std::time::Duration as TimeoutDuration;
 use anyhow::{Context, Result};
 use tracing::debug;
 
-use crate::Event;
+use crate::{Cli, Producer, ProducerEvent};
 
 /// Timeout used for network operations that run after the main command has
 /// completed.
 pub const TRAILING_NETWORK_CALL_TIMEOUT: TimeoutDuration = TimeoutDuration::from_secs(2);
 
-/// A connection to a v2 events backend.
-pub trait EventsConnection: Debug + Send + Sync {
+/// The user agent of the CLI's requests.
+const CLI_USER_AGENT: &str = "flox-cli";
+
+/// A connection to a v2 events backend, for the events of producer `P`.
+pub trait EventsConnection<P: Producer = Cli>: Debug + Send + Sync {
     /// Send events to the backend defined by this connection.
-    fn send(&mut self, events: Vec<&Event>) -> Result<()>;
+    fn send(&mut self, events: Vec<&ProducerEvent<P>>) -> Result<()>;
 
     /// Box this connection as a trait object.
-    fn boxed(self) -> Box<dyn EventsConnection>
+    fn boxed(self) -> Box<dyn EventsConnection<P>>
     where
         Self: Sized + 'static,
     {
@@ -30,6 +33,7 @@ pub struct EventsConnectionV2 {
     pub timeout: TimeoutDuration,
     pub(crate) endpoint_url: String,
     pub(crate) api_key: String,
+    pub(crate) user_agent: String,
 }
 
 impl Debug for EventsConnectionV2 {
@@ -38,17 +42,26 @@ impl Debug for EventsConnectionV2 {
             .field("timeout", &self.timeout)
             .field("endpoint_url", &self.endpoint_url)
             .field("api_key", &"<redacted>")
+            .field("user_agent", &self.user_agent)
             .finish()
     }
 }
 
 impl EventsConnectionV2 {
+    /// A connection to `endpoint_url` that sends `api_key`, as the CLI.
     pub fn new(endpoint_url: impl Into<String>, api_key: impl Into<String>) -> Self {
         Self {
             timeout: TRAILING_NETWORK_CALL_TIMEOUT,
             endpoint_url: endpoint_url.into(),
             api_key: api_key.into(),
+            user_agent: CLI_USER_AGENT.to_string(),
         }
+    }
+
+    /// The same connection, naming another producer as its user agent.
+    pub fn with_user_agent(mut self, user_agent: impl Into<String>) -> Self {
+        self.user_agent = user_agent.into();
+        self
     }
 
     /// Serialize a batch of events as the request body for the ingest
@@ -67,7 +80,7 @@ impl EventsConnectionV2 {
     /// the entire S3Queue behind it — ClickHouse cannot parse a body starting
     /// with `[`. This is the parallel fix to the same bug on the FloxHub side
     /// (floxhub@128dce329).
-    pub fn serialize_events(events: &[&Event]) -> Result<String> {
+    pub fn serialize_events<P: Producer>(events: &[&ProducerEvent<P>]) -> Result<String> {
         let mut lines = Vec::with_capacity(events.len());
         for event in events {
             lines.push(serde_json::to_string(event).context("Could not serialize event")?);
@@ -76,8 +89,8 @@ impl EventsConnectionV2 {
     }
 }
 
-impl EventsConnection for EventsConnectionV2 {
-    fn send(&mut self, events: Vec<&Event>) -> Result<()> {
+impl<P: Producer> EventsConnection<P> for EventsConnectionV2 {
+    fn send(&mut self, events: Vec<&ProducerEvent<P>>) -> Result<()> {
         let event_count = events.len();
         let body = Self::serialize_events(&events)?;
         debug!(
@@ -89,6 +102,7 @@ impl EventsConnection for EventsConnectionV2 {
         let thread_timeout = self.timeout;
         let thread_endpoint_url = self.endpoint_url.clone();
         let thread_api_key = self.api_key.clone();
+        let thread_user_agent = self.user_agent.clone();
 
         // Run the blocking request on a separate thread so the channel
         // `recv_timeout` below — not the reqwest client — bounds how long the
@@ -110,7 +124,7 @@ impl EventsConnection for EventsConnectionV2 {
                     .put(thread_endpoint_url)
                     .header("content-type", "application/json")
                     .header("x-api-key", thread_api_key)
-                    .header("user-agent", "flox-cli")
+                    .header("user-agent", thread_user_agent)
                     .body(body)
                     .send()
                     .context("Could not send v2 events")
@@ -156,7 +170,8 @@ mod mock {
 
     use anyhow::{Result, bail};
 
-    use super::{Debug, Event, EventsConnection};
+    use super::{Debug, EventsConnection};
+    use crate::Event;
 
     #[derive(Debug, Clone, Default)]
     pub struct MockEventsConnection {
@@ -201,3 +216,78 @@ mod mock {
 
 #[cfg(any(test, feature = "tests"))]
 pub use mock::MockEventsConnection;
+
+#[cfg(test)]
+mod tests {
+    use std::io::{BufRead, BufReader, Write};
+    use std::net::TcpListener;
+    use std::thread::JoinHandle;
+
+    use time::OffsetDateTime;
+    use uuid::Uuid;
+
+    use super::*;
+    use crate::{Event, EventKind};
+
+    /// A loopback endpoint that answers one request with `response` and
+    /// returns the request's head, its header names lower-cased.
+    pub(super) fn serve_once(response: &'static str) -> (String, JoinHandle<String>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback");
+        let url = format!(
+            "http://127.0.0.1:{}/ingest",
+            listener.local_addr().expect("address").port()
+        );
+        let handle = std::thread::spawn(move || {
+            let (stream, _) = listener.accept().expect("a request");
+            let mut reader = BufReader::new(stream);
+            let mut head = String::new();
+            loop {
+                let mut line = String::new();
+                if reader.read_line(&mut line).expect("read") == 0 || line == "\r\n" {
+                    break;
+                }
+                head.push_str(&line.to_ascii_lowercase());
+            }
+            reader
+                .into_inner()
+                .write_all(response.as_bytes())
+                .expect("answer");
+            head
+        });
+        (url, handle)
+    }
+
+    pub(super) fn event() -> Event {
+        Event {
+            event_id: Uuid::nil(),
+            event_timestamp: OffsetDateTime::UNIX_EPOCH,
+            source: "cli",
+            invocation_id: Uuid::nil(),
+            device_id: Uuid::nil(),
+            auth_subject: None,
+            producer_version: None,
+            kind: EventKind::CliAuthenticated {},
+        }
+    }
+
+    const OK: &str = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+
+    #[test]
+    fn the_cli_sends_its_own_user_agent() {
+        let (url, request) = serve_once(OK);
+        let mut connection = EventsConnectionV2::new(url, "key");
+        connection.send(vec![&event()]).expect("sent");
+        let head = request.join().expect("the endpoint thread");
+        assert!(head.contains("user-agent: flox-cli\r\n"), "{head}");
+    }
+
+    #[test]
+    fn a_connection_sends_the_user_agent_it_is_given() {
+        let (url, request) = serve_once(OK);
+        let mut connection = EventsConnectionV2::new(url, "key").with_user_agent("probe/2.0.0");
+        connection.send(vec![&event()]).expect("sent");
+        let head = request.join().expect("the endpoint thread");
+        assert!(head.contains("user-agent: probe/2.0.0\r\n"), "{head}");
+        assert!(!head.contains("flox-cli"), "{head}");
+    }
+}

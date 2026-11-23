@@ -45,6 +45,10 @@ pub trait Producer: std::fmt::Debug + Clone + PartialEq + Eq + 'static {
     /// The producer's event variants and their payloads, flattened into
     /// the envelope as `event_type` and `payload`.
     type Kind: std::fmt::Debug + Clone + PartialEq + Eq + Serialize + DeserializeOwned;
+
+    /// What a client of this producer keeps for the whole invocation to
+    /// build its own payloads from; `()` for a producer that needs nothing.
+    type Metadata: std::fmt::Debug;
 }
 
 /// The Flox CLI: `source` `"cli"` and the `cli.*` events of [`EventKind`].
@@ -53,6 +57,7 @@ pub struct Cli;
 
 impl Producer for Cli {
     type Kind = EventKind;
+    type Metadata = SharedMetadataTemplate;
 
     const SOURCE: &'static str = CLI_SOURCE;
 }
@@ -1316,6 +1321,7 @@ mod tests {
 
     impl Producer for Other {
         type Kind = OtherKind;
+        type Metadata = ();
 
         const SOURCE: &'static str = "other";
     }
@@ -2843,5 +2849,65 @@ mod pipeline_tests {
             result_seen,
             "missing result-known event with edited_includes"
         );
+    }
+
+    /// A producer other than the CLI, with the CLI's event types for brevity.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct Probe;
+
+    impl Producer for Probe {
+        type Kind = EventKind;
+        type Metadata = ();
+
+        const SOURCE: &'static str = "probe";
+    }
+
+    /// A connection that keeps what a [`Probe`] client sends.
+    #[derive(Debug, Clone, Default)]
+    struct ProbeConnection(std::sync::Arc<std::sync::Mutex<Vec<ProducerEvent<Probe>>>>);
+
+    impl EventsConnection<Probe> for ProbeConnection {
+        fn send(&mut self, events: Vec<&ProducerEvent<Probe>>) -> anyhow::Result<()> {
+            self.0
+                .lock()
+                .expect("lock")
+                .extend(events.into_iter().cloned());
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn a_client_of_another_producer_stamps_and_sends_its_own_events() {
+        let tempdir = TempDir::new().unwrap();
+        let connection = ProbeConnection::default();
+        let location = BufferLocation::with_names(tempdir.path(), "probe.json", "probe.lock");
+        let mut client = EventsClient::<Probe>::for_producer(
+            DEVICE_ID,
+            location.clone(),
+            INVOCATION_ID,
+            Some("2.0.0".to_string()),
+            (),
+            connection.clone(),
+        );
+        assert_eq!(client.max_age, Duration::minutes(2));
+
+        client.record_event(EventKind::CliAuthenticated {}).unwrap();
+        assert!(location.file().exists(), "buffered at the location given");
+        assert!(
+            !tempdir.path().join(EVENTS_BUFFER_FILE_NAME).exists(),
+            "buffered in the CLI's file"
+        );
+        assert!(client.is_flush_due().unwrap(), "due until the first send");
+        assert!(client.try_flush(false).unwrap());
+
+        let sent = connection.0.lock().unwrap().clone();
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0].source, "probe");
+        assert_eq!(sent[0].producer_version.as_deref(), Some("2.0.0"));
+        assert_eq!(
+            (sent[0].device_id, sent[0].invocation_id),
+            (DEVICE_ID, INVOCATION_ID)
+        );
+        assert_eq!(std::fs::read_to_string(location.file()).unwrap(), "");
     }
 }
