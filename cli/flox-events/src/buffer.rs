@@ -403,6 +403,42 @@ impl<P: Producer> EventsBuffer<P> {
         Ok(())
     }
 
+    /// Push several events and sync them to disk once, before returning.
+    ///
+    /// The same as calling [`push`](Self::push) for each event in turn, with
+    /// one write and one sync for all of them instead of one each; past the
+    /// cap, one rewrite of the file instead of one for every event.
+    pub fn push_all(&mut self, events: impl IntoIterator<Item = ProducerEvent<P>>) -> Result<()> {
+        let before = self.buffer.len();
+        self.buffer.extend(events);
+        let added = self.buffer.len() - before;
+        if added == 0 {
+            return Ok(());
+        }
+        debug!(count = added, "Pushing events to v2 events buffer");
+
+        if self.buffer.len() >= MAX_BUFFER_SIZE {
+            self.pop_front_to_max_size();
+            return self.overwrite_file();
+        }
+
+        let mut lines = String::new();
+        for event in self.buffer.iter().skip(before) {
+            lines.push_str(&serde_json::to_string(event)?);
+            lines.push('\n');
+        }
+        self.storage
+            .write_all(lines.as_bytes())
+            .context("Could not write new v2 events to buffer file")?;
+        self.storage
+            .flush()
+            .context("Could not flush v2 events buffer file")?;
+        self.storage
+            .sync_data()
+            .context("Could not sync v2 events buffer file")?;
+        Ok(())
+    }
+
     /// Iterate over buffered events from oldest to newest.
     pub fn iter(&self) -> impl Iterator<Item = &ProducerEvent<P>> {
         self.buffer.iter()
@@ -502,6 +538,60 @@ mod tests {
         EventsBuffer::delete(&dir.path().join("missing"))
             .expect("deleting from a missing directory succeeds");
         assert!(!dir.path().join("missing").exists());
+    }
+
+    /// `n` events of the CLI, stamped one second apart.
+    fn events(n: usize) -> Vec<crate::Event> {
+        (0..n)
+            .map(|i| {
+                let line = envelope("cli.environment.delete");
+                let mut event: crate::Event = serde_json::from_str(&line).unwrap();
+                event.event_id = uuid::Uuid::from_u128(i as u128);
+                event.event_timestamp =
+                    time::OffsetDateTime::from_unix_timestamp(i as i64).unwrap();
+                event
+            })
+            .collect()
+    }
+
+    #[test]
+    fn push_all_leaves_what_push_one_at_a_time_leaves() {
+        for (held, added) in [(0, 0), (0, 3), (10, 5), (990, 5), (990, 20), (998, 3)] {
+            let one = tempfile::tempdir().unwrap();
+            let all = tempfile::tempdir().unwrap();
+            let (old, new) = {
+                let mut e = events(held + added);
+                let new = e.split_off(held);
+                (e, new)
+            };
+            for dir in [one.path(), all.path()] {
+                let mut buffer = EventsBuffer::read(dir).unwrap();
+                buffer.push_all(old.clone()).unwrap();
+            }
+            {
+                let mut buffer = EventsBuffer::read(one.path()).unwrap();
+                for event in new.clone() {
+                    buffer.push(event).unwrap();
+                }
+            }
+            EventsBuffer::read(all.path())
+                .unwrap()
+                .push_all(new)
+                .unwrap();
+            let read =
+                |dir: &Path| std::fs::read_to_string(dir.join(EVENTS_BUFFER_FILE_NAME)).unwrap();
+            assert_eq!(
+                read(all.path()),
+                read(one.path()),
+                "{held} held, {added} added"
+            );
+            let kept = EventsBuffer::read(all.path()).unwrap().buffer.len();
+            assert_eq!(
+                kept,
+                (held + added).min(MAX_BUFFER_SIZE - 1),
+                "{held} held, {added} added"
+            );
+        }
     }
 
     /// A producer other than the CLI, whose events have their own source.
