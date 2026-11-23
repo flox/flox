@@ -37,6 +37,62 @@ pub mod types {
             }
         }
     }
+    ///Values recorded with an archive.
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "ArchiveRequest",
+    ///  "description": "Values recorded with an archive.",
+    ///  "type": "object",
+    ///  "properties": {
+    ///    "message": {
+    ///      "title": "Message",
+    ///      "description": "Publisher-authored note to show alongside the state. A blank message is recorded as unset.",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ],
+    ///      "maxLength": 1024
+    ///    },
+    ///    "replacement": {
+    ///      "title": "Replacement",
+    ///      "description": "Installable reference to a suggested substitute: catalog_name/attr_path for a catalog package, a bare attr_path for a base-catalog package.",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ],
+    ///      "maxLength": 256
+    ///    }
+    ///  },
+    ///  "additionalProperties": false
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    #[serde(deny_unknown_fields)]
+    pub struct ArchiveRequest {
+        ///Publisher-authored note to show alongside the state. A blank message is recorded as unset.
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub message: ::std::option::Option<Message>,
+        ///Installable reference to a suggested substitute: catalog_name/attr_path for a catalog package, a bare attr_path for a base-catalog package.
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub replacement: ::std::option::Option<Replacement>,
+    }
+    impl ::std::convert::From<&ArchiveRequest> for ArchiveRequest {
+        fn from(value: &ArchiveRequest) -> Self {
+            value.clone()
+        }
+    }
+    impl ::std::default::Default for ArchiveRequest {
+        fn default() -> Self {
+            Self {
+                message: Default::default(),
+                replacement: Default::default(),
+            }
+        }
+    }
     ///`BaseCatalogInfo`
     ///
     /// <details><summary>JSON schema</summary>
@@ -1827,6 +1883,85 @@ Examples: `owner.package`, `owner.*` for the whole catalog, and
             value.clone()
         }
     }
+    ///Publisher-authored note to show alongside the state. A blank message is recorded as unset.
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "Message",
+    ///  "description": "Publisher-authored note to show alongside the state. A blank message is recorded as unset.",
+    ///  "type": "string",
+    ///  "maxLength": 1024
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+    #[serde(transparent)]
+    pub struct Message(::std::string::String);
+    impl ::std::ops::Deref for Message {
+        type Target = ::std::string::String;
+        fn deref(&self) -> &::std::string::String {
+            &self.0
+        }
+    }
+    impl ::std::convert::From<Message> for ::std::string::String {
+        fn from(value: Message) -> Self {
+            value.0
+        }
+    }
+    impl ::std::convert::From<&Message> for Message {
+        fn from(value: &Message) -> Self {
+            value.clone()
+        }
+    }
+    impl ::std::str::FromStr for Message {
+        type Err = self::error::ConversionError;
+        fn from_str(
+            value: &str,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            if value.chars().count() > 1024usize {
+                return Err("longer than 1024 characters".into());
+            }
+            Ok(Self(value.to_string()))
+        }
+    }
+    impl ::std::convert::TryFrom<&str> for Message {
+        type Error = self::error::ConversionError;
+        fn try_from(
+            value: &str,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl ::std::convert::TryFrom<&::std::string::String> for Message {
+        type Error = self::error::ConversionError;
+        fn try_from(
+            value: &::std::string::String,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl ::std::convert::TryFrom<::std::string::String> for Message {
+        type Error = self::error::ConversionError;
+        fn try_from(
+            value: ::std::string::String,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl<'de> ::serde::Deserialize<'de> for Message {
+        fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
+        where
+            D: ::serde::Deserializer<'de>,
+        {
+            ::std::string::String::deserialize(deserializer)?
+                .parse()
+                .map_err(|e: self::error::ConversionError| {
+                    <D::Error as ::serde::de::Error>::custom(e.to_string())
+                })
+        }
+    }
     ///`MessageLevel`
     ///
     /// <details><summary>JSON schema</summary>
@@ -2459,6 +2594,37 @@ Examples: `owner.package`, `owner.*` for the whole catalog, and
                 .map_err(|e: self::error::ConversionError| {
                     <D::Error as ::serde::de::Error>::custom(e.to_string())
                 })
+        }
+    }
+    ///`PackageArchiveResponse`
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "PackageArchiveResponse",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "changed"
+    ///  ],
+    ///  "properties": {
+    ///    "changed": {
+    ///      "title": "Changed",
+    ///      "description": "False when the package was already in the requested state.",
+    ///      "type": "boolean"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct PackageArchiveResponse {
+        ///False when the package was already in the requested state.
+        pub changed: bool,
+    }
+    impl ::std::convert::From<&PackageArchiveResponse> for PackageArchiveResponse {
+        fn from(value: &PackageArchiveResponse) -> Self {
+            value.clone()
         }
     }
     ///`PackageBuild`
@@ -5345,6 +5511,85 @@ state implies. Absent (null) means ordinary circulation.*/
             value.clone()
         }
     }
+    ///Installable reference to a suggested substitute: catalog_name/attr_path for a catalog package, a bare attr_path for a base-catalog package.
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "Replacement",
+    ///  "description": "Installable reference to a suggested substitute: catalog_name/attr_path for a catalog package, a bare attr_path for a base-catalog package.",
+    ///  "type": "string",
+    ///  "maxLength": 256
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+    #[serde(transparent)]
+    pub struct Replacement(::std::string::String);
+    impl ::std::ops::Deref for Replacement {
+        type Target = ::std::string::String;
+        fn deref(&self) -> &::std::string::String {
+            &self.0
+        }
+    }
+    impl ::std::convert::From<Replacement> for ::std::string::String {
+        fn from(value: Replacement) -> Self {
+            value.0
+        }
+    }
+    impl ::std::convert::From<&Replacement> for Replacement {
+        fn from(value: &Replacement) -> Self {
+            value.clone()
+        }
+    }
+    impl ::std::str::FromStr for Replacement {
+        type Err = self::error::ConversionError;
+        fn from_str(
+            value: &str,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            if value.chars().count() > 256usize {
+                return Err("longer than 256 characters".into());
+            }
+            Ok(Self(value.to_string()))
+        }
+    }
+    impl ::std::convert::TryFrom<&str> for Replacement {
+        type Error = self::error::ConversionError;
+        fn try_from(
+            value: &str,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl ::std::convert::TryFrom<&::std::string::String> for Replacement {
+        type Error = self::error::ConversionError;
+        fn try_from(
+            value: &::std::string::String,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl ::std::convert::TryFrom<::std::string::String> for Replacement {
+        type Error = self::error::ConversionError;
+        fn try_from(
+            value: ::std::string::String,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl<'de> ::serde::Deserialize<'de> for Replacement {
+        fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
+        where
+            D: ::serde::Deserializer<'de>,
+        {
+            ::std::string::String::deserialize(deserializer)?
+                .parse()
+                .map_err(|e: self::error::ConversionError| {
+                    <D::Error as ::serde::de::Error>::custom(e.to_string())
+                })
+        }
+    }
     ///`ResolutionMessageGeneral`
     ///
     /// <details><summary>JSON schema</summary>
@@ -7242,6 +7487,171 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pack
                 Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
             }
             422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
+    /**Archive a package
+
+Archive a package, so new builds and name resolution stop using it
+
+Archiving an archived package with the same replacement and message
+changes nothing. Different values are a conflict: unarchive the
+package first.
+
+Path Parameters:
+- **catalog_name**: The name of the catalog
+- **package_name**: The name of the package
+Body Content (optional):
+- **ArchiveRequest**: The replacement and message to record
+
+Returns:
+- **PackageArchiveResponse**
+
+Sends a `PUT` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{package_name}/archive`
+
+*/
+    pub async fn archive_catalog_package_api_v1_catalog_catalogs_catalog_name_packages_package_name_archive_put<
+        'a,
+    >(
+        &'a self,
+        catalog_name: &'a types::CatalogName,
+        package_name: &'a types::PackageName,
+        body: Option<&'a types::ArchiveRequest>,
+    ) -> Result<
+        ResponseValue<types::PackageArchiveResponse>,
+        Error<types::ErrorResponse>,
+    > {
+        let url = format!(
+            "{}/api/v1/catalog/catalogs/{}/packages/{}/archive",
+            self.baseurl,
+            encode_path(&catalog_name.to_string()),
+            encode_path(&package_name.to_string()),
+        );
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
+            );
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .put(url)
+            .header(
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .json(&body)
+            .headers(header_map)
+            .build()?;
+        let info = OperationInfo {
+            operation_id: "archive_catalog_package_api_v1_catalog_catalogs_catalog_name_packages_package_name_archive_put",
+        };
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            400u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            401u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            403u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            404u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            409u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            503u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
+    /**Unarchive a package
+
+Unarchive a package, returning it to ordinary circulation
+
+Unarchiving a package that is not archived changes nothing.
+
+Path Parameters:
+- **catalog_name**: The name of the catalog
+- **package_name**: The name of the package
+
+Returns:
+- **PackageArchiveResponse**
+
+Sends a `DELETE` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{package_name}/archive`
+
+*/
+    pub async fn unarchive_catalog_package_api_v1_catalog_catalogs_catalog_name_packages_package_name_archive_delete<
+        'a,
+    >(
+        &'a self,
+        catalog_name: &'a types::CatalogName,
+        package_name: &'a types::PackageName,
+    ) -> Result<
+        ResponseValue<types::PackageArchiveResponse>,
+        Error<types::ErrorResponse>,
+    > {
+        let url = format!(
+            "{}/api/v1/catalog/catalogs/{}/packages/{}/archive",
+            self.baseurl,
+            encode_path(&catalog_name.to_string()),
+            encode_path(&package_name.to_string()),
+        );
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
+            );
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .delete(url)
+            .header(
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .headers(header_map)
+            .build()?;
+        let info = OperationInfo {
+            operation_id: "unarchive_catalog_package_api_v1_catalog_catalogs_catalog_name_packages_package_name_archive_delete",
+        };
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            400u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            401u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            403u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            404u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            503u16 => {
                 Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
             }
             _ => Err(Error::UnexpectedResponse(response)),
