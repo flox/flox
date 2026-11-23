@@ -8,9 +8,9 @@ use chrono::{DateTime, Months, TimeDelta, Utc};
 use floxhub_client::{
     AttrPathItem,
     BuildFilters,
-    BuildResponse,
-    EffectiveBuildStatus,
+    EffectiveFactoryRunStatus,
     FactoryClientTrait,
+    FactoryRunResponse,
     SourceCommitShaItem,
     SystemItem,
 };
@@ -32,7 +32,7 @@ pub struct List {
     /// Valid values: pending, running, completed, failed, timed_out,
     /// cancelled.
     #[bpaf(long, argument::<String>("STATUS"), parse(parse_status), many)]
-    pub status: Vec<EffectiveBuildStatus>,
+    pub status: Vec<EffectiveFactoryRunStatus>,
 
     /// Filter by system; repeat to match any of several.
     /// Examples: aarch64-darwin, aarch64-linux, x86_64-darwin, x86_64-linux.
@@ -98,10 +98,10 @@ impl List {
     }
 }
 
-/// Parse one `--status` value into a typed [`EffectiveBuildStatus`] at the
+/// Parse one `--status` value into a typed [`EffectiveFactoryRunStatus`] at the
 /// CLI boundary. The type's `FromStr` is strict and its error names the
 /// accepted values, so the message is shown as-is.
-fn parse_status(s: String) -> Result<EffectiveBuildStatus> {
+fn parse_status(s: String) -> Result<EffectiveFactoryRunStatus> {
     Ok(s.parse()?)
 }
 
@@ -181,7 +181,7 @@ fn back_from(now: DateTime<Utc>, interval: Interval) -> Option<DateTime<Utc>> {
 /// The depaging client returns every matching build, so the JSON form is the
 /// full array of builds, with no pagination envelope to report. The table
 /// shows each build's age relative to `now`; JSON keeps exact timestamps.
-fn render(builds: Vec<BuildResponse>, json: bool, now: DateTime<Utc>) -> Result<String> {
+fn render(builds: Vec<FactoryRunResponse>, json: bool, now: DateTime<Utc>) -> Result<String> {
     if json {
         Ok(format!("{}\n", serde_json::to_string_pretty(&builds)?))
     } else {
@@ -217,13 +217,13 @@ struct BuildRowDisplay {
 }
 
 impl BuildRowDisplay {
-    fn new(b: BuildResponse, now: DateTime<Utc>) -> Self {
+    fn new(b: FactoryRunResponse, now: DateTime<Utc>) -> Self {
         let status = effective_status(&b.status);
         let updated = format_age(effective_updated_at(&b), now);
         let trigger = trigger_label(b.trigger.as_ref());
 
         BuildRowDisplay {
-            build_id: b.build_id,
+            build_id: b.run_id,
             pkg_path: format!("{}/{}", b.catalog_name, b.attr_path),
             system: b.system,
             trigger,
@@ -240,7 +240,7 @@ struct BuildListDisplay {
 }
 
 impl BuildListDisplay {
-    fn new(builds: Vec<BuildResponse>, now: DateTime<Utc>) -> Self {
+    fn new(builds: Vec<FactoryRunResponse>, now: DateTime<Utc>) -> Self {
         BuildListDisplay {
             rows: builds
                 .into_iter()
@@ -276,7 +276,7 @@ impl fmt::Display for BuildListDisplay {
 #[cfg(test)]
 mod tests {
     use bpaf::Parser;
-    use floxhub_client::BuildTrigger;
+    use floxhub_client::FactoryRunTrigger;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
 
@@ -289,8 +289,8 @@ mod tests {
         // has no task, so UPDATED falls back to the build's created_at.
         // A build from a Factory that predates trigger reporting shows `-`.
         let builds = vec![
-            BuildResponse {
-                trigger: Some(BuildTrigger {
+            FactoryRunResponse {
+                trigger: Some(FactoryRunTrigger {
                     kind: Some("source_push".to_string().into()),
                     stabilities: vec!["stable".to_string(), "staging".to_string()],
                 }),
@@ -298,10 +298,10 @@ mod tests {
                     1,
                     "x86_64-linux",
                     "hello",
-                    Some(EffectiveBuildStatus::Running),
+                    Some(EffectiveFactoryRunStatus::Running),
                 )
             },
-            BuildResponse {
+            FactoryRunResponse {
                 catalog_name: "other-catalog".to_string(),
                 ..make_build(2, "aarch64-darwin", "ripgrep", None)
             },
@@ -325,19 +325,21 @@ mod tests {
                 3,
                 "x86_64-linux",
                 "curl",
-                Some(EffectiveBuildStatus::TimedOut),
+                Some(EffectiveFactoryRunStatus::TimedOut),
             ),
             make_build(
                 4,
                 "aarch64-darwin",
                 "jq",
-                Some(EffectiveBuildStatus::Cancelled),
+                Some(EffectiveFactoryRunStatus::Cancelled),
             ),
             make_build(
                 5,
                 "x86_64-linux",
                 "wget",
-                Some(EffectiveBuildStatus::Unknown("frobnicated".to_string())),
+                Some(EffectiveFactoryRunStatus::Unknown(
+                    "frobnicated".to_string(),
+                )),
             ),
         ];
         let display = BuildListDisplay::new(builds, utc("2025-01-01T00:01:00Z"));
@@ -380,11 +382,14 @@ mod tests {
     #[tokio::test]
     async fn list_handler_forwards_all_filters() {
         let client = StubFactoryClient::with_outcomes(
-            StubResult::Build(EffectiveBuildStatus::Completed),
+            StubResult::Build(EffectiveFactoryRunStatus::Completed),
             StubResult::NotFound,
         );
         let args = List {
-            status: vec![EffectiveBuildStatus::Running, EffectiveBuildStatus::Failed],
+            status: vec![
+                EffectiveFactoryRunStatus::Running,
+                EffectiveFactoryRunStatus::Failed,
+            ],
             system: vec!["aarch64-darwin".parse().unwrap()],
             attr_path: vec!["hello".parse().unwrap()],
             source_commit_sha: vec!["abc123".parse().unwrap()],
@@ -398,7 +403,10 @@ mod tests {
         assert_eq!(
             client.last_filters(),
             Some(BuildFilters {
-                status: vec![EffectiveBuildStatus::Running, EffectiveBuildStatus::Failed],
+                status: vec![
+                    EffectiveFactoryRunStatus::Running,
+                    EffectiveFactoryRunStatus::Failed
+                ],
                 system: vec!["aarch64-darwin".parse().unwrap()],
                 attr_path: vec!["hello".parse().unwrap()],
                 source_commit_sha: vec!["abc123".parse().unwrap()],

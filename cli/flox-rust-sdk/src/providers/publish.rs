@@ -814,7 +814,7 @@ where
                 .into_owned(),
             allow_lineage_change: false,
             expected_registered_source: None,
-            factory_build_token: factory_build_token.map(str::to_string),
+            factory_run_token: factory_build_token.map(str::to_string),
             // Always sent, mirroring `locked_inputs` above: an empty list
             // states that the repository declares no overrides, rather
             // than leaving the field unstated for the server to guess at.
@@ -2448,7 +2448,7 @@ pub mod tests {
             .expect("couldn't acquire mock lock")
             .clone()
             .expect("publish_build was called");
-        assert_eq!(sent.factory_build_token, Some("factory:abc123".to_string()));
+        assert_eq!(sent.factory_run_token, Some("factory:abc123".to_string()));
     }
 
     #[test]

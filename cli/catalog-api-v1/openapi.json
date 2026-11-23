@@ -1011,6 +1011,261 @@
         }
       }
     },
+    "/api/v1/catalog/catalogs/{catalog_name}/packages/{package_name}/archive": {
+      "put": {
+        "tags": [
+          "catalogs"
+        ],
+        "summary": "Archive a package",
+        "description": "Archive a package, so new builds and name resolution stop using it\n\nArchiving an archived package with the same replacement and message\nchanges nothing. Different values are a conflict: unarchive the\npackage first.\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n- **package_name**: The name of the package\nBody Content (optional):\n- **ArchiveRequest**: The replacement and message to record\n\nReturns:\n- **PackageArchiveResponse**",
+        "operationId": "archive_catalog_package_api_v1_catalog_catalogs__catalog_name__packages__package_name__archive_put",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "HTTPBasic": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "catalog_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9\\-_]{3,63}$",
+              "title": "Catalog Name",
+              "name": "catalog_name",
+              "example": "mycatalog"
+            }
+          },
+          {
+            "name": "package_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9.\\-_]{1,128}$",
+              "title": "Package Name",
+              "name": "package_name",
+              "example": "curl"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "title": "Archive Request",
+                "nullable": true,
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/ArchiveRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The package is in the requested state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackageArchiveResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The package is in the base catalog, or is a namespace rather than a package, or the replacement was rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The request is not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller cannot write to the catalog, or is not a user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The catalog or package could not be found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request parameters are invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The service is temporarily unavailable, as when the package is busy with a concurrent write; retry after the Retry-After interval",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The package is already archived with a different replacement or message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "catalogs"
+        ],
+        "summary": "Unarchive a package",
+        "description": "Unarchive a package, returning it to ordinary circulation\n\nUnarchiving a package that is not archived changes nothing.\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n- **package_name**: The name of the package\n\nReturns:\n- **PackageArchiveResponse**",
+        "operationId": "unarchive_catalog_package_api_v1_catalog_catalogs__catalog_name__packages__package_name__archive_delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "HTTPBasic": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "catalog_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9\\-_]{3,63}$",
+              "title": "Catalog Name",
+              "name": "catalog_name",
+              "example": "mycatalog"
+            }
+          },
+          {
+            "name": "package_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9.\\-_]{1,128}$",
+              "title": "Package Name",
+              "name": "package_name",
+              "example": "curl"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The package is in the requested state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackageArchiveResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The package is in the base catalog, or is a namespace rather than a package",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The request is not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller cannot write to the catalog, or is not a user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The catalog or package could not be found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request parameters are invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The service is temporarily unavailable, as when the package is busy with a concurrent write; retry after the Retry-After interval",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/catalog/catalogs/{catalog_name}/packages/{package_name}/publish/info": {
       "post": {
         "tags": [
@@ -2355,6 +2610,28 @@
   },
   "components": {
     "schemas": {
+      "ArchiveRequest": {
+        "properties": {
+          "message": {
+            "title": "Message",
+            "description": "Publisher-authored note to show alongside the state. A blank message is recorded as unset.",
+            "nullable": true,
+            "type": "string",
+            "maxLength": 1024
+          },
+          "replacement": {
+            "title": "Replacement",
+            "description": "Installable reference to a suggested substitute: catalog_name/attr_path for a catalog package, a bare attr_path for a base-catalog package.",
+            "nullable": true,
+            "type": "string",
+            "maxLength": 256
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ArchiveRequest",
+        "description": "Values recorded with an archive."
+      },
       "BaseCatalogInfo": {
         "properties": {
           "base_url": {
@@ -2795,8 +3072,8 @@
             },
             "type": "object"
           },
-          "factory_build_token": {
-            "title": "Factory Build Token",
+          "factory_run_token": {
+            "title": "Factory Run Token",
             "nullable": true,
             "type": "string"
           },
@@ -3451,6 +3728,20 @@
         "title": "NotLockableEntry",
         "description": "A requested reference whose catalog is supplied by pinned evaluation."
       },
+      "PackageArchiveResponse": {
+        "properties": {
+          "changed": {
+            "type": "boolean",
+            "title": "Changed",
+            "description": "False when the package was already in the requested state."
+          }
+        },
+        "type": "object",
+        "required": [
+          "changed"
+        ],
+        "title": "PackageArchiveResponse"
+      },
       "PackageBuild": {
         "properties": {
           "url": {
@@ -3713,8 +4004,8 @@
             },
             "type": "object"
           },
-          "factory_build_token": {
-            "title": "Factory Build Token",
+          "factory_run_token": {
+            "title": "Factory Run Token",
             "nullable": true,
             "type": "string"
           },

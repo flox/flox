@@ -2,10 +2,10 @@ use anyhow::Result;
 use bpaf::Bpaf;
 use floxhub_client::{
     BuildId,
-    BuildResponse,
-    EffectiveBuildStatus,
+    EffectiveFactoryRunStatus,
     FactoryClientError,
     FactoryClientTrait,
+    FactoryRunResponse,
 };
 use indoc::{formatdoc, indoc};
 use tracing::instrument;
@@ -154,7 +154,7 @@ enum CancelOutcome {
 /// Classify a successful (HTTP 200) cancel response from the build's effective
 /// `status`.
 ///
-/// Matching the typed [`EffectiveBuildStatus`] exhaustively makes a status
+/// Matching the typed [`EffectiveFactoryRunStatus`] exhaustively makes a status
 /// newly added to the enum a compile error here rather than a silent
 /// fall-through; until the enum names it, a new server status arrives as
 /// `Unknown`.
@@ -164,27 +164,27 @@ enum CancelOutcome {
 /// but the build has not yet stopped; like the read verbs, that is a normal
 /// outcome, not a retryable error. Only an unrecognized status is a contract
 /// violation.
-fn success_outcome(status: &EffectiveBuildStatus, id: BuildId) -> CancelOutcome {
+fn success_outcome(status: &EffectiveFactoryRunStatus, id: BuildId) -> CancelOutcome {
     let word = status.as_str();
     match status {
-        EffectiveBuildStatus::Cancelled => {
+        EffectiveFactoryRunStatus::Cancelled => {
             CancelOutcome::Resolved(format!("Cancellation initiated for build {id}."))
         },
-        EffectiveBuildStatus::Completed => {
+        EffectiveFactoryRunStatus::Completed => {
             CancelOutcome::Resolved(format!("Build {id} already completed; nothing to cancel."))
         },
-        EffectiveBuildStatus::Failed => {
+        EffectiveFactoryRunStatus::Failed => {
             CancelOutcome::Resolved(format!("Build {id} already failed; nothing to cancel."))
         },
-        EffectiveBuildStatus::TimedOut => {
+        EffectiveFactoryRunStatus::TimedOut => {
             CancelOutcome::Resolved(format!("Build {id} already timed out; nothing to cancel."))
         },
-        EffectiveBuildStatus::Running | EffectiveBuildStatus::Pending => {
+        EffectiveFactoryRunStatus::Running | EffectiveFactoryRunStatus::Pending => {
             CancelOutcome::Accepted(accepted_message(id, word))
         },
         // A status outside the known vocabulary is a contract violation, not a
         // successful cancel.
-        EffectiveBuildStatus::Unknown(_) => CancelOutcome::Unexpected(formatdoc! {"
+        EffectiveFactoryRunStatus::Unknown(_) => CancelOutcome::Unexpected(formatdoc! {"
             The Flox Factory returned an unexpected status '{word}' for build {id}.
             Run 'flox factory status {id}' to check the build."}),
     }
@@ -199,7 +199,7 @@ fn accepted_message(id: BuildId, status: &str) -> String {
 
 /// Render a successful cancel: the human outcome line, or the raw build as JSON
 /// when `--json` is set (mirrors `status.rs`'s split).
-fn render(build: &BuildResponse, outcome: &str, json: bool) -> Result<String> {
+fn render(build: &FactoryRunResponse, outcome: &str, json: bool) -> Result<String> {
     if json {
         Ok(format!("{}\n", serde_json::to_string_pretty(build)?))
     } else {
@@ -237,7 +237,7 @@ mod tests {
     #[test]
     fn cancelled_status_is_resolved() {
         assert_eq!(
-            success_outcome(&EffectiveBuildStatus::Cancelled, id(42)),
+            success_outcome(&EffectiveFactoryRunStatus::Cancelled, id(42)),
             CancelOutcome::Resolved("Cancellation initiated for build 42.".to_string())
         );
     }
@@ -245,7 +245,7 @@ mod tests {
     #[test]
     fn completed_status_is_resolved() {
         assert_eq!(
-            success_outcome(&EffectiveBuildStatus::Completed, id(42)),
+            success_outcome(&EffectiveFactoryRunStatus::Completed, id(42)),
             CancelOutcome::Resolved("Build 42 already completed; nothing to cancel.".to_string())
         );
     }
@@ -253,7 +253,7 @@ mod tests {
     #[test]
     fn failed_status_is_resolved() {
         assert_eq!(
-            success_outcome(&EffectiveBuildStatus::Failed, id(42)),
+            success_outcome(&EffectiveFactoryRunStatus::Failed, id(42)),
             CancelOutcome::Resolved("Build 42 already failed; nothing to cancel.".to_string())
         );
     }
@@ -263,7 +263,7 @@ mod tests {
         // `timed_out` is terminal, so it is an "already terminal" exit-0
         // outcome, not a contract violation.
         assert_eq!(
-            success_outcome(&EffectiveBuildStatus::TimedOut, id(42)),
+            success_outcome(&EffectiveFactoryRunStatus::TimedOut, id(42)),
             CancelOutcome::Resolved("Build 42 already timed out; nothing to cancel.".to_string())
         );
     }
@@ -273,7 +273,7 @@ mod tests {
         // A 200 with a non-terminal status means the cancel was accepted but the
         // build has not yet stopped: a normal exit-0 outcome, not a retry.
         assert_eq!(
-            success_outcome(&EffectiveBuildStatus::Running, id(42)),
+            success_outcome(&EffectiveFactoryRunStatus::Running, id(42)),
             CancelOutcome::Accepted(
                 indoc! {"
                     Cancellation accepted for build 42; it is running and not yet terminal.
@@ -289,7 +289,7 @@ mod tests {
         // non-terminal outcome, so the cancel is accepted (exit 0) rather than
         // read as a contract violation.
         assert_eq!(
-            success_outcome(&EffectiveBuildStatus::Pending, id(42)),
+            success_outcome(&EffectiveFactoryRunStatus::Pending, id(42)),
             CancelOutcome::Accepted(
                 indoc! {"
                     Cancellation accepted for build 42; it is pending and not yet terminal.
@@ -304,7 +304,7 @@ mod tests {
         // Only a status outside the known vocabulary is a contract violation.
         assert_eq!(
             success_outcome(
-                &EffectiveBuildStatus::Unknown("frobnicated".to_string()),
+                &EffectiveFactoryRunStatus::Unknown("frobnicated".to_string()),
                 id(42)
             ),
             CancelOutcome::Unexpected(
@@ -424,7 +424,7 @@ mod tests {
             42,
             "x86_64-linux",
             "hello",
-            Some(EffectiveBuildStatus::Running),
+            Some(EffectiveFactoryRunStatus::Running),
         );
         assert_eq!(
             render(&build, "Cancellation initiated for build 42.", false).unwrap(),
@@ -438,14 +438,14 @@ mod tests {
             42,
             "x86_64-linux",
             "hello",
-            Some(EffectiveBuildStatus::Running),
+            Some(EffectiveFactoryRunStatus::Running),
         );
         let rendered = render(&build, "OUTCOME LINE", true).unwrap();
         // The JSON branch serializes the build and drops the human outcome
         // line. Assert the behavior of the branch, not serde's round-trip
         // fidelity (AGENTS.md).
         assert!(!rendered.contains("OUTCOME LINE"));
-        assert!(rendered.contains("\"build_id\": 42"));
+        assert!(rendered.contains("\"run_id\": 42"));
         assert!(rendered.contains("\"status\": \"running\""));
     }
 
@@ -456,7 +456,7 @@ mod tests {
     #[tokio::test]
     async fn successful_cancel_issues_delete_and_returns_ok() {
         let client =
-            StubFactoryClient::with_cancel(StubResult::Build(EffectiveBuildStatus::Cancelled));
+            StubFactoryClient::with_cancel(StubResult::Build(EffectiveFactoryRunStatus::Cancelled));
         let args = Cancel {
             json: false,
             id: id(42),
@@ -504,7 +504,7 @@ mod tests {
         // build has not yet stopped: a normal success (exit 0) with a warning,
         // not a retryable error.
         let client =
-            StubFactoryClient::with_cancel(StubResult::Build(EffectiveBuildStatus::Running));
+            StubFactoryClient::with_cancel(StubResult::Build(EffectiveFactoryRunStatus::Running));
         let args = Cancel {
             json: false,
             id: id(42),
@@ -532,7 +532,7 @@ mod tests {
         // violation, not a successful cancel: the verb returns exit 1 and emits
         // the error to stderr rather than printing the build to stdout.
         let client = StubFactoryClient::with_cancel(StubResult::Build(
-            EffectiveBuildStatus::Unknown("frobnicated".to_string()),
+            EffectiveFactoryRunStatus::Unknown("frobnicated".to_string()),
         ));
         let args = Cancel {
             json: false,

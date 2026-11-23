@@ -12,7 +12,12 @@ use anyhow::{Result, anyhow};
 use bpaf::Bpaf;
 use chrono::{DateTime, Utc};
 use flox_rust_sdk::flox::Flox;
-use floxhub_client::{BuildResponse, BuildTrigger, EffectiveBuildStatus, FactoryClientError};
+use floxhub_client::{
+    EffectiveFactoryRunStatus,
+    FactoryClientError,
+    FactoryRunResponse,
+    FactoryRunTrigger,
+};
 use indoc::indoc;
 use tracing::instrument;
 
@@ -23,9 +28,9 @@ use crate::commands::display_command_help;
 ///
 /// An unrecognized future status renders as `unknown: <value>` rather than
 /// blanking the row; every other status renders as its wire word.
-fn effective_status(status: &EffectiveBuildStatus) -> String {
+fn effective_status(status: &EffectiveFactoryRunStatus) -> String {
     match status {
-        EffectiveBuildStatus::Unknown(value) => format!("unknown: {value}"),
+        EffectiveFactoryRunStatus::Unknown(value) => format!("unknown: {value}"),
         status => status.to_string(),
     }
 }
@@ -36,7 +41,7 @@ fn effective_status(status: &EffectiveBuildStatus) -> String {
 /// progress. An undispatched build has no task, so it falls back to the
 /// build's own `created_at`. This is the "updated, or created if never
 /// updated" value shown in the `UPDATED` column.
-fn effective_updated_at(build: &BuildResponse) -> DateTime<Utc> {
+fn effective_updated_at(build: &FactoryRunResponse) -> DateTime<Utc> {
     build
         .task
         .as_ref()
@@ -45,7 +50,7 @@ fn effective_updated_at(build: &BuildResponse) -> DateTime<Utc> {
 }
 
 /// Compute the label describing what scheduled a build.
-fn trigger_label(trigger: Option<&BuildTrigger>) -> String {
+fn trigger_label(trigger: Option<&FactoryRunTrigger>) -> String {
     let Some(trigger) = trigger else {
         return "-".to_string();
     };
@@ -142,19 +147,19 @@ pub(crate) mod test_helpers {
     use chrono::TimeZone;
     use factory_api_v1::types::{TaskErrorClass, TaskResponse, TaskStatus};
     use floxhub_client::{
-        BuildDetailResponse,
         BuildFilters,
         BuildId,
-        BuildResponse,
-        EffectiveBuildStatus,
+        EffectiveFactoryRunStatus,
         FactoryApiError,
         FactoryByteStream,
         FactoryClientError,
         FactoryClientTrait,
         FactoryErrorResponse,
+        FactoryRunDetailResponse,
+        FactoryRunResponse,
     };
 
-    /// Construct a `BuildResponse` fixture whose effective `status` is the given
+    /// Construct a `FactoryRunResponse` fixture whose effective `status` is the given
     /// value, defaulting to pre-dispatch `pending` for `None`.
     ///
     /// The attached task mirrors the server's persisted shape: a pending or
@@ -165,20 +170,20 @@ pub(crate) mod test_helpers {
         id: i64,
         system: &str,
         attr_path: &str,
-        status: Option<EffectiveBuildStatus>,
-    ) -> BuildResponse {
-        let status = status.unwrap_or(EffectiveBuildStatus::Pending);
+        status: Option<EffectiveFactoryRunStatus>,
+    ) -> FactoryRunResponse {
+        let status = status.unwrap_or(EffectiveFactoryRunStatus::Pending);
 
         let task_footprint = match &status {
-            EffectiveBuildStatus::Running => Some((TaskStatus::Running, None)),
-            EffectiveBuildStatus::Completed => Some((TaskStatus::Completed, None)),
-            EffectiveBuildStatus::Failed => Some((TaskStatus::Failed, None)),
-            EffectiveBuildStatus::TimedOut => {
+            EffectiveFactoryRunStatus::Running => Some((TaskStatus::Running, None)),
+            EffectiveFactoryRunStatus::Completed => Some((TaskStatus::Completed, None)),
+            EffectiveFactoryRunStatus::Failed => Some((TaskStatus::Failed, None)),
+            EffectiveFactoryRunStatus::TimedOut => {
                 Some((TaskStatus::Failed, Some(TaskErrorClass::Timeout)))
             },
-            EffectiveBuildStatus::Pending
-            | EffectiveBuildStatus::Cancelled
-            | EffectiveBuildStatus::Unknown(_) => None,
+            EffectiveFactoryRunStatus::Pending
+            | EffectiveFactoryRunStatus::Cancelled
+            | EffectiveFactoryRunStatus::Unknown(_) => None,
         };
 
         let task = task_footprint.map(|(task_status, error_class)| TaskResponse {
@@ -193,8 +198,8 @@ pub(crate) mod test_helpers {
             started_at: None,
         });
 
-        BuildResponse {
-            build_id: id,
+        FactoryRunResponse {
+            run_id: id,
             status,
             system: system.to_string(),
             attr_path: attr_path.to_string(),
@@ -213,15 +218,15 @@ pub(crate) mod test_helpers {
         }
     }
 
-    /// Extend a `BuildResponse` fixture into the `BuildDetailResponse` that
+    /// Extend a `FactoryRunResponse` fixture into the `FactoryRunDetailResponse` that
     /// `get_build` returns, with no published outputs.
     ///
     /// The destructuring is exhaustive, so a field added to either type fails
     /// to compile here rather than going unset.
-    pub fn make_build_detail(build: BuildResponse) -> BuildDetailResponse {
-        let BuildResponse {
+    pub fn make_build_detail(build: FactoryRunResponse) -> FactoryRunDetailResponse {
+        let FactoryRunResponse {
             attr_path,
-            build_id,
+            run_id,
             build_type,
             catalog_name,
             created_at,
@@ -236,9 +241,9 @@ pub(crate) mod test_helpers {
             trigger,
         } = build;
 
-        BuildDetailResponse {
+        FactoryRunDetailResponse {
             attr_path,
-            build_id,
+            run_id,
             build_type,
             catalog_name,
             created_at,
@@ -265,7 +270,7 @@ pub(crate) mod test_helpers {
     #[derive(Clone)]
     pub enum StubResult {
         /// Return a build whose effective `status` is this value.
-        Build(EffectiveBuildStatus),
+        Build(EffectiveFactoryRunStatus),
         /// Return [`FactoryClientError::NotFound`].
         NotFound,
         /// Return [`FactoryClientError::AuthRejected`].
@@ -275,7 +280,7 @@ pub(crate) mod test_helpers {
     }
 
     impl StubResult {
-        fn realize(&self) -> Result<BuildResponse, FactoryClientError> {
+        fn realize(&self) -> Result<FactoryRunResponse, FactoryClientError> {
             match self {
                 // Build the fixture coherently from the effective status,
                 // preserving `make_build`'s server-shaped invariant rather than
@@ -351,7 +356,7 @@ pub(crate) mod test_helpers {
         async fn list_builds(
             &self,
             filters: &BuildFilters,
-        ) -> Result<floxhub_client::ResultsPage<BuildResponse>, FactoryClientError> {
+        ) -> Result<floxhub_client::ResultsPage<FactoryRunResponse>, FactoryClientError> {
             *self.last_filters.lock().unwrap() = Some(filters.clone());
             // Mirror the get_build outcome's error, if any, so a not-found stub
             // stays not-found across endpoints; otherwise an empty page.
@@ -365,14 +370,14 @@ pub(crate) mod test_helpers {
         async fn get_build(
             &self,
             _build_id: BuildId,
-        ) -> Result<BuildDetailResponse, FactoryClientError> {
+        ) -> Result<FactoryRunDetailResponse, FactoryClientError> {
             self.get_build.realize().map(make_build_detail)
         }
 
         async fn cancel_build(
             &self,
             _build_id: BuildId,
-        ) -> Result<BuildResponse, FactoryClientError> {
+        ) -> Result<FactoryRunResponse, FactoryClientError> {
             self.cancel_called.store(true, Ordering::SeqCst);
             self.cancel_build.realize()
         }
@@ -418,14 +423,14 @@ mod parser_tests {
 
 #[cfg(test)]
 mod trigger_label_tests {
-    use floxhub_client::BuildTrigger;
+    use floxhub_client::FactoryRunTrigger;
     use pretty_assertions::assert_eq;
 
     use super::trigger_label;
 
     #[test]
     fn trigger_label_combines_kind_and_stabilities() {
-        let trigger = |kind: Option<&str>, stabilities: &[&str]| BuildTrigger {
+        let trigger = |kind: Option<&str>, stabilities: &[&str]| FactoryRunTrigger {
             kind: kind.map(|kind| kind.to_string().into()),
             stabilities: stabilities.iter().map(|s| s.to_string()).collect(),
         };

@@ -13,13 +13,13 @@ fn main() {
     let mut spec_json: serde_json::Value =
         serde_json::from_reader(file).expect("Failed to parse openapi spec");
 
-    // Keep only the /api/v1/factory/builds paths: the endpoints the CLI verbs
+    // Keep only the /api/v1/factory/runs paths: the endpoints the CLI verbs
     // (status, list, logs, cancel) call. Other exported paths are dropped from
     // codegen; schemas referenced by retained paths are still emitted.
     spec_json["paths"]
         .as_object_mut()
         .unwrap()
-        .retain(|k, _| k.starts_with("/api/v1/factory/builds"));
+        .retain(|k, _| k.starts_with("/api/v1/factory/runs"));
 
     let spec = serde_json::from_value(spec_json).expect("Failed to parse openapi spec");
 
@@ -38,8 +38,8 @@ fn generator() -> progenitor::Generator {
     // body and the `status` query-param filter, so an unrecognized status
     // renders as `unknown: <value>` instead of failing deserialization.
     settings.with_replacement(
-        "EffectiveBuildStatus",
-        "crate::status::EffectiveBuildStatus",
+        "EffectiveRunStatus",
+        "crate::status::EffectiveRunStatus",
         vec![].into_iter(),
     );
     settings.with_inner_type(parse_quote! { crate::hooks::RequestHooks });

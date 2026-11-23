@@ -15,10 +15,10 @@ use std::str::FromStr;
 use chrono::{DateTime, Utc};
 use factory_api_v1::types::{
     AttrPathItem,
-    BuildDetailResponse,
-    BuildResponse,
-    EffectiveBuildStatus,
+    EffectiveRunStatus,
     ErrorResponse,
+    RunDetailResponse,
+    RunResponse,
     SourceCommitShaItem,
     SystemItem,
 };
@@ -71,7 +71,7 @@ pub enum FactoryClientError {
     /// Any other factory API error, rendered from the generated error type.
     ///
     /// This includes an unrecognised response (a non-auth 4xx, or a 200 whose
-    /// body did not parse as a `BuildResponse`): it degrades to this generic
+    /// body did not parse as a `RunResponse`): it degrades to this generic
     /// case rather than escalating to a bespoke variant.
     #[error("{}", fmt_api_error(.0))]
     APIError(APIError<ErrorResponse>),
@@ -181,7 +181,7 @@ fn classify_build_error(err: FactoryClientError) -> FactoryClientError {
         // retry with backoff.
         Some(409 | 422 | 500..=599) => FactoryClientError::Server(api),
         // Everything else (a non-auth 4xx, or a 200 whose body did not parse as
-        // a `BuildResponse`) degrades to the generic API error.
+        // a `RunResponse`) degrades to the generic API error.
         _ => FactoryClientError::APIError(api),
     }
 }
@@ -246,7 +246,7 @@ impl fmt::Display for BuildId {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct BuildFilters {
     /// Match builds whose effective status is any of these.
-    pub status: Vec<EffectiveBuildStatus>,
+    pub status: Vec<EffectiveRunStatus>,
     /// Match builds for any of these systems, compared exactly. The server owns
     /// the system vocabulary and rejects a name outside it.
     pub system: Vec<SystemItem>,
@@ -266,8 +266,8 @@ pub struct BuildFilters {
 
 /// The factory builds API interface, implemented for [`FloxhubClient`].
 ///
-/// Methods return domain types (`ResultsPage<BuildResponse>`, `BuildResponse`,
-/// `BuildDetailResponse`, `ByteStream`) and domain errors
+/// Methods return domain types (`ResultsPage<RunResponse>`, `RunResponse`,
+/// `RunDetailResponse`, `ByteStream`) and domain errors
 /// (`FactoryClientError`), keeping generated HTTP types contained within the
 /// `floxhub-client` crate.
 #[allow(async_fn_in_trait)]
@@ -276,18 +276,17 @@ pub trait FactoryClientTrait {
     async fn list_builds(
         &self,
         filters: &BuildFilters,
-    ) -> Result<ResultsPage<BuildResponse>, FactoryClientError>;
+    ) -> Result<ResultsPage<RunResponse>, FactoryClientError>;
 
     /// Fetch a single build by its ID, with the outputs it published.
-    async fn get_build(&self, build_id: BuildId)
-    -> Result<BuildDetailResponse, FactoryClientError>;
+    async fn get_build(&self, build_id: BuildId) -> Result<RunDetailResponse, FactoryClientError>;
 
     /// Cancel a single build by its ID (DELETE).
     ///
     /// Idempotent: a satisfied-intent cancel returns the build with its
     /// effective `status`; the caller reads that field to distinguish a
     /// just-initiated cancellation from an already-terminal build.
-    async fn cancel_build(&self, build_id: BuildId) -> Result<BuildResponse, FactoryClientError>;
+    async fn cancel_build(&self, build_id: BuildId) -> Result<RunResponse, FactoryClientError>;
 
     /// Proxy the raw log stream for a build.
     async fn get_build_logs(&self, build_id: BuildId) -> Result<ByteStream, FactoryClientError>;
@@ -301,7 +300,7 @@ impl FactoryClientTrait for crate::FloxhubClient {
     async fn list_builds(
         &self,
         filters: &BuildFilters,
-    ) -> Result<ResultsPage<BuildResponse>, FactoryClientError> {
+    ) -> Result<ResultsPage<RunResponse>, FactoryClientError> {
         // Map empty collections to None so an unfiltered call omits the query
         // parameter entirely. These references are Copy, so the per-page
         // closure reuses them each call.
@@ -316,7 +315,7 @@ impl FactoryClientTrait for crate::FloxhubClient {
             |page_number, page_size| async move {
                 let response = self
                     .factory
-                    .list_builds_api_v1_factory_builds_get(
+                    .list_runs_api_v1_factory_runs_get(
                         attr_path,
                         None,
                         // The Factory API types `page` as `i64`.
@@ -333,7 +332,7 @@ impl FactoryClientTrait for crate::FloxhubClient {
                     .await?
                     .into_inner();
 
-                Ok::<_, FactoryClientError>((response.total, response.builds))
+                Ok::<_, FactoryClientError>((response.total, response.runs))
             },
             FACTORY_PAGE_SIZE,
         );
@@ -342,16 +341,13 @@ impl FactoryClientTrait for crate::FloxhubClient {
         Ok(ResultsPage { results, count })
     }
 
-    async fn get_build(
-        &self,
-        build_id: BuildId,
-    ) -> Result<BuildDetailResponse, FactoryClientError> {
+    async fn get_build(&self, build_id: BuildId) -> Result<RunDetailResponse, FactoryClientError> {
         // A 404 on this resource-specific endpoint means the build ID does not
         // exist; reclassify it so the `status` verb can report it as such. Other
         // endpoints leave a 404 as the underlying API error.
         Ok(self
             .factory
-            .get_build_api_v1_factory_builds_build_id_get(build_id.into())
+            .get_run_api_v1_factory_runs_run_id_get(build_id.into())
             .await
             .map_api_error()
             .await
@@ -359,13 +355,13 @@ impl FactoryClientTrait for crate::FloxhubClient {
             .into_inner())
     }
 
-    async fn cancel_build(&self, build_id: BuildId) -> Result<BuildResponse, FactoryClientError> {
+    async fn cancel_build(&self, build_id: BuildId) -> Result<RunResponse, FactoryClientError> {
         // The slice's one destructive call. Every HTTP and transport outcome is
         // classified here so the verb can map each to a distinct exit code
         // without re-inspecting raw responses at the call site.
         Ok(self
             .factory
-            .cancel_build_api_v1_factory_builds_build_id_delete(build_id.into())
+            .cancel_run_api_v1_factory_runs_run_id_delete(build_id.into())
             .await
             .map_api_error()
             .await
@@ -380,7 +376,7 @@ impl FactoryClientTrait for crate::FloxhubClient {
         // so. Other endpoints leave a 404 as the underlying API error.
         Ok(self
             .factory
-            .get_build_logs_api_v1_factory_builds_build_id_logs_get(build_id.into())
+            .get_run_logs_api_v1_factory_runs_run_id_logs_get(build_id.into())
             .await
             .map_api_error()
             .await
@@ -445,10 +441,10 @@ pub mod tests {
 
         let mock = server.mock(|when, then| {
             when.method("GET")
-                .path("/api/v1/factory/builds")
+                .path("/api/v1/factory/runs")
                 .header("authorization", expected_header);
             then.status(200).json_body(json!({
-                "builds": [],
+                "runs": [],
                 "page": 1,
                 "page_size": 20,
                 "total": 0
@@ -478,11 +474,11 @@ pub mod tests {
 
         let mock = server.mock(|when, then| {
             when.method("GET")
-                .path("/api/v1/factory/builds")
+                .path("/api/v1/factory/runs")
                 .query_param("status", "running")
                 .query_param("status", "failed");
             then.status(200).json_body(json!({
-                "builds": [],
+                "runs": [],
                 "page": 0,
                 "page_size": 50,
                 "total": 0
@@ -495,7 +491,7 @@ pub mod tests {
         };
         let client = crate::FloxhubClient::new(config).unwrap();
         let filters = BuildFilters {
-            status: vec![EffectiveBuildStatus::Running, EffectiveBuildStatus::Failed],
+            status: vec![EffectiveRunStatus::Running, EffectiveRunStatus::Failed],
             ..Default::default()
         };
         let result = client.list_builds(&filters).await.unwrap();
@@ -515,13 +511,13 @@ pub mod tests {
 
         let mock = server.mock(|when, then| {
             when.method("GET")
-                .path("/api/v1/factory/builds")
+                .path("/api/v1/factory/runs")
                 .query_param("system", "aarch64-darwin")
                 .query_param("attr_path", "hello")
                 .query_param("source_commit_sha", "abc123")
                 .query_param("since", SINCE);
             then.status(200).json_body(json!({
-                "builds": [],
+                "runs": [],
                 "page": 0,
                 "page_size": 50,
                 "total": 0
@@ -560,12 +556,12 @@ pub mod tests {
         // A full page is what makes the loop ask for a second one, and the
         // total must exceed one page so it does not stop on the count check.
         let full_page: Vec<serde_json::Value> = (0..200)
-            .map(|_| valid_build_json(EffectiveBuildStatus::Completed))
+            .map(|_| valid_build_json(EffectiveRunStatus::Completed))
             .collect();
 
         let page_zero = server.mock(|when, then| {
             when.method("GET")
-                .path("/api/v1/factory/builds")
+                .path("/api/v1/factory/runs")
                 .query_param("page", "0")
                 .query_param("status", "running")
                 .query_param("system", "aarch64-darwin")
@@ -573,7 +569,7 @@ pub mod tests {
                 .query_param("source_commit_sha", "abc123")
                 .query_param("since", SINCE);
             then.status(200).json_body(json!({
-                "builds": full_page,
+                "runs": full_page,
                 "page": 0,
                 "page_size": 200,
                 "total": 201
@@ -582,7 +578,7 @@ pub mod tests {
 
         let page_one = server.mock(|when, then| {
             when.method("GET")
-                .path("/api/v1/factory/builds")
+                .path("/api/v1/factory/runs")
                 .query_param("page", "1")
                 .query_param("status", "running")
                 .query_param("system", "aarch64-darwin")
@@ -590,7 +586,7 @@ pub mod tests {
                 .query_param("source_commit_sha", "abc123")
                 .query_param("since", SINCE);
             then.status(200).json_body(json!({
-                "builds": [valid_build_json(EffectiveBuildStatus::Completed)],
+                "runs": [valid_build_json(EffectiveRunStatus::Completed)],
                 "page": 1,
                 "page_size": 200,
                 "total": 201
@@ -603,7 +599,7 @@ pub mod tests {
         };
         let client = crate::FloxhubClient::new(config).unwrap();
         let filters = BuildFilters {
-            status: vec![EffectiveBuildStatus::Running],
+            status: vec![EffectiveRunStatus::Running],
             system: vec!["aarch64-darwin".parse().unwrap()],
             attr_path: vec!["hello".parse().unwrap()],
             source_commit_sha: vec!["abc123".parse().unwrap()],
@@ -627,14 +623,14 @@ pub mod tests {
 
         let mock = server.mock(|when, then| {
             when.method("GET")
-                .path("/api/v1/factory/builds")
+                .path("/api/v1/factory/runs")
                 .query_param_missing("status")
                 .query_param_missing("system")
                 .query_param_missing("attr_path")
                 .query_param_missing("source_commit_sha")
                 .query_param_missing("since");
             then.status(200).json_body(json!({
-                "builds": [],
+                "runs": [],
                 "page": 0,
                 "page_size": 50,
                 "total": 0
@@ -667,7 +663,7 @@ pub mod tests {
             when.header("flox-test", "test-value")
                 .and(|when| when.header("flox-test2", "test-value2"));
             then.status(200).json_body(json!({
-                "builds": [],
+                "runs": [],
                 "page": 1,
                 "page_size": 20,
                 "total": 0
@@ -820,7 +816,7 @@ pub mod tests {
         let server = MockServer::start_async().await;
         let mock = server.mock(|when, then| {
             when.method("GET")
-                .path(format!("/api/v1/factory/builds/{BUILD_ID}"));
+                .path(format!("/api/v1/factory/runs/{BUILD_ID}"));
             then.status(404)
                 .json_body(json!({ "detail": "Build not found" }));
         });
@@ -850,14 +846,14 @@ pub mod tests {
     /// The build ID every single-build mock in this module serves.
     const BUILD_ID: i64 = 7;
 
-    /// A complete `BuildResponse` body with the given effective `status`, built
-    /// from the typed `BuildResponse` and serialized so the wire fixture fails
+    /// A complete `RunResponse` body with the given effective `status`, built
+    /// from the typed `RunResponse` and serialized so the wire fixture fails
     /// loudly if a required field is added or changed, rather than silently
     /// omitting it and parsing a degenerate body.
-    fn valid_build_json(status: EffectiveBuildStatus) -> serde_json::Value {
-        serde_json::to_value(BuildResponse {
+    fn valid_build_json(status: EffectiveRunStatus) -> serde_json::Value {
+        serde_json::to_value(RunResponse {
             attr_path: "hello".to_string(),
-            build_id: BUILD_ID,
+            run_id: BUILD_ID,
             build_type: "nixpkgs".to_string(),
             catalog_name: "my-catalog".to_string(),
             created_at: "2025-01-01T00:00:00Z".parse().unwrap(),
@@ -872,7 +868,7 @@ pub mod tests {
             // Trigger provenance isn't under test here.
             trigger: None,
         })
-        .expect("BuildResponse serializes")
+        .expect("RunResponse serializes")
     }
 
     /// Start a mock server returning `status`/`body` for the single-build DELETE,
@@ -880,11 +876,11 @@ pub mod tests {
     async fn cancel_build_against_mock(
         status: u16,
         body: serde_json::Value,
-    ) -> Result<BuildResponse, FactoryClientError> {
+    ) -> Result<RunResponse, FactoryClientError> {
         let server = MockServer::start_async().await;
         let mock = server.mock(|when, then| {
             when.method("DELETE")
-                .path(format!("/api/v1/factory/builds/{BUILD_ID}"));
+                .path(format!("/api/v1/factory/runs/{BUILD_ID}"));
             then.status(status).json_body(body);
         });
 
@@ -903,13 +899,12 @@ pub mod tests {
     async fn cancel_build_returns_build_on_200() {
         // A satisfied cancel returns the build; the caller reads the effective
         // `status` to tell a fresh cancellation from an already-terminal build.
-        let build =
-            cancel_build_against_mock(200, valid_build_json(EffectiveBuildStatus::Cancelled))
-                .await
-                .unwrap();
-        let expected = BuildResponse {
+        let build = cancel_build_against_mock(200, valid_build_json(EffectiveRunStatus::Cancelled))
+            .await
+            .unwrap();
+        let expected = RunResponse {
             attr_path: "hello".to_string(),
-            build_id: BUILD_ID,
+            run_id: BUILD_ID,
             build_type: "nixpkgs".to_string(),
             catalog_name: "my-catalog".to_string(),
             created_at: "2025-01-01T00:00:00Z".parse().unwrap(),
@@ -918,7 +913,7 @@ pub mod tests {
             published_package: None,
             source_commit_sha: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2".to_string(),
             source_repo_url: "https://github.com/example/repo".to_string(),
-            status: EffectiveBuildStatus::Cancelled,
+            status: EffectiveRunStatus::Cancelled,
             system: "x86_64-linux".to_string(),
             task: None,
             trigger: None,
@@ -1004,7 +999,7 @@ pub mod tests {
 
     #[tokio::test]
     async fn cancel_build_maps_200_wrong_shape_to_api_error() {
-        // A 200 whose body is not a `BuildResponse` degrades to the generic API
+        // A 200 whose body is not a `RunResponse` degrades to the generic API
         // error rather than escalating to a bespoke variant; the verb reports it
         // as a retryable service error.
         let err = cancel_build_against_mock(200, json!({ "unexpected": "shape" }))
@@ -1040,7 +1035,7 @@ pub mod tests {
         // NotFound and lets the verb render a cause-agnostic message.
         let server = MockServer::start_async().await;
         let mock = server.mock(|when, then| {
-            when.method("GET").path("/api/v1/factory/builds/7/logs");
+            when.method("GET").path("/api/v1/factory/runs/7/logs");
             then.status(404)
                 .json_body(json!({ "detail": "Build not found" }));
         });
@@ -1069,7 +1064,7 @@ pub mod tests {
         // than reported as NotFound.
         let server = MockServer::start_async().await;
         let _mock = server.mock(|when, then| {
-            when.method("GET").path("/api/v1/factory/builds");
+            when.method("GET").path("/api/v1/factory/runs");
             then.status(404).json_body(json!({ "detail": "Not Found" }));
         });
 
@@ -1113,9 +1108,9 @@ pub mod tests {
         {
             let server = MockServer::start_async().await;
             let _mock = server.mock(|when, then| {
-                when.method("GET").path("/api/v1/factory/builds");
+                when.method("GET").path("/api/v1/factory/runs");
                 then.status(200).json_body(json!({
-                    "builds": [],
+                    "runs": [],
                     "page": 1,
                     "page_size": 20,
                     "total": 0

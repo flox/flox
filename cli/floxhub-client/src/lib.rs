@@ -108,12 +108,12 @@ pub use factory::{
 };
 pub use factory_api_v1::types::{
     AttrPathItem,
-    BuildDetailResponse,
-    BuildResponse,
-    BuildTrigger,
-    BuildTriggerKind,
-    EffectiveBuildStatus,
+    EffectiveRunStatus as EffectiveFactoryRunStatus,
     ErrorResponse as FactoryErrorResponse,
+    RunDetailResponse as FactoryRunDetailResponse,
+    RunResponse as FactoryRunResponse,
+    RunTrigger as FactoryRunTrigger,
+    RunTriggerKind as FactoryRunTriggerKind,
     SourceCommitShaItem,
     SystemItem,
 };

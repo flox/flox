@@ -722,7 +722,7 @@ impl CatalogClientTrait for FloxhubClient {
         // Keep the public query ordered for deterministic projections; only
         // the generated wire request needs the server's HashMap.
         let body = api_types::CheckBuildRequest {
-            factory_build_token: query.factory_build_token.map(str::to_string),
+            factory_run_token: query.factory_build_token.map(str::to_string),
             source_url: query.source_url.to_string(),
             source_rev: query.source_rev.to_string(),
             nixpkgs_rev: query.nixpkgs_rev.to_string(),
@@ -1907,7 +1907,7 @@ pub mod tests {
                             }
                         },
                         "direct_inputs": ["dep-key"],
-                        "factory_build_token": "factory:abc123",
+                        "factory_run_token": "factory:abc123",
                         "source_ref": "refs/heads/release",
                         "dot_flox_dir": "nested/.flox"
                     })
@@ -2080,7 +2080,7 @@ pub mod tests {
             direct_inputs: None,
             dot_flox_dir: ".flox".to_string(),
             expected_registered_source: None,
-            factory_build_token: factory_build_token.map(str::to_string),
+            factory_run_token: factory_build_token.map(str::to_string),
             locked_base_catalog_url: None,
             locked_inputs: None,
             narinfos: None,
@@ -2106,7 +2106,7 @@ pub mod tests {
         let mock = server.mock(|when, then| {
             when.method("POST")
                 .path(PUBLISH_PATH)
-                .json_body_includes(json!({ "factory_build_token": "factory:abc123" }).to_string());
+                .json_body_includes(json!({ "factory_run_token": "factory:abc123" }).to_string());
             then.status(200).json_body(json!({}));
         });
 

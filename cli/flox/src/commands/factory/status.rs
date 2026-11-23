@@ -1,6 +1,6 @@
 use anyhow::Result;
 use bpaf::Bpaf;
-use floxhub_client::{BuildDetailResponse, BuildId, FactoryClientTrait};
+use floxhub_client::{BuildId, FactoryClientTrait, FactoryRunDetailResponse};
 use indoc::formatdoc;
 use tracing::instrument;
 
@@ -42,9 +42,9 @@ impl Status {
 
 /// Render a single build as either raw JSON or a human-readable table.
 ///
-/// The JSON form is intentionally the bare [`BuildDetailResponse`] object, with
+/// The JSON form is intentionally the bare [`FactoryRunDetailResponse`] object, with
 /// no surrounding envelope: a single build has no pagination to report.
-fn render(build: BuildDetailResponse, json: bool) -> Result<String> {
+fn render(build: FactoryRunDetailResponse, json: bool) -> Result<String> {
     if json {
         Ok(format!("{}\n", serde_json::to_string_pretty(&build)?))
     } else {
@@ -63,13 +63,13 @@ struct BuildStatusDisplay {
     created_at: String,
 }
 
-impl From<BuildDetailResponse> for BuildStatusDisplay {
-    fn from(b: BuildDetailResponse) -> Self {
+impl From<FactoryRunDetailResponse> for BuildStatusDisplay {
+    fn from(b: FactoryRunDetailResponse) -> Self {
         let status = effective_status(&b.status);
         let trigger = trigger_label(b.trigger.as_ref());
 
         BuildStatusDisplay {
-            build_id: b.build_id,
+            build_id: b.run_id,
             pkg_path: format!("{}/{}", b.catalog_name, b.attr_path),
             system: b.system,
             trigger,
@@ -93,7 +93,7 @@ impl std::fmt::Display for BuildStatusDisplay {
 
 #[cfg(test)]
 mod tests {
-    use floxhub_client::{BuildTrigger, EffectiveBuildStatus};
+    use floxhub_client::{EffectiveFactoryRunStatus, FactoryRunTrigger};
     use indoc::indoc;
     use pretty_assertions::assert_eq;
 
@@ -124,9 +124,9 @@ mod tests {
             42,
             "x86_64-linux",
             "hello",
-            Some(EffectiveBuildStatus::Running),
+            Some(EffectiveFactoryRunStatus::Running),
         );
-        build.trigger = Some(BuildTrigger {
+        build.trigger = Some(FactoryRunTrigger {
             kind: Some("source_push".to_string().into()),
             stabilities: vec!["staging".to_string()],
         });
