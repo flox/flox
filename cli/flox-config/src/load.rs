@@ -46,13 +46,24 @@ pub fn parse_from<T: DeserializeOwned>(
 ) -> Result<T> {
     let env = env.into_iter().collect::<Vec<_>>();
     let base_directories = base_directories_from(&env);
-    let user_config_dir = locate_user_config_dir(&base_directories, &env)?.into_path();
+    let user_config_dir = user_config_dir_from(&env)?;
     parse_with(
         &base_directories,
         &user_config_dir,
         locate_system_config_dir(&env)?.as_deref(),
         env,
     )
+}
+
+/// The user config dir [parse_from] reads for the environment `env`,
+/// located as [parse] locates it, and not created.
+///
+/// [parse] would create it if it is missing, and fails where it cannot;
+/// a caller that reads without changing anything can tell from this path
+/// whether [parse] would.
+pub fn user_config_dir_from(env: &[(String, String)]) -> Result<PathBuf> {
+    let base_directories = base_directories_from(env);
+    Ok(locate_user_config_dir(&base_directories, env)?.into_path())
 }
 
 /// Like [parse], with explicit directories and environment.
@@ -637,6 +648,30 @@ mod tests {
             config_dir
         );
         assert!(config_dir.is_dir(), "preparing creates the dir");
+    }
+
+    #[test]
+    fn user_config_dir_is_located_without_being_created() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let home = tempdir.path().join("home");
+        fs::create_dir(&home).unwrap();
+        let env = env_of(&[
+            ("HOME", home.to_str().unwrap()),
+            ("XDG_CONFIG_DIRS", home.to_str().unwrap()),
+        ]);
+
+        let located = user_config_dir_from(&env).unwrap();
+
+        assert_eq!(located, home.join(".config").join(FLOX_DIR_NAME));
+        assert!(!located.exists());
+
+        let overridden = tempdir.path().join("overridden");
+        let env = env_of(&[
+            ("HOME", home.to_str().unwrap()),
+            (FLOX_CONFIG_DIR_VAR, overridden.to_str().unwrap()),
+        ]);
+        assert_eq!(user_config_dir_from(&env).unwrap(), overridden);
+        assert!(!overridden.exists());
     }
 
     #[test]
