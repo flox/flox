@@ -91,14 +91,17 @@ struct QueryFunctions {
 
 /// RAII guard to clean up a newly created `.flox` directory if pulling an environment fails.
 #[derive(Debug)]
-struct DotFloxCleanupGuard<'a> {
-    path: &'a Path,
+struct DotFloxCleanupGuard {
+    path: PathBuf,
     armed: bool,
 }
 
-impl<'a> DotFloxCleanupGuard<'a> {
-    fn new(path: &'a Path) -> Self {
-        Self { path, armed: true }
+impl DotFloxCleanupGuard {
+    fn new(path: impl Into<PathBuf>) -> Self {
+        Self {
+            path: path.into(),
+            armed: true,
+        }
     }
 
     fn disarm(&mut self) {
@@ -106,10 +109,12 @@ impl<'a> DotFloxCleanupGuard<'a> {
     }
 }
 
-impl Drop for DotFloxCleanupGuard<'_> {
+impl Drop for DotFloxCleanupGuard {
     fn drop(&mut self) {
         if self.armed && self.path.exists() {
-            let _ = fs::remove_dir_all(self.path);
+            if let Err(err) = fs::remove_dir_all(&self.path) {
+                tracing::warn!(?err, path = %self.path.display(), "Failed to clean up .flox directory on abort");
+            }
         }
     }
 }
@@ -429,26 +434,18 @@ impl Pull {
 
         if copy {
             debug!("Converting environment to path environment");
-            match env.into_path_environment(flox) {
-                Err(e) => {
-                    fs::remove_dir_all(&dot_flox_path)
-                        .context("Could not clean up .flox/ directory")?;
-                    bail!(e);
-                },
-                Ok(env) => {
-                    create_dot_flox_gitignore(env.dot_flox_path())?;
-                    let origin = local_environment_id::ensure(&env.dot_flox_path());
+            let env = env.into_path_environment(flox)?;
+            create_dot_flox_gitignore(env.dot_flox_path())?;
+            let origin = local_environment_id::ensure(&env.dot_flox_path());
 
-                    let env = ConcreteEnvironment::Path(env);
-                    if origin == local_environment_id::Origin::Minted
-                        && let Err(err) =
-                            EventsHub::global().record_event(EventKind::CliEnvironmentCreate(
-                                CliEnvironmentPayload::new(env_detail_from_concrete(flox, &env)),
-                            ))
-                    {
-                        debug!(error = %err, "Failed to record v2 event");
-                    }
-                },
+            let env = ConcreteEnvironment::Path(env);
+            if origin == local_environment_id::Origin::Minted
+                && let Err(err) =
+                    EventsHub::global().record_event(EventKind::CliEnvironmentCreate(
+                        CliEnvironmentPayload::new(env_detail_from_concrete(flox, &env)),
+                    ))
+            {
+                debug!(error = %err, "Failed to record v2 event");
             }
         }
 
