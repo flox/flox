@@ -243,3 +243,51 @@ impl Display for DidYouMean<'_, SearchSuggestion> {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use flox_rust_sdk::providers::catalog::SystemEnum;
+    use floxhub_client::{DeprecationInfo, DeprecationKind, SearchResult};
+
+    use super::*;
+
+    /// The related results are rendered with the table `flox search` uses, so
+    /// a deprecated one gets its notice there too.
+    #[test]
+    fn related_results_show_deprecation_notices() {
+        let related = SearchResult {
+            attr_path: "cargo".to_string(),
+            name: "cargo".to_string(),
+            pname: "cargo".to_string(),
+            stabilities: vec![],
+            system: SystemEnum::from_str("aarch64-darwin").unwrap(),
+            catalog: None,
+            pkg_path: "cargo".to_string(),
+            description: Some("a description".to_string()),
+            version: None,
+            deprecation: Some(DeprecationInfo {
+                kind: DeprecationKind::Removed,
+                message: Some("cargo is EOL".to_string()),
+                replacement: None,
+            }),
+        };
+        let suggestion = DidYouMean {
+            searched_term: "rust",
+            curated: Some("cargo"),
+            search_results: SearchResults {
+                results: vec![related],
+                count: Some(1),
+            },
+            suggestion: SearchSuggestion {
+                use_bold_fmt: false,
+            },
+        };
+
+        assert_eq!(
+            suggestion.to_string(),
+            "Related search results for 'cargo':\ncargo  a description\n       ! cargo is EOL"
+        );
+    }
+}

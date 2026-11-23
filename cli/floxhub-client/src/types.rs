@@ -32,8 +32,25 @@ pub struct ResultsPage<T> {
 pub use api_types::PackageInfoSearch as SearchResult;
 pub type SearchResults = ResultsPage<SearchResult>;
 
-pub use api_types::{PackageOutput, PackageOutputs, PackageVersionInfo as PackageBuild};
-pub type PackageDetails = ResultsPage<PackageBuild>;
+pub use api_types::{
+    DeprecationInfo,
+    DeprecationKind,
+    PackageOutput,
+    PackageOutputs,
+    PackageVersionInfo as PackageBuild,
+};
+
+/// The builds the catalog lists for one pkg-path.
+///
+/// Unlike a search, the catalog reports a deprecation once for the whole
+/// pkg-path rather than per build, so it sits beside the builds.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PackageDetails {
+    pub results: Vec<PackageBuild>,
+    pub count: ResultCount,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deprecation: Option<DeprecationInfo>,
+}
 
 // Build-inputs lookup (lockless catalog locking, ECO-93). Re-exported so
 // consumers (e.g. nef-lock-catalog) depend only on floxhub-client.

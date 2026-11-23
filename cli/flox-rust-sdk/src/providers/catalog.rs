@@ -244,6 +244,7 @@ impl CatalogClientTrait for MockClient {
             Some(Response::Packages(PackageDetails {
                 results: _,
                 count: Some(0),
+                ..
             })) => Ok(SearchResults {
                 results: vec![],
                 count: Some(0),

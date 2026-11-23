@@ -719,6 +719,14 @@ post_cmd = '''
 [search.java_suggestions]
 cmd = "flox search java"
 
+# Deprecated results: php81 has a message and no replacement, aria is
+# renamed to aria2.
+[search.php81]
+cmd = "flox search php81"
+
+[search.aria]
+cmd = "flox search aria"
+
 # Records the by-command lookup for an ambiguous command. Without a TTY the
 # command exits with the candidate list, which is expected — the response is
 # captured before the failure.
@@ -731,6 +739,12 @@ cmd = "flox show hello"
 
 [show.flask]
 cmd = "flox show python310Packages.flask"
+
+[show.php81]
+cmd = "flox show php81"
+
+[show.aria]
+cmd = "flox show aria"
 
 [init.go]
 files = ["init/go/common", "init/go/module"]

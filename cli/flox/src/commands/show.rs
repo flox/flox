@@ -5,11 +5,14 @@ use anyhow::{Result, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
-use floxhub_client::{CatalogClientTrait, PackageBuild, VersionsError};
+use floxhub_client::{CatalogClientTrait, DeprecationInfo, PackageBuild, VersionsError};
 use itertools::Itertools;
+use serde::Serialize;
 use tracing::instrument;
 
 use crate::subcommand_metric;
+use crate::utils::deprecation::deprecation_notice;
+use crate::utils::message;
 use crate::utils::search::DEFAULT_DESCRIPTION;
 use crate::utils::tracing::sentry_set_tag;
 
@@ -50,8 +53,15 @@ impl Show {
             Err(e) => Err(e)?,
         };
         if results.results.is_empty() {
+            // The catalog reports the deprecation even when no build passes
+            // the stability filter.
+            let notice = results
+                .deprecation
+                .as_ref()
+                .map(|deprecation| format!("\n{}", deprecation_notice(&self.pkg_path, deprecation)))
+                .unwrap_or_default();
             bail!(
-                "No builds are available for '{}' in any stability.",
+                "No builds are available for '{}' in any stability.{notice}",
                 self.pkg_path
             );
         }
@@ -65,7 +75,11 @@ impl Show {
         .map(|s| s.to_string())
         .collect::<HashSet<_>>();
         if self.json {
-            render_show_versions_json(&mut std::io::stdout(), &results.results)?;
+            render_show_versions_json(
+                &mut std::io::stdout(),
+                &results.results,
+                results.deprecation.as_ref(),
+            )?;
         } else {
             render_show_catalog(
                 &mut std::io::stdout(),
@@ -73,14 +87,40 @@ impl Show {
                 &expected_systems,
                 self.all,
             )?;
+            // After the output so it isn't scrolled off by a long version list.
+            if let Some(deprecation) = &results.deprecation {
+                message::warning(deprecation_notice(&self.pkg_path, deprecation));
+            }
         }
 
         Ok(())
     }
 }
 
-fn render_show_versions_json(writer: &mut impl Write, versions: &[PackageBuild]) -> Result<()> {
-    let json = serde_json::to_string_pretty(versions)?;
+/// A build as listed by `flox show --json`.
+///
+/// The catalog reports a deprecation once per pkg-path, but the output stays an
+/// array of builds so existing consumers keep working. The deprecation is
+/// therefore repeated on every build, as `flox search --json` does for each
+/// result, and left out entirely when there is none.
+#[derive(Serialize)]
+struct ShowBuildJson<'a> {
+    #[serde(flatten)]
+    build: &'a PackageBuild,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    deprecation: Option<&'a DeprecationInfo>,
+}
+
+fn render_show_versions_json(
+    writer: &mut impl Write,
+    versions: &[PackageBuild],
+    deprecation: Option<&DeprecationInfo>,
+) -> Result<()> {
+    let builds = versions
+        .iter()
+        .map(|build| ShowBuildJson { build, deprecation })
+        .collect::<Vec<_>>();
+    let json = serde_json::to_string_pretty(&builds)?;
     writeln!(writer, "{json}")?;
     Ok(())
 }
@@ -252,7 +292,13 @@ mod test {
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::providers::catalog::test_helpers::auto_recording_catalog_client;
     use floxhub_client::client::test_helpers::client_config;
-    use floxhub_client::{FloxhubClient, PackageOutput, PackageOutputs, PackageSystem};
+    use floxhub_client::{
+        DeprecationKind,
+        FloxhubClient,
+        PackageOutput,
+        PackageOutputs,
+        PackageSystem,
+    };
     use httpmock::MockServer;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
@@ -294,6 +340,37 @@ mod test {
             "No builds are available for 'search_term' in any stability."
         );
         mock.assert();
+    }
+
+    /// The catalog reports a deprecation even when every build is filtered
+    /// out, and the notice has to reach the user then too.
+    #[tokio::test]
+    async fn show_no_available_builds_includes_the_deprecation() {
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        let server = MockServer::start_async().await;
+        server.mock(|when, then| {
+            when.method("GET").path("/api/v1/catalog/packages/php81");
+            then.status(200).json_body(serde_json::json!({
+                "items": [],
+                "total_count": 0,
+                "deprecation": {"kind": "removed", "message": "php81 is EOL"},
+            }));
+        });
+        flox.floxhub_client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+
+        let err = Show {
+            pkg_path: "php81".to_string(),
+            json: false,
+            all: false,
+        }
+        .handle(flox)
+        .await
+        .unwrap_err();
+
+        assert_eq!(
+            err.to_string(),
+            "No builds are available for 'php81' in any stability.\nphp81 is EOL"
+        );
     }
 
     #[tokio::test]
@@ -507,7 +584,7 @@ mod test {
         ])];
 
         let mut buf = vec![];
-        render_show_versions_json(&mut buf, &results).unwrap();
+        render_show_versions_json(&mut buf, &results, None).unwrap();
         let json = String::from_utf8(buf).unwrap();
 
         assert!(json.trim().contains('\n'), "expected pretty-printed JSON");
@@ -519,6 +596,111 @@ mod test {
         assert_eq!(
             entries[0]["available_stabilities"],
             serde_json::json!(["stable", "unstable"])
+        );
+    }
+
+    /// `--json` stays an array of builds; each carries the pkg-path's
+    /// deprecation, the way `flox search --json` carries it per result. The
+    /// deprecation is the catalog's answer for `aria`.
+    #[test]
+    fn json_carries_deprecation_on_every_build() {
+        let deprecation = DeprecationInfo {
+            kind: DeprecationKind::Removed,
+            message: Some("'aria' has been renamed to/replaced by 'aria2'".to_string()),
+            replacement: Some("aria2".to_string()),
+        };
+        let results = vec![
+            mock_pkg("2.0", "aarch64-darwin"),
+            mock_pkg("1.0", "aarch64-darwin"),
+        ];
+
+        let mut buf = vec![];
+        render_show_versions_json(&mut buf, &results, Some(&deprecation)).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&buf).unwrap();
+
+        assert_eq!(
+            parsed,
+            serde_json::json!([
+                {
+                    "attr_path": "",
+                    "broken": null,
+                    "catalog": "nixpkgs",
+                    "deprecation": {
+                        "kind": "removed",
+                        "message": "'aria' has been renamed to/replaced by 'aria2'",
+                        "replacement": "aria2"
+                    },
+                    "derivation": "",
+                    "description": "test",
+                    "insecure": null,
+                    "license": "MIT",
+                    "locked_url": "https://github.com/flox/nixpkgs?rev=abc123",
+                    "missing_builds": null,
+                    "name": "",
+                    "outputs": [
+                        {"name": "sub-pkg", "store_path": "somestorepath"},
+                        {"name": "sub-pkg-other", "store_path": "somestorepath"}
+                    ],
+                    "outputs_to_install": ["sub-pkg"],
+                    "pkg_path": "pkg",
+                    "pname": "",
+                    "rev": "",
+                    "rev_count": 0,
+                    "rev_date": "2025-05-31T12:05:15Z",
+                    "scrape_date": null,
+                    "stabilities": null,
+                    "system": "aarch64-darwin",
+                    "unfree": null,
+                    "version": "2.0"
+                },
+                {
+                    "attr_path": "",
+                    "broken": null,
+                    "catalog": "nixpkgs",
+                    "deprecation": {
+                        "kind": "removed",
+                        "message": "'aria' has been renamed to/replaced by 'aria2'",
+                        "replacement": "aria2"
+                    },
+                    "derivation": "",
+                    "description": "test",
+                    "insecure": null,
+                    "license": "MIT",
+                    "locked_url": "https://github.com/flox/nixpkgs?rev=abc123",
+                    "missing_builds": null,
+                    "name": "",
+                    "outputs": [
+                        {"name": "sub-pkg", "store_path": "somestorepath"},
+                        {"name": "sub-pkg-other", "store_path": "somestorepath"}
+                    ],
+                    "outputs_to_install": ["sub-pkg"],
+                    "pkg_path": "pkg",
+                    "pname": "",
+                    "rev": "",
+                    "rev_count": 0,
+                    "rev_date": "2025-05-31T12:05:15Z",
+                    "scrape_date": null,
+                    "stabilities": null,
+                    "system": "aarch64-darwin",
+                    "unfree": null,
+                    "version": "1.0"
+                }
+            ])
+        );
+    }
+
+    /// Output for a package without a deprecation is exactly what
+    /// serializing the builds alone gives: same key order, no `deprecation`.
+    #[test]
+    fn json_without_deprecation_is_the_plain_builds() {
+        let results = vec![mock_pkg("1.0", "aarch64-darwin")];
+
+        let mut buf = vec![];
+        render_show_versions_json(&mut buf, &results, None).unwrap();
+
+        assert_eq!(
+            String::from_utf8(buf).unwrap(),
+            format!("{}\n", serde_json::to_string_pretty(&results).unwrap())
         );
     }
 }
