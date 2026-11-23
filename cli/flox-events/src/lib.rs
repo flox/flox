@@ -14,7 +14,7 @@ mod connection;
 mod guard;
 mod hub;
 
-pub use buffer::{BufferLocation, EVENTS_BUFFER_FILE_NAME, EventsBuffer};
+pub use buffer::{BufferLocation, EVENTS_BUFFER_FILE_NAME, EventsBuffer, LOCK_WAIT};
 pub use client::{BATCH_SIZE, EventsClient, buffer_max_age};
 pub use connection::{EventsConnection, EventsConnectionV2, TRAILING_NETWORK_CALL_TIMEOUT};
 pub use guard::{EventsGuard, force_flush_requested};

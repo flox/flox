@@ -14,6 +14,12 @@ use crate::{Cli, Producer, ProducerEvent};
 pub const EVENTS_BUFFER_FILE_NAME: &str = "events-v2.json";
 const EVENTS_LOCK_FILE_NAME: &str = "events-v2.lock";
 const MAX_BUFFER_SIZE: usize = 1000;
+/// How long [`EventsBuffer::read_at`] waits for another process to release
+/// the buffer lock. Every holder only reads or writes the file, so a wait
+/// this long means a stuck holder.
+pub const LOCK_WAIT: std::time::Duration = std::time::Duration::from_secs(1);
+/// How often a held lock is tried again.
+const LOCK_RETRY: std::time::Duration = std::time::Duration::from_millis(10);
 
 /// Where an event buffer lives: a directory, the buffer file in it, and the
 /// lock file that guards the buffer file.
@@ -81,7 +87,7 @@ pub struct EventsBuffer<P: Producer = Cli> {
 impl EventsBuffer<Cli> {
     /// Read the CLI's buffer from `data_dir`, creating the file if needed.
     ///
-    /// Blocks until the file lock is acquired.
+    /// Waits for the file lock at most [`LOCK_WAIT`].
     pub fn read(data_dir: &Path) -> Result<Self> {
         Self::read_at(&BufferLocation::new(data_dir))
     }
@@ -102,7 +108,9 @@ impl EventsBuffer<Cli> {
 impl<P: Producer> EventsBuffer<P> {
     /// Read the buffer at `location`, creating the file if needed.
     ///
-    /// Blocks until the file lock is acquired.
+    /// Waits for the file lock at most [`LOCK_WAIT`], then fails: a process
+    /// that holds it longer is stuck, and every later invocation would wait
+    /// on it.
     pub fn read_at(location: &BufferLocation) -> Result<Self> {
         let data_dir = location.dir();
         std::fs::create_dir_all(data_dir).with_context(|| {
@@ -114,9 +122,7 @@ impl<P: Producer> EventsBuffer<P> {
 
         let events_lock =
             open_lock_file(location.lock()).context("Could not open v2 events lock file")?;
-        events_lock
-            .lock()
-            .context("Could not lock v2 events buffer")?;
+        lock_within(&events_lock, LOCK_WAIT)?;
 
         let buffer_file_path = location.file();
         let mut events_buffer_file_options = OpenOptions::new();
@@ -451,6 +457,25 @@ impl<P: Producer> EventsBuffer<P> {
     }
 }
 
+/// Takes the exclusive lock on `file`, giving up after `wait`.
+fn lock_within(file: &File, wait: std::time::Duration) -> Result<()> {
+    let deadline = std::time::Instant::now() + wait;
+    loop {
+        match file.try_lock() {
+            Ok(()) => return Ok(()),
+            Err(TryLockError::WouldBlock) if std::time::Instant::now() < deadline => {
+                std::thread::sleep(LOCK_RETRY);
+            },
+            Err(TryLockError::WouldBlock) => {
+                anyhow::bail!("Timed out after {wait:?} waiting for the v2 events buffer lock");
+            },
+            Err(TryLockError::Error(err)) => {
+                return Err(err).context("Could not lock v2 events buffer");
+            },
+        }
+    }
+}
+
 fn remove_file_if_present(path: &Path) -> std::io::Result<()> {
     match std::fs::remove_file(path) {
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -592,6 +617,26 @@ mod tests {
                 "{held} held, {added} added"
             );
         }
+    }
+
+    #[test]
+    fn a_reader_gives_up_on_a_lock_held_past_the_wait() {
+        let dir = tempfile::tempdir().unwrap();
+        let location = BufferLocation::new(dir.path());
+        let held = open_lock_file(location.lock()).unwrap();
+        held.lock().unwrap();
+
+        let start = std::time::Instant::now();
+        let read = EventsBuffer::read(dir.path());
+        let waited = start.elapsed();
+        assert!(read.is_err(), "read the buffer while another held its lock");
+        assert!(
+            waited >= LOCK_WAIT && waited < 5 * LOCK_WAIT,
+            "waited {waited:?}"
+        );
+
+        drop(held);
+        EventsBuffer::read(dir.path()).expect("reads once the lock is free");
     }
 
     /// A producer other than the CLI, whose events have their own source.
