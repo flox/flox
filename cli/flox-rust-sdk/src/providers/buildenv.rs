@@ -139,6 +139,38 @@ impl Display for DownloadAttempt {
     }
 }
 
+/// A custom package has been uploaded, but the current user hasn't configured
+/// a trusted public key that matches a signature of this package.
+#[derive(Debug, Clone)]
+pub struct UntrustedPackageError {
+    pub install_id: String,
+    /// Public keys that the catalog expects the package to be signed by.
+    pub expected_keys: Vec<String>,
+}
+
+impl Display for UntrustedPackageError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(
+            f,
+            "Package '{}' is not signed by a trusted key.",
+            self.install_id
+        )?;
+        if !self.expected_keys.is_empty() {
+            // Nix accepts a signature from any one trusted key.
+            writeln!(f, "Trust any key below to use it:")?;
+            for key in &self.expected_keys {
+                writeln!(f, "  {key}")?;
+            }
+        }
+        write!(
+            f,
+            "See https://flox.dev/docs/customer/signing-keys/ for more information."
+        )
+    }
+}
+
+impl std::error::Error for UntrustedPackageError {}
+
 #[derive(Debug, Error)]
 pub enum BuildEnvError {
     #[error("Failed to realize '{install_id}':\n{message}")]
@@ -213,13 +245,9 @@ pub enum BuildEnvError {
         attempts: DownloadAttempts,
     },
 
-    /// A custom package has been uploaded, but the current user hasn't configured
-    /// a trusted public key that matches a signature of this package.
-    #[error(
-        "Package '{0}' is not signed by a trusted key.\n\
-        See https://flox.dev/docs/customer/signing-keys/ for more information."
-    )]
-    UntrustedPackage(String),
+    /// See [`UntrustedPackageError`].
+    #[error(transparent)]
+    UntrustedPackage(UntrustedPackageError),
 
     #[error("authentication error")]
     Auth(#[source] AuthError),
@@ -566,7 +594,10 @@ pub fn copy_from_custom_catalog_locations(
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             if stderr.contains("because it lacks a signature by a trusted key") {
-                return Err(BuildEnvError::UntrustedPackage(install_id.to_string()));
+                return Err(BuildEnvError::UntrustedPackage(UntrustedPackageError {
+                    install_id: install_id.to_string(),
+                    expected_keys: location.public_keys.clone().unwrap_or_default(),
+                }));
             }
             // We're expecting errors for netrc type auth, but not for
             // catalog provided auth.
@@ -1789,6 +1820,41 @@ mod flox_nixpkgs_ref_tests {
             err,
             BuildEnvError::LockfileContents(ref msg) if msg.contains("has no host")
         ));
+    }
+}
+
+#[cfg(test)]
+mod untrusted_package_tests {
+    use indoc::indoc;
+    use pretty_assertions::assert_eq;
+
+    use super::*;
+
+    #[test]
+    fn untrusted_package_message_lists_expected_keys() {
+        let cases = [
+            ("no keys", vec![], indoc! {"
+                Package 'pkg' is not signed by a trusted key.
+                See https://flox.dev/docs/customer/signing-keys/ for more information."}),
+            (
+                "two keys",
+                vec!["floxhub-1:abc=".to_string(), "acme-1:def=".to_string()],
+                indoc! {"
+                    Package 'pkg' is not signed by a trusted key.
+                    Trust any key below to use it:
+                      floxhub-1:abc=
+                      acme-1:def=
+                    See https://flox.dev/docs/customer/signing-keys/ for more information."},
+            ),
+        ];
+
+        for (name, keys, expected) in cases {
+            let err = UntrustedPackageError {
+                install_id: "pkg".to_string(),
+                expected_keys: keys,
+            };
+            assert_eq!(err.to_string(), expected, "case: {name}");
+        }
     }
 }
 
@@ -3492,7 +3558,12 @@ mod join_realise_results_tests {
         let result = std::thread::scope(|s| {
             let handles = vec![
                 s.spawn(|| Ok::<(), BuildEnvError>(())),
-                s.spawn(|| Err(BuildEnvError::UntrustedPackage("pkg".into()))),
+                s.spawn(|| {
+                    Err(BuildEnvError::UntrustedPackage(UntrustedPackageError {
+                        install_id: "pkg".into(),
+                        expected_keys: vec![],
+                    }))
+                }),
                 s.spawn(|| Ok::<(), BuildEnvError>(())),
             ];
             join_realise_results(handles)
@@ -3508,7 +3579,12 @@ mod join_realise_results_tests {
         let result = std::thread::scope(|s| {
             let handles = vec![
                 s.spawn(|| Err::<(), BuildEnvError>(BuildEnvError::NixCopyError("first".into()))),
-                s.spawn(|| Err(BuildEnvError::UntrustedPackage("second".into()))),
+                s.spawn(|| {
+                    Err(BuildEnvError::UntrustedPackage(UntrustedPackageError {
+                        install_id: "second".into(),
+                        expected_keys: vec![],
+                    }))
+                }),
                 s.spawn(|| Err(BuildEnvError::Other("third".into()))),
             ];
             join_realise_results(handles)
@@ -3524,7 +3600,12 @@ mod join_realise_results_tests {
         let result = std::thread::scope(|s| {
             let handles = vec![
                 s.spawn(|| -> Result<(), BuildEnvError> { panic!("boom") }),
-                s.spawn(|| Err(BuildEnvError::UntrustedPackage("pkg".into()))),
+                s.spawn(|| {
+                    Err(BuildEnvError::UntrustedPackage(UntrustedPackageError {
+                        install_id: "pkg".into(),
+                        expected_keys: vec![],
+                    }))
+                }),
             ];
             join_realise_results(handles)
         });
