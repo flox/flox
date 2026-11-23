@@ -1,5 +1,5 @@
-//! `flox factory` command namespace: read-only build inspection for operators,
-//! plus the destructive `cancel` verb.
+//! `flox factory` command namespace: read-only inspection of Flox Factory runs
+//! for operators, plus the destructive `cancel` verb.
 //!
 //! Hidden from `flox --help`; discoverable via the operator runbook.
 
@@ -23,7 +23,7 @@ use tracing::instrument;
 
 use crate::commands::display_command_help;
 
-/// Compute the effective status label for a build from its server-computed
+/// Compute the effective status label for a run from its server-computed
 /// `status`.
 ///
 /// An unrecognized future status renders as `unknown: <value>` rather than
@@ -35,21 +35,20 @@ fn effective_status(status: &EffectiveFactoryRunStatus) -> String {
     }
 }
 
-/// Compute the effective "last updated" timestamp for a build.
+/// Compute the effective "last updated" timestamp for a run.
 ///
-/// A dispatched build reports its task's `updated_at`, which tracks lifecycle
-/// progress. An undispatched build has no task, so it falls back to the
-/// build's own `created_at`. This is the "updated, or created if never
+/// A dispatched run reports its task's `updated_at`, which tracks lifecycle
+/// progress. An undispatched run has no task, so it falls back to the
+/// run's own `created_at`. This is the "updated, or created if never
 /// updated" value shown in the `UPDATED` column.
-fn effective_updated_at(build: &FactoryRunResponse) -> DateTime<Utc> {
-    build
-        .task
+fn effective_updated_at(run: &FactoryRunResponse) -> DateTime<Utc> {
+    run.task
         .as_ref()
         .map(|task| task.updated_at)
-        .unwrap_or(build.created_at)
+        .unwrap_or(run.created_at)
 }
 
-/// Compute the label describing what scheduled a build.
+/// Compute the label describing what scheduled a run.
 fn trigger_label(trigger: Option<&FactoryRunTrigger>) -> String {
     let Some(trigger) = trigger else {
         return "-".to_string();
@@ -61,7 +60,7 @@ fn trigger_label(trigger: Option<&FactoryRunTrigger>) -> String {
         return kind.to_string();
     }
 
-    // The stabilities that named the build's nixpkgs revision when it was
+    // The stabilities that named the run's nixpkgs revision when it was
     // scheduled follow in parentheses. They explain why one package can be
     // built more than once per system. They sit inside the trigger label rather
     // than in a column of their own so they are not read as the revision's
@@ -94,26 +93,26 @@ fn user_facing_error(err: FactoryClientError, not_found: Option<String>) -> anyh
 // as plain comments rather than a `///` doc comment because bpaf renders the
 // enum's doc comment into `flox factory --help`, where implementation detail
 // does not belong.
-/// Operator subcommands for inspecting Flox Factory builds.
+/// Operator subcommands for inspecting Flox Factory runs.
 #[derive(Debug, Clone, Bpaf)]
 pub enum FactoryCommands {
     /// Print help information
     #[bpaf(command, hide)]
     Help,
 
-    /// Show the status of a single Flox Factory build
+    /// Show the status of a single Flox Factory run
     #[bpaf(command)]
     Status(#[bpaf(external(status::status))] status::Status),
 
-    /// List Flox Factory builds
+    /// List Flox Factory runs
     #[bpaf(command)]
     List(#[bpaf(external(list::list))] list::List),
 
-    /// Print the logs for a single Flox Factory build
+    /// Print the logs for a single Flox Factory run
     #[bpaf(command)]
     Logs(#[bpaf(external(logs::logs))] logs::Logs),
 
-    /// Cancel a single Flox Factory build
+    /// Cancel a single Flox Factory run
     #[bpaf(command)]
     Cancel(#[bpaf(external(cancel::cancel))] cancel::Cancel),
 }
@@ -147,8 +146,6 @@ pub(crate) mod test_helpers {
     use chrono::TimeZone;
     use factory_api_v1::types::{TaskErrorClass, TaskResponse, TaskStatus};
     use floxhub_client::{
-        BuildFilters,
-        BuildId,
         EffectiveFactoryRunStatus,
         FactoryApiError,
         FactoryByteStream,
@@ -156,6 +153,8 @@ pub(crate) mod test_helpers {
         FactoryClientTrait,
         FactoryErrorResponse,
         FactoryRunDetailResponse,
+        FactoryRunFilters,
+        FactoryRunId,
         FactoryRunResponse,
     };
 
@@ -163,10 +162,10 @@ pub(crate) mod test_helpers {
     /// value, defaulting to pre-dispatch `pending` for `None`.
     ///
     /// The attached task mirrors the server's persisted shape: a pending or
-    /// pre-dispatch-cancelled build carries no task; a timed-out build is
-    /// persisted as a failed task carrying the `timeout` error class; the other
-    /// dispatched states carry the matching task lifecycle status.
-    pub fn make_build(
+    /// pre-dispatch-cancelled run has no task; a timed-out run is persisted as
+    /// a failed task with the `timeout` error class; a run in any other
+    /// dispatched state has a task with the matching lifecycle status.
+    pub fn make_run(
         id: i64,
         system: &str,
         attr_path: &str,
@@ -212,18 +211,18 @@ pub(crate) mod test_helpers {
             exit_code: None,
             published_package: None,
             task,
-            // A build from a Factory that predates trigger reporting; tests
+            // A run from a Factory that predates trigger reporting; tests
             // covering the trigger set it on the result.
             trigger: None,
         }
     }
 
     /// Extend a `FactoryRunResponse` fixture into the `FactoryRunDetailResponse` that
-    /// `get_build` returns, with no published outputs.
+    /// `get_factory_run` returns, with no published outputs.
     ///
     /// The destructuring is exhaustive, so a field added to either type fails
     /// to compile here rather than going unset.
-    pub fn make_build_detail(build: FactoryRunResponse) -> FactoryRunDetailResponse {
+    pub fn make_run_detail(run: FactoryRunResponse) -> FactoryRunDetailResponse {
         let FactoryRunResponse {
             attr_path,
             run_id,
@@ -239,7 +238,7 @@ pub(crate) mod test_helpers {
             system,
             task,
             trigger,
-        } = build;
+        } = run;
 
         FactoryRunDetailResponse {
             attr_path,
@@ -269,8 +268,8 @@ pub(crate) mod test_helpers {
     /// transport path is covered by the pure classifier tests instead.
     #[derive(Clone)]
     pub enum StubResult {
-        /// Return a build whose effective `status` is this value.
-        Build(EffectiveFactoryRunStatus),
+        /// Return a run whose effective `status` is this value.
+        Run(EffectiveFactoryRunStatus),
         /// Return [`FactoryClientError::NotFound`].
         NotFound,
         /// Return [`FactoryClientError::AuthRejected`].
@@ -283,10 +282,10 @@ pub(crate) mod test_helpers {
         fn realize(&self) -> Result<FactoryRunResponse, FactoryClientError> {
             match self {
                 // Build the fixture coherently from the effective status,
-                // preserving `make_build`'s server-shaped invariant rather than
+                // preserving `make_run`'s server-shaped invariant rather than
                 // mutating after the fact.
-                StubResult::Build(status) => {
-                    Ok(make_build(1, "x86_64-linux", "hello", Some(status.clone())))
+                StubResult::Run(status) => {
+                    Ok(make_run(1, "x86_64-linux", "hello", Some(status.clone())))
                 },
                 StubResult::NotFound => Err(FactoryClientError::NotFound),
                 StubResult::AuthRejected => Err(FactoryClientError::AuthRejected(stub_api_error())),
@@ -306,89 +305,89 @@ pub(crate) mod test_helpers {
 
     /// In-test stub implementing [`FactoryClientTrait`].
     ///
-    /// Drives `get_build` (the `status` lookup) and `cancel_build` (the DELETE)
+    /// Drives `get_factory_run` (the `status` lookup) and `cancel_factory_run` (the DELETE)
     /// to independent [`StubResult`] outcomes, records whether the DELETE was
-    /// issued, and captures the last [`BuildFilters`] passed to `list_builds`
+    /// issued, and captures the last [`FactoryRunFilters`] passed to `list_factory_runs`
     /// so a list test can assert the CLI's filter translation without a mock
     /// server.
     pub struct StubFactoryClient {
-        get_build: StubResult,
-        cancel_build: StubResult,
+        get_factory_run: StubResult,
+        cancel_factory_run: StubResult,
         cancel_called: AtomicBool,
-        last_filters: Mutex<Option<BuildFilters>>,
+        last_filters: Mutex<Option<FactoryRunFilters>>,
     }
 
     impl StubFactoryClient {
-        /// A stub whose every lookup reports the build as missing.
+        /// A stub whose every lookup reports the run as missing.
         pub fn with_not_found() -> Self {
             Self::with_outcomes(StubResult::NotFound, StubResult::NotFound)
         }
 
-        /// A stub whose `get_build` (the `status` lookup) yields `get_build` and
-        /// whose DELETE (`cancel_build`) yields `cancel_build`.
-        pub fn with_outcomes(get_build: StubResult, cancel_build: StubResult) -> Self {
+        /// A stub whose `get_factory_run` (the `status` lookup) yields `get_factory_run` and
+        /// whose DELETE (`cancel_factory_run`) yields `cancel_factory_run`.
+        pub fn with_outcomes(get_factory_run: StubResult, cancel_factory_run: StubResult) -> Self {
             Self {
-                get_build,
-                cancel_build,
+                get_factory_run,
+                cancel_factory_run,
                 cancel_called: AtomicBool::new(false),
                 last_filters: Mutex::new(None),
             }
         }
 
-        /// A stub exercising only the DELETE (`cancel_build`). The `cancel` verb
-        /// issues no `get_build`, so that slot is an inert `NotFound` placeholder.
-        pub fn with_cancel(cancel_build: StubResult) -> Self {
-            Self::with_outcomes(StubResult::NotFound, cancel_build)
+        /// A stub exercising only the DELETE (`cancel_factory_run`). The `cancel` verb
+        /// issues no `get_factory_run`, so that slot is an inert `NotFound` placeholder.
+        pub fn with_cancel(cancel_factory_run: StubResult) -> Self {
+            Self::with_outcomes(StubResult::NotFound, cancel_factory_run)
         }
 
-        /// Whether `cancel_build` (the DELETE) was ever invoked.
+        /// Whether `cancel_factory_run` (the DELETE) was ever invoked.
         pub fn cancel_was_called(&self) -> bool {
             self.cancel_called.load(Ordering::SeqCst)
         }
 
-        /// The [`BuildFilters`] from the most recent `list_builds` call, if any.
-        pub fn last_filters(&self) -> Option<BuildFilters> {
+        /// The [`FactoryRunFilters`] from the most recent `list_factory_runs` call, if any.
+        pub fn last_filters(&self) -> Option<FactoryRunFilters> {
             self.last_filters.lock().unwrap().clone()
         }
     }
 
     impl FactoryClientTrait for StubFactoryClient {
-        async fn list_builds(
+        async fn list_factory_runs(
             &self,
-            filters: &BuildFilters,
+            filters: &FactoryRunFilters,
         ) -> Result<floxhub_client::ResultsPage<FactoryRunResponse>, FactoryClientError> {
             *self.last_filters.lock().unwrap() = Some(filters.clone());
-            // Mirror the get_build outcome's error, if any, so a not-found stub
+            // Mirror the get_factory_run outcome's error, if any, so a not-found stub
             // stays not-found across endpoints; otherwise an empty page.
-            self.get_build.realize()?;
+            self.get_factory_run.realize()?;
             Ok(floxhub_client::ResultsPage {
                 results: vec![],
                 count: Some(0),
             })
         }
 
-        async fn get_build(
+        async fn get_factory_run(
             &self,
-            _build_id: BuildId,
+            _run_id: FactoryRunId,
         ) -> Result<FactoryRunDetailResponse, FactoryClientError> {
-            self.get_build.realize().map(make_build_detail)
+            self.get_factory_run.realize().map(make_run_detail)
         }
 
-        async fn cancel_build(
+        async fn cancel_factory_run(
             &self,
-            _build_id: BuildId,
+            _run_id: FactoryRunId,
         ) -> Result<FactoryRunResponse, FactoryClientError> {
             self.cancel_called.store(true, Ordering::SeqCst);
-            self.cancel_build.realize()
+            self.cancel_factory_run.realize()
         }
 
-        async fn get_build_logs(
+        async fn get_factory_run_logs(
             &self,
-            _build_id: BuildId,
+            _run_id: FactoryRunId,
         ) -> Result<FactoryByteStream, FactoryClientError> {
-            // Mirror the get_build outcome's error, if any, so a not-found stub
+            // Mirror the get_factory_run outcome's error, if any, so a not-found stub
             // stays not-found across endpoints; otherwise serve the canned stream.
-            self.get_build.realize()?;
+            self.get_factory_run.realize()?;
             let lines: [&[u8]; 2] = [b"Building hello...\n", b"Build completed.\n"];
             let chunks = lines
                 .into_iter()
@@ -478,9 +477,9 @@ mod error_tests {
     fn not_found_renders_the_verb_message() {
         let err = user_facing_error(
             FactoryClientError::NotFound,
-            Some("No Flox Factory build found with ID 7.".to_string()),
+            Some("No Flox Factory run found with ID 7.".to_string()),
         );
-        assert_eq!(err.to_string(), "No Flox Factory build found with ID 7.");
+        assert_eq!(err.to_string(), "No Flox Factory run found with ID 7.");
     }
 
     #[tokio::test]

@@ -3,23 +3,23 @@ use std::io::{BufWriter, Write};
 use anstream::adapter::StripBytes;
 use anyhow::Result;
 use bpaf::Bpaf;
-use floxhub_client::{BuildId, FactoryClientError, FactoryClientTrait};
+use floxhub_client::{FactoryClientError, FactoryClientTrait, FactoryRunId};
 use futures::StreamExt;
 use tracing::instrument;
 
 use crate::utils::message;
 use crate::{Exit, subcommand_metric};
 
-/// Print the logs for a single Flox Factory build.
+/// Print the logs for a single Flox Factory run.
 #[derive(Debug, Clone, PartialEq, Bpaf)]
 pub struct Logs {
     /// Print the raw log bytes without sanitizing terminal escape sequences
     #[bpaf(long)]
     pub raw: bool,
 
-    /// Build ID to fetch logs for
+    /// ID of the Flox Factory run to fetch logs for
     #[bpaf(positional("ID"))]
-    pub id: BuildId,
+    pub id: FactoryRunId,
 }
 
 impl Logs {
@@ -27,10 +27,13 @@ impl Logs {
     pub async fn handle(self, client: &impl FactoryClientTrait) -> Result<()> {
         subcommand_metric!("factory::logs");
 
-        let mut stream = match client.get_build_logs(self.id).await {
+        let mut stream = match client.get_factory_run_logs(self.id).await {
             Ok(stream) => stream,
             Err(FactoryClientError::NotFound) => {
-                message::error(format!("No logs available for build {}.", self.id));
+                message::error(format!(
+                    "No logs available for Flox Factory run {}.",
+                    self.id
+                ));
                 return Err(Exit(2).into());
             },
             Err(other) => return Err(super::user_facing_error(other, None)),
@@ -195,7 +198,7 @@ mod tests {
         assert!(err.is::<Exit>(), "expected an Exit error, got {err:?}");
         assert_eq!(
             writer.to_string(),
-            "✘ ERROR: No logs available for build 42.\n"
+            "✘ ERROR: No logs available for Flox Factory run 42.\n"
         );
     }
 }
