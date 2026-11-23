@@ -6,15 +6,22 @@ use anyhow::{Context, Result};
 use config::{Config as HierarchicalConfig, Environment};
 use flox_core::vars::{DO_NOT_TRACK_VAR, do_not_track};
 use itertools::{Either, Itertools};
+use serde::de::DeserializeOwned;
 use tracing::debug;
 use xdg::BaseDirectories;
 
-use crate::config::{Config, FLOX_CONFIG_FILE, FLOX_DIR_NAME};
+use crate::{FLOX_CONFIG_FILE, FLOX_DIR_NAME};
 
 const FLOX_CONFIG_DIR_VAR: &str = "FLOX_CONFIG_DIR";
 
-/// Creates a [Config] from the environment and config files
-pub(crate) fn parse() -> Result<Config> {
+/// The config key that [DO_NOT_TRACK_VAR] forces to `true`.
+const DISABLE_METRICS_KEY: &str = "disable_metrics";
+
+/// Creates a configuration from the environment and config files.
+///
+/// `T` names the keys that are read:
+/// a key it does not have is passed over, whatever its value.
+pub fn parse<T: DeserializeOwned>() -> Result<T> {
     let base_directories = BaseDirectories::with_prefix(FLOX_DIR_NAME);
     parse_with(
         &base_directories,
@@ -24,29 +31,38 @@ pub(crate) fn parse() -> Result<Config> {
     )
 }
 
-pub(crate) fn parse_with(
+/// Like [parse], with explicit directories and environment.
+pub fn parse_with<T: DeserializeOwned>(
     flox_dirs: &BaseDirectories,
     user_config_dir: &Path,
     system_config_dir: Option<&Path>,
     env: impl IntoIterator<Item = (String, String)>,
-) -> Result<Config> {
+) -> Result<T> {
     let env = env.into_iter().collect::<Vec<_>>();
     let tracking_refused = env
         .iter()
         .any(|(key, value)| key == DO_NOT_TRACK_VAR && do_not_track(value));
     let final_config = raw_config_from_parts(flox_dirs, user_config_dir, system_config_dir, env)?;
 
-    let mut cli_config: Config = final_config
+    let cli_config: T = final_config
         .to_owned()
         .try_deserialize()
         .context("Could not parse config")?;
+    if !tracking_refused {
+        return Ok(cli_config);
+    }
     // `DO_NOT_TRACK` wins over `disable_metrics = false` from every source,
     // including `FLOX_DISABLE_METRICS=false`: the NixOS module, for example,
     // exports that `false` to every Flox service by default.
-    if tracking_refused {
-        cli_config.flox.disable_metrics = true;
-    }
-    Ok(cli_config)
+    // It is set on the merged sources rather than on a field of `T`,
+    // after they parsed without it:
+    // a value that cannot be read stays an error whatever `DO_NOT_TRACK` holds.
+    HierarchicalConfig::builder()
+        .add_source(final_config)
+        .set_override(DISABLE_METRICS_KEY, true)?
+        .build()?
+        .try_deserialize()
+        .context("Could not parse config")
 }
 
 /// Locates the system wide flox config dir.
@@ -214,7 +230,7 @@ mod tests {
     use toml_edit::Key;
 
     use super::*;
-    use crate::config::TokenStorageMode;
+    use crate::config::{Config, TokenStorageMode};
 
     // TODO: update the `xdg` crate and build `BaseDirectories` by hand with known (test) paths
     fn mock_flox_dirs() -> BaseDirectories {
