@@ -769,7 +769,7 @@ pub fn str_to_catalog_name(
 ) -> Result<api_types::CatalogName, FloxhubClientError> {
     api_types::CatalogName::from_str(name.as_ref()).map_err(|_e| {
         FloxhubClientError::APIError(APIError::InvalidRequest(format!(
-            "catalog name {} does not meet API requirements.",
+            "catalog name '{}' does not meet API requirements.",
             name.as_ref()
         )))
     })
@@ -781,7 +781,7 @@ pub fn str_to_package_name(
 ) -> Result<api_types::PackageName, FloxhubClientError> {
     api_types::PackageName::from_str(name.as_ref()).map_err(|_e| {
         FloxhubClientError::APIError(APIError::InvalidRequest(format!(
-            "package name {} does not meet API requirements.",
+            "package name '{}' does not meet API requirements.",
             name.as_ref()
         )))
     })
