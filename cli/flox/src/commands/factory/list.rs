@@ -7,10 +7,10 @@ use bpaf::Bpaf;
 use chrono::{DateTime, Months, TimeDelta, Utc};
 use floxhub_client::{
     AttrPathItem,
-    BuildFilters,
-    BuildResponse,
-    EffectiveBuildStatus,
+    EffectiveFactoryRunStatus,
     FactoryClientTrait,
+    FactoryRunFilters,
+    FactoryRunResponse,
     SourceCommitShaItem,
     SystemItem,
 };
@@ -22,17 +22,17 @@ use crate::subcommand_metric;
 use crate::utils::message::page_output;
 use crate::utils::table::{table_string, table_writer};
 
-/// List Flox Factory builds.
+/// List Flox Factory runs.
 ///
 /// Each filter except --since is repeatable and ORs its values; different
-/// filters AND together. An unfiltered invocation lists every build.
+/// filters AND together. An unfiltered invocation lists every run.
 #[derive(Debug, Clone, PartialEq, Bpaf)]
 pub struct List {
-    /// Filter by build status; repeat to match any of several.
+    /// Filter by run status; repeat to match any of several.
     /// Valid values: pending, running, completed, failed, timed_out,
     /// cancelled.
     #[bpaf(long, argument::<String>("STATUS"), parse(parse_status), many)]
-    pub status: Vec<EffectiveBuildStatus>,
+    pub status: Vec<EffectiveFactoryRunStatus>,
 
     /// Filter by system; repeat to match any of several.
     /// Examples: aarch64-darwin, aarch64-linux, x86_64-darwin, x86_64-linux.
@@ -50,7 +50,7 @@ pub struct List {
     #[bpaf(long("source-rev"), argument::<String>("REV"), parse(parse_non_empty("Source revision")), many)]
     pub source_commit_sha: Vec<SourceCommitShaItem>,
 
-    /// Only builds created at or after this time, given as a duration counted
+    /// Only runs created at or after this time, given as a duration counted
     /// back from now ("7d"), a phrase ("yesterday"), or an ISO 8601 timestamp.
     #[bpaf(long, argument::<String>("TIME"), parse(parse_since), optional)]
     pub since: Option<DateTime<Utc>>,
@@ -69,7 +69,7 @@ impl List {
     pub async fn handle(self, client: &impl FactoryClientTrait) -> Result<()> {
         subcommand_metric!("factory::list");
 
-        let filters = BuildFilters {
+        let filters = FactoryRunFilters {
             status: self.status,
             system: self.system,
             attr_path: self.attr_path,
@@ -78,14 +78,14 @@ impl List {
         };
 
         // Depage the full result set, mirroring `flox generations list`: the
-        // operator sees every matching build at once and scrolls with the
+        // operator sees every matching run at once and scrolls with the
         // pager, rather than stepping server-side pages by hand.
-        let builds = client
-            .list_builds(&filters)
+        let runs = client
+            .list_factory_runs(&filters)
             .await
             .map_err(|e| super::user_facing_error(e, None))?;
 
-        let output = render(builds.results, self.json, Utc::now())?;
+        let output = render(runs.results, self.json, Utc::now())?;
 
         // JSON is for scripting: never route it through the pager, even on a
         // TTY. The human table is paged unless `--no-pager` is given.
@@ -98,10 +98,10 @@ impl List {
     }
 }
 
-/// Parse one `--status` value into a typed [`EffectiveBuildStatus`] at the
+/// Parse one `--status` value into a typed [`EffectiveFactoryRunStatus`] at the
 /// CLI boundary. The type's `FromStr` is strict and its error names the
 /// accepted values, so the message is shown as-is.
-fn parse_status(s: String) -> Result<EffectiveBuildStatus> {
+fn parse_status(s: String) -> Result<EffectiveFactoryRunStatus> {
     Ok(s.parse()?)
 }
 
@@ -139,7 +139,7 @@ fn parse_since(s: String) -> Result<DateTime<Utc>> {
 /// A duration counts backwards, so `7d` and `7 days ago` name the same bound;
 /// anything else is read as an absolute date or timestamp. Resolving here means
 /// every page of one listing is sent the same bound, rather than a moving one.
-/// The bound must not lie in the future, which no build could satisfy.
+/// The bound must not lie in the future, which no run could satisfy.
 fn resolve_since(s: &str, now: DateTime<Utc>) -> Result<DateTime<Utc>> {
     if s.is_empty() {
         bail!("Time must not be empty.");
@@ -176,16 +176,17 @@ fn back_from(now: DateTime<Utc>, interval: Interval) -> Option<DateTime<Utc>> {
     }
 }
 
-/// Render the builds as either pretty-printed JSON or a table.
+/// Render the runs as either pretty-printed JSON or a table.
 ///
-/// The depaging client returns every matching build, so the JSON form is the
-/// full array of builds, with no pagination envelope to report. The table
-/// shows each build's age relative to `now`; JSON keeps exact timestamps.
-fn render(builds: Vec<BuildResponse>, json: bool, now: DateTime<Utc>) -> Result<String> {
+/// The depaging client returns every matching run, so the JSON form is the
+/// full array of runs, with no pagination envelope to report. The table
+/// shows each run's age relative to `now`, whereas the JSON form has exact
+/// timestamps.
+fn render(runs: Vec<FactoryRunResponse>, json: bool, now: DateTime<Utc>) -> Result<String> {
     if json {
-        Ok(format!("{}\n", serde_json::to_string_pretty(&builds)?))
+        Ok(format!("{}\n", serde_json::to_string_pretty(&runs)?))
     } else {
-        Ok(BuildListDisplay::new(builds, now).to_string())
+        Ok(RunListDisplay::new(runs, now).to_string())
     }
 }
 
@@ -205,10 +206,10 @@ fn format_age(then: DateTime<Utc>, now: DateTime<Utc>) -> String {
     format!("{n}{unit} ago")
 }
 
-/// Human-readable build list table row.
+/// Human-readable run list table row.
 #[derive(Clone, Debug)]
-struct BuildRowDisplay {
-    build_id: i64,
+struct RunRowDisplay {
+    run_id: i64,
     pkg_path: String,
     system: String,
     trigger: String,
@@ -216,16 +217,16 @@ struct BuildRowDisplay {
     updated: String,
 }
 
-impl BuildRowDisplay {
-    fn new(b: BuildResponse, now: DateTime<Utc>) -> Self {
-        let status = effective_status(&b.status);
-        let updated = format_age(effective_updated_at(&b), now);
-        let trigger = trigger_label(b.trigger.as_ref());
+impl RunRowDisplay {
+    fn new(run: FactoryRunResponse, now: DateTime<Utc>) -> Self {
+        let status = effective_status(&run.status);
+        let updated = format_age(effective_updated_at(&run), now);
+        let trigger = trigger_label(run.trigger.as_ref());
 
-        BuildRowDisplay {
-            build_id: b.build_id,
-            pkg_path: format!("{}/{}", b.catalog_name, b.attr_path),
-            system: b.system,
+        RunRowDisplay {
+            run_id: run.run_id,
+            pkg_path: format!("{}/{}", run.catalog_name, run.attr_path),
+            system: run.system,
             trigger,
             status,
             updated,
@@ -233,38 +234,38 @@ impl BuildRowDisplay {
     }
 }
 
-/// Human-readable build list table.
+/// Human-readable run list table.
 #[derive(Clone, Debug)]
-struct BuildListDisplay {
-    rows: Vec<BuildRowDisplay>,
+struct RunListDisplay {
+    rows: Vec<RunRowDisplay>,
 }
 
-impl BuildListDisplay {
-    fn new(builds: Vec<BuildResponse>, now: DateTime<Utc>) -> Self {
-        BuildListDisplay {
-            rows: builds
+impl RunListDisplay {
+    fn new(runs: Vec<FactoryRunResponse>, now: DateTime<Utc>) -> Self {
+        RunListDisplay {
+            rows: runs
                 .into_iter()
-                .map(|b| BuildRowDisplay::new(b, now))
+                .map(|run| RunRowDisplay::new(run, now))
                 .collect(),
         }
     }
 }
 
-impl fmt::Display for BuildListDisplay {
+impl fmt::Display for RunListDisplay {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.rows.is_empty() {
-            writeln!(f, "No builds found.")?;
+            writeln!(f, "No Flox Factory runs found.")?;
             return Ok(());
         }
 
         let mut tw = table_writer(Vec::new());
-        writeln!(tw, "BUILD ID\tPACKAGE\tSYSTEM\tTRIGGER\tSTATUS\tUPDATED")
+        writeln!(tw, "RUN ID\tPACKAGE\tSYSTEM\tTRIGGER\tSTATUS\tUPDATED")
             .map_err(|_| fmt::Error)?;
         for row in &self.rows {
             writeln!(
                 tw,
                 "{}\t{}\t{}\t{}\t{}\t{}",
-                row.build_id, row.pkg_path, row.system, row.trigger, row.status, row.updated,
+                row.run_id, row.pkg_path, row.system, row.trigger, row.status, row.updated,
             )
             .map_err(|_| fmt::Error)?;
         }
@@ -276,76 +277,79 @@ impl fmt::Display for BuildListDisplay {
 #[cfg(test)]
 mod tests {
     use bpaf::Parser;
-    use floxhub_client::BuildTrigger;
+    use floxhub_client::FactoryRunTrigger;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
 
     use super::*;
-    use crate::commands::factory::test_helpers::{StubFactoryClient, StubResult, make_build};
+    use crate::commands::factory::test_helpers::{StubFactoryClient, StubResult, make_run};
 
     #[test]
     fn list_display_renders_table_exactly() {
-        // A dispatched build shows its task's updated_at; an undispatched build
-        // has no task, so UPDATED falls back to the build's created_at.
-        // A build from a Factory that predates trigger reporting shows `-`.
-        let builds = vec![
-            BuildResponse {
-                trigger: Some(BuildTrigger {
+        // UPDATED shows a dispatched run's task's updated_at. An undispatched
+        // run has no task, so UPDATED falls back to the run's created_at.
+        // TRIGGER shows `-` for a run from a Factory that predates trigger
+        // reporting.
+        let runs = vec![
+            FactoryRunResponse {
+                trigger: Some(FactoryRunTrigger {
                     kind: Some("source_push".to_string().into()),
                     stabilities: vec!["stable".to_string(), "staging".to_string()],
                 }),
-                ..make_build(
+                ..make_run(
                     1,
                     "x86_64-linux",
                     "hello",
-                    Some(EffectiveBuildStatus::Running),
+                    Some(EffectiveFactoryRunStatus::Running),
                 )
             },
-            BuildResponse {
+            FactoryRunResponse {
                 catalog_name: "other-catalog".to_string(),
-                ..make_build(2, "aarch64-darwin", "ripgrep", None)
+                ..make_run(2, "aarch64-darwin", "ripgrep", None)
             },
         ];
-        let display = BuildListDisplay::new(builds, utc("2025-01-01T00:01:00Z"));
+        let display = RunListDisplay::new(runs, utc("2025-01-01T00:01:00Z"));
         assert_eq!(display.to_string(), indoc! {"
-            BUILD ID  PACKAGE                SYSTEM          TRIGGER                       STATUS   UPDATED
-            1         my-catalog/hello       x86_64-linux    source_push (stable,staging)  running  59s ago
-            2         other-catalog/ripgrep  aarch64-darwin  -                             pending  1m ago
+            RUN ID  PACKAGE                SYSTEM          TRIGGER                       STATUS   UPDATED
+            1       my-catalog/hello       x86_64-linux    source_push (stable,staging)  running  59s ago
+            2       other-catalog/ripgrep  aarch64-darwin  -                             pending  1m ago
         "});
     }
 
     #[test]
     fn list_display_renders_new_status_labels() {
-        // The labels introduced with the typed status: a timed-out build reads
+        // The labels introduced with the typed status: a timed-out run reads
         // `timed_out` (not `failed`), a pre-dispatch cancel reads `cancelled`
         // (not `pending`), and an unrecognized status renders tolerantly as
         // `unknown: <value>` rather than blanking the row.
-        let builds = vec![
-            make_build(
+        let runs = vec![
+            make_run(
                 3,
                 "x86_64-linux",
                 "curl",
-                Some(EffectiveBuildStatus::TimedOut),
+                Some(EffectiveFactoryRunStatus::TimedOut),
             ),
-            make_build(
+            make_run(
                 4,
                 "aarch64-darwin",
                 "jq",
-                Some(EffectiveBuildStatus::Cancelled),
+                Some(EffectiveFactoryRunStatus::Cancelled),
             ),
-            make_build(
+            make_run(
                 5,
                 "x86_64-linux",
                 "wget",
-                Some(EffectiveBuildStatus::Unknown("frobnicated".to_string())),
+                Some(EffectiveFactoryRunStatus::Unknown(
+                    "frobnicated".to_string(),
+                )),
             ),
         ];
-        let display = BuildListDisplay::new(builds, utc("2025-01-01T00:01:00Z"));
+        let display = RunListDisplay::new(runs, utc("2025-01-01T00:01:00Z"));
         assert_eq!(display.to_string(), indoc! {"
-            BUILD ID  PACKAGE          SYSTEM          TRIGGER  STATUS                UPDATED
-            3         my-catalog/curl  x86_64-linux    -        timed_out             59s ago
-            4         my-catalog/jq    aarch64-darwin  -        cancelled             1m ago
-            5         my-catalog/wget  x86_64-linux    -        unknown: frobnicated  1m ago
+            RUN ID  PACKAGE          SYSTEM          TRIGGER  STATUS                UPDATED
+            3       my-catalog/curl  x86_64-linux    -        timed_out             59s ago
+            4       my-catalog/jq    aarch64-darwin  -        cancelled             1m ago
+            5       my-catalog/wget  x86_64-linux    -        unknown: frobnicated  1m ago
         "});
     }
 
@@ -380,11 +384,14 @@ mod tests {
     #[tokio::test]
     async fn list_handler_forwards_all_filters() {
         let client = StubFactoryClient::with_outcomes(
-            StubResult::Build(EffectiveBuildStatus::Completed),
+            StubResult::Run(EffectiveFactoryRunStatus::Completed),
             StubResult::NotFound,
         );
         let args = List {
-            status: vec![EffectiveBuildStatus::Running, EffectiveBuildStatus::Failed],
+            status: vec![
+                EffectiveFactoryRunStatus::Running,
+                EffectiveFactoryRunStatus::Failed,
+            ],
             system: vec!["aarch64-darwin".parse().unwrap()],
             attr_path: vec!["hello".parse().unwrap()],
             source_commit_sha: vec!["abc123".parse().unwrap()],
@@ -397,8 +404,11 @@ mod tests {
 
         assert_eq!(
             client.last_filters(),
-            Some(BuildFilters {
-                status: vec![EffectiveBuildStatus::Running, EffectiveBuildStatus::Failed],
+            Some(FactoryRunFilters {
+                status: vec![
+                    EffectiveFactoryRunStatus::Running,
+                    EffectiveFactoryRunStatus::Failed
+                ],
                 system: vec!["aarch64-darwin".parse().unwrap()],
                 attr_path: vec!["hello".parse().unwrap()],
                 source_commit_sha: vec!["abc123".parse().unwrap()],

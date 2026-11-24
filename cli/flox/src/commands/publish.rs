@@ -152,12 +152,12 @@ fn publish_failure(err: PublishError) -> anyhow::Error {
     }
 }
 
-/// Carries the Factory's per-build token into the build pod. Read by
-/// [`factory_build_token_from_env`] and forwarded, unread, on the two
-/// catalog-server calls `flox publish` makes.
-const FACTORY_BUILD_TOKEN_VAR: &str = "_FLOX_FACTORY_BUILD_TOKEN";
+/// The variable in which the Build Coordinator sets a Factory run's token for
+/// the build pod. Read by [`factory_run_token_from_env`] and forwarded,
+/// unread, on the two catalog-server calls `flox publish` makes.
+const FACTORY_RUN_TOKEN_VAR: &str = "_FLOX_FACTORY_RUN_TOKEN";
 
-/// Read the Factory build token from the process environment.
+/// Read the Factory run token from the process environment.
 ///
 /// Called once per publish and threaded to the call sites that need it
 /// (the dedup check and the publish body) rather than re-read. Unset,
@@ -165,16 +165,13 @@ const FACTORY_BUILD_TOKEN_VAR: &str = "_FLOX_FACTORY_BUILD_TOKEN";
 /// omitted from both request bodies `flox publish` sends. The value is
 /// opaque and never parsed, validated, or checked for a prefix. It is
 /// not a credential either: it authenticates nothing and only names
-/// which build a publish belongs to, so it is logged as-is.
-fn factory_build_token_from_env() -> Option<String> {
-    let token = std::env::var(FACTORY_BUILD_TOKEN_VAR)
+/// which Factory run a publish belongs to, so it is logged as-is.
+fn factory_run_token_from_env() -> Option<String> {
+    let token = std::env::var(FACTORY_RUN_TOKEN_VAR)
         .ok()
         .filter(|s| !s.is_empty());
     if let Some(value) = token.as_deref() {
-        tracing::info!(
-            factory_build_token = value,
-            "forwarding Factory build token"
-        );
+        tracing::info!(factory_run_token = value, "forwarding Factory run token");
     }
     token
 }
@@ -589,7 +586,7 @@ impl Publish {
         };
         // Read once and forwarded, unread, on every catalog-server call this
         // publish makes.
-        let factory_build_token = factory_build_token_from_env();
+        let factory_run_token = factory_run_token_from_env();
 
         let mut lineage_override = if publish_config.allow_lineage_change {
             LineageOverride::Unbound
@@ -613,7 +610,7 @@ impl Publish {
                 nixpkgs_rev,
                 system,
                 locked_inputs: &closure.locked_inputs,
-                factory_build_token: factory_build_token.as_deref(),
+                factory_run_token: factory_run_token.as_deref(),
                 direct_inputs: &closure.direct_inputs,
                 source_ref: &publish_provider.env_metadata.build_repo_meta.ref_,
                 dot_flox_dir: &dot_flox_dir,
@@ -664,7 +661,7 @@ impl Publish {
                 &closure,
                 key_file,
                 publish_config.metadata_only,
-                factory_build_token.as_deref(),
+                factory_run_token.as_deref(),
                 lineage_override,
                 confirm_lineage_change,
             )
@@ -1006,7 +1003,7 @@ mod tests {
                 nixpkgs_rev: "cafebabe",
                 system: PackageSystem::X8664Linux,
                 locked_inputs: &locked_inputs,
-                factory_build_token: None,
+                factory_run_token: None,
                 direct_inputs: &[],
                 source_ref: "refs/heads/topic",
                 dot_flox_dir: ".flox",
@@ -1044,24 +1041,26 @@ mod tests {
     }
 
     #[test]
-    fn factory_build_token_from_env_unset_gives_none() {
-        temp_env::with_var(FACTORY_BUILD_TOKEN_VAR, None::<&str>, || {
-            assert_eq!(factory_build_token_from_env(), None);
+    fn factory_run_token_from_env_unset_gives_none() {
+        temp_env::with_var(FACTORY_RUN_TOKEN_VAR, None::<&str>, || {
+            assert_eq!(factory_run_token_from_env(), None);
         });
     }
 
     #[test]
-    fn factory_build_token_from_env_empty_gives_none() {
-        temp_env::with_var(FACTORY_BUILD_TOKEN_VAR, Some(""), || {
-            assert_eq!(factory_build_token_from_env(), None);
+    fn factory_run_token_from_env_empty_gives_none() {
+        temp_env::with_var(FACTORY_RUN_TOKEN_VAR, Some(""), || {
+            assert_eq!(factory_run_token_from_env(), None);
         });
     }
 
     #[test]
-    fn factory_build_token_from_env_set_gives_some() {
-        temp_env::with_var(FACTORY_BUILD_TOKEN_VAR, Some("factory:abc123"), || {
+    fn factory_run_token_from_env_set_gives_some() {
+        // Spelled out rather than read from `FACTORY_RUN_TOKEN_VAR`: the Build
+        // Coordinator sets this name, so a rename here must fail a test.
+        temp_env::with_var("_FLOX_FACTORY_RUN_TOKEN", Some("factory:abc123"), || {
             assert_eq!(
-                factory_build_token_from_env(),
+                factory_run_token_from_env(),
                 Some("factory:abc123".to_string())
             );
         });

@@ -183,7 +183,7 @@ pub trait Publisher {
     /// projected from the project catalog lock at publish time; empty for
     /// builds that resolve no catalog inputs.
     ///
-    /// `factory_build_token` is forwarded, uninterpreted, from the caller's
+    /// `factory_run_token` is forwarded, uninterpreted, from the caller's
     /// process environment; this trait does not read the environment
     /// itself.
     ///
@@ -205,7 +205,7 @@ pub trait Publisher {
         closure: &PackageClosure,
         key_file: Option<PathBuf>,
         metadata_only: bool,
-        factory_build_token: Option<&str>,
+        factory_run_token: Option<&str>,
         lineage_override: LineageOverride,
         confirm_lineage_change: impl AsyncFnOnce(&SourceLineageChange) -> Result<bool, PublishError>,
     ) -> Result<PublishOutcome, PublishError>;
@@ -734,7 +734,7 @@ where
         closure: &PackageClosure,
         key_file: Option<PathBuf>,
         metadata_only: bool,
-        factory_build_token: Option<&str>,
+        factory_run_token: Option<&str>,
         lineage_override: LineageOverride,
         confirm_lineage_change: impl AsyncFnOnce(&SourceLineageChange) -> Result<bool, PublishError>,
     ) -> Result<PublishOutcome, PublishError> {
@@ -814,7 +814,7 @@ where
                 .into_owned(),
             allow_lineage_change: false,
             expected_registered_source: None,
-            factory_build_token: factory_build_token.map(str::to_string),
+            factory_run_token: factory_run_token.map(str::to_string),
             // Always sent, mirroring `locked_inputs` above: an empty list
             // states that the repository declares no overrides, rather
             // than leaving the field unstated for the server to guess at.
@@ -2377,11 +2377,11 @@ pub mod tests {
         );
     }
 
-    /// The caller's `factory_build_token` argument — the CLI's forwarded
+    /// The caller's `factory_run_token` argument — the CLI's forwarded
     /// process-environment value — reaches the `UserBuildPublish` body sent
     /// to `publish_build`, uninterpreted.
     #[tokio::test]
-    async fn publish_forwards_factory_build_token_to_request_body() {
+    async fn publish_forwards_factory_run_token_to_request_body() {
         let (mut flox, _temp_dir_handle) = flox_instance();
         let (_tempdir_handle, _remote_repo, remote_uri) = example_git_remote_repo();
         let (env, _build_repo) = example_path_environment(&flox, Some(&remote_uri));
@@ -2448,7 +2448,7 @@ pub mod tests {
             .expect("couldn't acquire mock lock")
             .clone()
             .expect("publish_build was called");
-        assert_eq!(sent.factory_build_token, Some("factory:abc123".to_string()));
+        assert_eq!(sent.factory_run_token, Some("factory:abc123".to_string()));
     }
 
     #[test]

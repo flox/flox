@@ -1,11 +1,11 @@
-//! Hand-written, tolerant replacement for the generated `BuildResponse.status`
+//! Hand-written, tolerant replacement for the generated `RunResponse.status`
 //! enum.
 //!
-//! The Factory Service computes an effective build status server-side. We
+//! The Factory Service computes an effective run status server-side. We
 //! deserialize it into a closed set of known variants plus an open
-//! [`EffectiveBuildStatus::Unknown`] catch-all: a status the server adds in the
+//! [`EffectiveRunStatus::Unknown`] catch-all: a status the server adds in the
 //! future renders as `unknown: <value>` rather than failing the whole response
-//! and blanking the build list. Progenitor generates the endpoint bindings; this
+//! and blanking the run list. Progenitor generates the endpoint bindings; this
 //! type is spliced in via `with_replacement` in `build.rs` so the same tolerance
 //! covers both the response body and the `status` query-param filter.
 
@@ -14,7 +14,7 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
-/// The server-computed status of a build.
+/// The server-computed status of a run.
 ///
 /// Known variants serialize to their wire word (e.g. `TimedOut` ⇄ `timed_out`).
 /// Any value outside the known set deserializes into [`Self::Unknown`] and
@@ -44,7 +44,7 @@ use strum::IntoEnumIterator;
     parse_err_fn = unknown_status,
     parse_err_ty = ParseStatusError
 )]
-pub enum EffectiveBuildStatus {
+pub enum EffectiveRunStatus {
     Pending,
     Running,
     Completed,
@@ -59,7 +59,7 @@ pub enum EffectiveBuildStatus {
     Unknown(String),
 }
 
-impl EffectiveBuildStatus {
+impl EffectiveRunStatus {
     /// The wire word for this status. For [`Self::Unknown`] this is the
     /// original, unrecognized value.
     pub fn as_str(&self) -> &str {
@@ -75,7 +75,7 @@ impl EffectiveBuildStatus {
     }
 }
 
-impl fmt::Display for EffectiveBuildStatus {
+impl fmt::Display for EffectiveRunStatus {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.as_str())
     }
@@ -90,7 +90,7 @@ pub struct ParseStatusError(String);
 
 impl fmt::Display for ParseStatusError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let valid = EffectiveBuildStatus::iter()
+        let valid = EffectiveRunStatus::iter()
             .map(|status| status.to_string())
             .collect::<Vec<_>>()
             .join(", ");
@@ -113,24 +113,24 @@ mod tests {
 
     #[test]
     fn deserializes_known_variant() {
-        let status: EffectiveBuildStatus = serde_json::from_str(r#""timed_out""#).unwrap();
-        assert_eq!(status, EffectiveBuildStatus::TimedOut);
+        let status: EffectiveRunStatus = serde_json::from_str(r#""timed_out""#).unwrap();
+        assert_eq!(status, EffectiveRunStatus::TimedOut);
     }
 
     #[test]
     fn deserializes_unknown_variant_tolerantly() {
-        let status: EffectiveBuildStatus = serde_json::from_str(r#""queued""#).unwrap();
-        assert_eq!(status, EffectiveBuildStatus::Unknown("queued".to_string()));
+        let status: EffectiveRunStatus = serde_json::from_str(r#""queued""#).unwrap();
+        assert_eq!(status, EffectiveRunStatus::Unknown("queued".to_string()));
     }
 
     #[test]
     fn serializes_known_and_unknown_to_wire_word() {
         assert_eq!(
-            serde_json::to_string(&EffectiveBuildStatus::Cancelled).unwrap(),
+            serde_json::to_string(&EffectiveRunStatus::Cancelled).unwrap(),
             r#""cancelled""#,
         );
         assert_eq!(
-            serde_json::to_string(&EffectiveBuildStatus::Unknown("frobnicated".to_string()))
+            serde_json::to_string(&EffectiveRunStatus::Unknown("frobnicated".to_string()))
                 .unwrap(),
             r#""frobnicated""#,
         );
@@ -138,9 +138,9 @@ mod tests {
 
     #[test]
     fn display_matches_as_str() {
-        assert_eq!(EffectiveBuildStatus::Pending.to_string(), "pending");
+        assert_eq!(EffectiveRunStatus::Pending.to_string(), "pending");
         assert_eq!(
-            EffectiveBuildStatus::Unknown("weird".to_string()).to_string(),
+            EffectiveRunStatus::Unknown("weird".to_string()).to_string(),
             "weird",
         );
     }
@@ -151,12 +151,12 @@ mod tests {
     /// rejection message naming the accepted values.
     #[test]
     fn from_str_parses_known_words_and_rejects_the_rest() {
-        assert_eq!("timed_out".parse(), Ok(EffectiveBuildStatus::TimedOut));
+        assert_eq!("timed_out".parse(), Ok(EffectiveRunStatus::TimedOut));
         assert_eq!(
-            "queued".parse::<EffectiveBuildStatus>().unwrap_err().to_string(),
+            "queued".parse::<EffectiveRunStatus>().unwrap_err().to_string(),
             "Invalid status 'queued'; valid values are: pending, running, completed, failed, timed_out, cancelled."
         );
-        assert!("".parse::<EffectiveBuildStatus>().is_err());
+        assert!("".parse::<EffectiveRunStatus>().is_err());
     }
 
     /// Pins the known variants to the schema the client is generated from. If
@@ -167,10 +167,10 @@ mod tests {
     fn known_matches_openapi_schema() {
         let spec: serde_json::Value =
             serde_json::from_str(include_str!("../openapi.json")).unwrap();
-        let schema_values: Vec<String> = spec["components"]["schemas"]["EffectiveBuildStatus"]
+        let schema_values: Vec<String> = spec["components"]["schemas"]["EffectiveRunStatus"]
             ["enum"]
             .as_array()
-            .expect("EffectiveBuildStatus.enum is an array")
+            .expect("EffectiveRunStatus.enum is an array")
             .iter()
             .map(|value| {
                 value
@@ -179,7 +179,7 @@ mod tests {
                     .to_string()
             })
             .collect();
-        let known: Vec<String> = EffectiveBuildStatus::iter()
+        let known: Vec<String> = EffectiveRunStatus::iter()
             .map(|status| status.to_string())
             .collect();
         assert_eq!(schema_values, known);

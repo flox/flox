@@ -29,7 +29,7 @@
 //!
 //! let client = FloxhubClient::new(config)?;
 //! let results = client.search("curl", system, None).await?;
-//! let builds = client.list_builds(&Default::default()).await?;
+//! let runs = client.list_factory_runs(&Default::default()).await?;
 //! ```
 
 mod accounts;
@@ -99,21 +99,21 @@ pub use config::{FloxhubClientConfig, FloxhubMockMode};
 pub use error::*;
 // Re-export factory types so consumers depend only on floxhub-client.
 pub use factory::{
-    BuildFilters,
-    BuildId,
     FactoryClientError,
     FactoryClientTrait,
+    FactoryRunFilters,
+    FactoryRunId,
     MapApiErrorExt as FactoryMapApiErrorExt,
-    ParseBuildIdError,
+    ParseFactoryRunIdError,
 };
 pub use factory_api_v1::types::{
     AttrPathItem,
-    BuildDetailResponse,
-    BuildResponse,
-    BuildTrigger,
-    BuildTriggerKind,
-    EffectiveBuildStatus,
+    EffectiveRunStatus as EffectiveFactoryRunStatus,
     ErrorResponse as FactoryErrorResponse,
+    RunDetailResponse as FactoryRunDetailResponse,
+    RunResponse as FactoryRunResponse,
+    RunTrigger as FactoryRunTrigger,
+    RunTriggerKind as FactoryRunTriggerKind,
     SourceCommitShaItem,
     SystemItem,
 };

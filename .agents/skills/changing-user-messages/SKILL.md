@@ -71,7 +71,7 @@ description: Use when adding or changing user-facing errors, warnings, success o
     `nix build`. Leave alone the words that the user types
     or a program parses: a Nix flag such as
     `nix-store --realise`, or an API value such as the
-    `cancelled` status of a Flox Factory build. The rule
+    `cancelled` status of a Flox Factory run. The rule
     does not call for renaming identifiers or rewriting
     comments.
   - **Output relayed from Nix:** When Flox shows output from

@@ -4,7 +4,7 @@
 //! catalog and factory surfaces. [`FloxhubClient`] holds both generated
 //! inner clients, constructed from a shared reqwest client and auth hook.
 //!
-//! The factory builds endpoints are exposed via [`FactoryClientTrait`], which
+//! The endpoints for Factory runs are exposed via [`FactoryClientTrait`], which
 //! is implemented for [`FloxhubClient`]. Callers construct a [`FloxhubClient`]
 //! and use it for both catalog and factory operations.
 
@@ -15,10 +15,10 @@ use std::str::FromStr;
 use chrono::{DateTime, Utc};
 use factory_api_v1::types::{
     AttrPathItem,
-    BuildDetailResponse,
-    BuildResponse,
-    EffectiveBuildStatus,
+    EffectiveRunStatus,
     ErrorResponse,
+    RunDetailResponse,
+    RunResponse,
     SourceCommitShaItem,
     SystemItem,
 };
@@ -37,7 +37,7 @@ pub type ApiErrorResponseValue = ResponseValue<ApiErrorResponse>;
 /// Common error type for factory API operations.
 #[derive(Debug, thiserror::Error)]
 pub enum FactoryClientError {
-    /// The requested build was not found (HTTP 404).
+    /// The requested Factory run was not found (HTTP 404).
     ///
     /// Deliberately carries no detail: the calling verb knows what it asked
     /// for and renders the user-facing message.
@@ -71,7 +71,7 @@ pub enum FactoryClientError {
     /// Any other factory API error, rendered from the generated error type.
     ///
     /// This includes an unrecognised response (a non-auth 4xx, or a 200 whose
-    /// body did not parse as a `BuildResponse`): it degrades to this generic
+    /// body did not parse as a `RunResponse`): it degrades to this generic
     /// case rather than escalating to a bespoke variant.
     #[error("{}", fmt_api_error(.0))]
     APIError(APIError<ErrorResponse>),
@@ -140,7 +140,7 @@ fn fmt_api_error(api_error: &APIError<ErrorResponse>) -> String {
 /// [`FactoryClientError::NotFound`].
 ///
 /// Only callers where a 404 unambiguously means the requested resource does
-/// not exist (such as [`FactoryClientTrait::get_build`]) should apply this. A
+/// not exist (such as [`FactoryClientTrait::get_factory_run`]) should apply this. A
 /// 404 from a listing endpoint or from a misconfigured base URL is a route or
 /// configuration error, not a missing resource, and is left as the underlying
 /// API error so the message describes what is actually wrong.
@@ -155,15 +155,15 @@ fn not_found_on_404(err: FactoryClientError) -> FactoryClientError {
     }
 }
 
-/// Classify a single-build resource error into the typed variants that the
+/// Classify a single-run resource error into the typed variants that the
 /// cancel verb's exit-code space distinguishes.
 ///
-/// Applied by [`FactoryClientTrait::cancel_build`], whose caller must tell apart
-/// a missing build, an auth rejection, a server-side fault, and a 200 whose body
-/// did not come from Factory Service. Builds on [`not_found_on_404`] for the 404
-/// case. Endpoints without that need (`get_build`, the listing endpoint) keep
-/// the underlying API error.
-fn classify_build_error(err: FactoryClientError) -> FactoryClientError {
+/// Applied by [`FactoryClientTrait::cancel_factory_run`], whose caller must
+/// tell apart a missing run, an auth rejection, a server-side fault, and a 200
+/// whose body did not come from Factory Service. Builds on [`not_found_on_404`]
+/// for the 404 case. `get_factory_run` and `get_factory_run_logs` call only
+/// [`not_found_on_404`], and `list_factory_runs` calls neither.
+fn classify_run_error(err: FactoryClientError) -> FactoryClientError {
     let api = match not_found_on_404(err) {
         FactoryClientError::APIError(api) => api,
         // NotFound, Transport, and the typed variants are already classified.
@@ -176,85 +176,85 @@ fn classify_build_error(err: FactoryClientError) -> FactoryClientError {
         // 5xx is a service fault. 422 only arises from a non-integer path
         // (FastAPI request validation), which an `i64` never produces, so it is
         // mapped here defensively rather than left as a generic API error. 409
-        // is the cancel endpoint's "the coordinator does not know the build
+        // is the cancel endpoint's "the coordinator does not know the run
         // yet, its dispatch is in flight" answer, which the spec documents as
         // retry with backoff.
         Some(409 | 422 | 500..=599) => FactoryClientError::Server(api),
         // Everything else (a non-auth 4xx, or a 200 whose body did not parse as
-        // a `BuildResponse`) degrades to the generic API error.
+        // a `RunResponse`) degrades to the generic API error.
         _ => FactoryClientError::APIError(api),
     }
 }
 
 // ---------------------------------------------------------------------------
-// BuildId
+// FactoryRunId
 // ---------------------------------------------------------------------------
 
-/// A Flox Factory build ID.
+/// The ID of a Flox Factory run.
 ///
-/// Server build IDs are positive `i64`. Parsing rejects zero, negative,
+/// Server run IDs are positive `i64`. Parsing rejects zero, negative,
 /// non-numeric, and out-of-range values, so a holder only ever carries an ID
 /// the server could have assigned.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct BuildId(i64);
+pub struct FactoryRunId(i64);
 
-impl From<BuildId> for i64 {
-    fn from(id: BuildId) -> Self {
+impl From<FactoryRunId> for i64 {
+    fn from(id: FactoryRunId) -> Self {
         id.0
     }
 }
 
-/// Rejection of a string that does not name a possible build ID.
+/// Rejection of a string that does not name a possible Factory run ID.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
-#[error("Invalid build ID '{0}'; expected a positive integer.")]
-pub struct ParseBuildIdError(String);
+#[error("Invalid Flox Factory run ID '{0}'; expected a positive integer.")]
+pub struct ParseFactoryRunIdError(String);
 
-impl FromStr for BuildId {
-    type Err = ParseBuildIdError;
+impl FromStr for FactoryRunId {
+    type Err = ParseFactoryRunIdError;
 
     /// Accept only a positive `i64`. Parsing as `i64` first rejects values
     /// above `i64::MAX` as overflow rather than wrapping them onto the wire.
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.parse::<i64>() {
-            Ok(id) if id >= 1 => Ok(BuildId(id)),
-            _ => Err(ParseBuildIdError(s.to_string())),
+            Ok(id) if id >= 1 => Ok(FactoryRunId(id)),
+            _ => Err(ParseFactoryRunIdError(s.to_string())),
         }
     }
 }
 
-impl fmt::Display for BuildId {
+impl fmt::Display for FactoryRunId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
     }
 }
 
 // ---------------------------------------------------------------------------
-// BuildFilters
+// FactoryRunFilters
 // ---------------------------------------------------------------------------
 
-/// Server-side filters for [`FactoryClientTrait::list_builds`], one field per
+/// Server-side filters for [`FactoryClientTrait::list_factory_runs`], one field per
 /// query parameter.
 ///
 /// Every field holds an already-parsed value: the prefix and system fields are
 /// the generated newtypes, which the schema pins as non-empty, while the status
 /// vocabulary and the `since` instant are parsed at the CLI flag boundary.
 /// Empty collections and `None` mean "no
-/// filter": a default `BuildFilters` requests every build, and the emitted
+/// filter": a default `FactoryRunFilters` requests every run, and the emitted
 /// request omits the filter parameters entirely, so it is byte-identical to an
 /// unfiltered call. The server ORs the values within a field (any match) and
 /// ANDs across fields (all must match).
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct BuildFilters {
-    /// Match builds whose effective status is any of these.
-    pub status: Vec<EffectiveBuildStatus>,
-    /// Match builds for any of these systems, compared exactly. The server owns
+pub struct FactoryRunFilters {
+    /// Match runs whose effective status is any of these.
+    pub status: Vec<EffectiveRunStatus>,
+    /// Match runs for any of these systems, compared exactly. The server owns
     /// the system vocabulary and rejects a name outside it.
     pub system: Vec<SystemItem>,
-    /// Match builds whose attribute path starts with any of these prefixes.
+    /// Match runs whose attribute path starts with any of these prefixes.
     pub attr_path: Vec<AttrPathItem>,
-    /// Match builds whose source commit SHA starts with any of these prefixes.
+    /// Match runs whose source commit SHA starts with any of these prefixes.
     pub source_commit_sha: Vec<SourceCommitShaItem>,
-    /// Restrict to builds created at or after this instant. Resolving a time
+    /// Restrict to runs created at or after this instant. Resolving a time
     /// expression to an instant is the caller's job, so every page of one
     /// listing is evaluated against the same bound.
     pub since: Option<DateTime<Utc>>,
@@ -264,33 +264,42 @@ pub struct BuildFilters {
 // FactoryClientTrait
 // ---------------------------------------------------------------------------
 
-/// The factory builds API interface, implemented for [`FloxhubClient`].
+/// The client interface for the Factory's run endpoints, implemented for
+/// [`FloxhubClient`].
 ///
-/// Methods return domain types (`ResultsPage<BuildResponse>`, `BuildResponse`,
-/// `BuildDetailResponse`, `ByteStream`) and domain errors
+/// Methods return domain types (`ResultsPage<RunResponse>`, `RunResponse`,
+/// `RunDetailResponse`, `ByteStream`) and domain errors
 /// (`FactoryClientError`), keeping generated HTTP types contained within the
 /// `floxhub-client` crate.
 #[allow(async_fn_in_trait)]
 pub trait FactoryClientTrait {
-    /// Return all builds across pages, narrowed by `filters`.
-    async fn list_builds(
+    /// Return all Factory runs across pages, narrowed by `filters`.
+    async fn list_factory_runs(
         &self,
-        filters: &BuildFilters,
-    ) -> Result<ResultsPage<BuildResponse>, FactoryClientError>;
+        filters: &FactoryRunFilters,
+    ) -> Result<ResultsPage<RunResponse>, FactoryClientError>;
 
-    /// Fetch a single build by its ID, with the outputs it published.
-    async fn get_build(&self, build_id: BuildId)
-    -> Result<BuildDetailResponse, FactoryClientError>;
+    /// Fetch a single Factory run by its ID, with the outputs it published.
+    async fn get_factory_run(
+        &self,
+        run_id: FactoryRunId,
+    ) -> Result<RunDetailResponse, FactoryClientError>;
 
-    /// Cancel a single build by its ID (DELETE).
+    /// Cancel a single Factory run by its ID (DELETE).
     ///
-    /// Idempotent: a satisfied-intent cancel returns the build with its
+    /// Idempotent: a satisfied-intent cancel returns the run with its
     /// effective `status`; the caller reads that field to distinguish a
-    /// just-initiated cancellation from an already-terminal build.
-    async fn cancel_build(&self, build_id: BuildId) -> Result<BuildResponse, FactoryClientError>;
+    /// just-initiated cancellation from an already-terminal run.
+    async fn cancel_factory_run(
+        &self,
+        run_id: FactoryRunId,
+    ) -> Result<RunResponse, FactoryClientError>;
 
-    /// Proxy the raw log stream for a build.
-    async fn get_build_logs(&self, build_id: BuildId) -> Result<ByteStream, FactoryClientError>;
+    /// Proxy the raw log stream for a Factory run.
+    async fn get_factory_run_logs(
+        &self,
+        run_id: FactoryRunId,
+    ) -> Result<ByteStream, FactoryClientError>;
 }
 
 // ---------------------------------------------------------------------------
@@ -298,10 +307,10 @@ pub trait FactoryClientTrait {
 // ---------------------------------------------------------------------------
 
 impl FactoryClientTrait for crate::FloxhubClient {
-    async fn list_builds(
+    async fn list_factory_runs(
         &self,
-        filters: &BuildFilters,
-    ) -> Result<ResultsPage<BuildResponse>, FactoryClientError> {
+        filters: &FactoryRunFilters,
+    ) -> Result<ResultsPage<RunResponse>, FactoryClientError> {
         // Map empty collections to None so an unfiltered call omits the query
         // parameter entirely. These references are Copy, so the per-page
         // closure reuses them each call.
@@ -316,7 +325,7 @@ impl FactoryClientTrait for crate::FloxhubClient {
             |page_number, page_size| async move {
                 let response = self
                     .factory
-                    .list_builds_api_v1_factory_builds_get(
+                    .list_runs_api_v1_factory_runs_get(
                         attr_path,
                         None,
                         // The Factory API types `page` as `i64`.
@@ -333,7 +342,7 @@ impl FactoryClientTrait for crate::FloxhubClient {
                     .await?
                     .into_inner();
 
-                Ok::<_, FactoryClientError>((response.total, response.builds))
+                Ok::<_, FactoryClientError>((response.total, response.runs))
             },
             FACTORY_PAGE_SIZE,
         );
@@ -342,16 +351,16 @@ impl FactoryClientTrait for crate::FloxhubClient {
         Ok(ResultsPage { results, count })
     }
 
-    async fn get_build(
+    async fn get_factory_run(
         &self,
-        build_id: BuildId,
-    ) -> Result<BuildDetailResponse, FactoryClientError> {
-        // A 404 on this resource-specific endpoint means the build ID does not
+        run_id: FactoryRunId,
+    ) -> Result<RunDetailResponse, FactoryClientError> {
+        // A 404 on this resource-specific endpoint means the run ID does not
         // exist; reclassify it so the `status` verb can report it as such. Other
         // endpoints leave a 404 as the underlying API error.
         Ok(self
             .factory
-            .get_build_api_v1_factory_builds_build_id_get(build_id.into())
+            .get_run_api_v1_factory_runs_run_id_get(run_id.into())
             .await
             .map_api_error()
             .await
@@ -359,28 +368,34 @@ impl FactoryClientTrait for crate::FloxhubClient {
             .into_inner())
     }
 
-    async fn cancel_build(&self, build_id: BuildId) -> Result<BuildResponse, FactoryClientError> {
+    async fn cancel_factory_run(
+        &self,
+        run_id: FactoryRunId,
+    ) -> Result<RunResponse, FactoryClientError> {
         // The slice's one destructive call. Every HTTP and transport outcome is
         // classified here so the verb can map each to a distinct exit code
         // without re-inspecting raw responses at the call site.
         Ok(self
             .factory
-            .cancel_build_api_v1_factory_builds_build_id_delete(build_id.into())
+            .cancel_run_api_v1_factory_runs_run_id_delete(run_id.into())
             .await
             .map_api_error()
             .await
-            .map_err(classify_build_error)?
+            .map_err(classify_run_error)?
             .into_inner())
     }
 
-    async fn get_build_logs(&self, build_id: BuildId) -> Result<ByteStream, FactoryClientError> {
+    async fn get_factory_run_logs(
+        &self,
+        run_id: FactoryRunId,
+    ) -> Result<ByteStream, FactoryClientError> {
         // A 404 on this resource-specific endpoint means there are no logs to
-        // serve — the build does not exist, was never dispatched, or its
+        // serve: the run does not exist, was never dispatched, or its
         // coordinator counterpart is gone. Reclassify it so the caller can say
         // so. Other endpoints leave a 404 as the underlying API error.
         Ok(self
             .factory
-            .get_build_logs_api_v1_factory_builds_build_id_logs_get(build_id.into())
+            .get_run_logs_api_v1_factory_runs_run_id_logs_get(run_id.into())
             .await
             .map_api_error()
             .await
@@ -417,27 +432,27 @@ pub mod tests {
     }
 
     #[test]
-    fn build_id_accepts_the_positive_i64_range() {
-        assert_eq!("1".parse::<BuildId>().map(i64::from), Ok(1));
+    fn run_id_accepts_the_positive_i64_range() {
+        assert_eq!("1".parse::<FactoryRunId>().map(i64::from), Ok(1));
         assert_eq!(
-            i64::MAX.to_string().parse::<BuildId>().map(i64::from),
+            i64::MAX.to_string().parse::<FactoryRunId>().map(i64::from),
             Ok(i64::MAX)
         );
     }
 
     #[test]
-    fn build_id_rejects_zero_negative_overflow_and_garbage() {
-        assert!("0".parse::<BuildId>().is_err());
-        assert!("-1".parse::<BuildId>().is_err());
-        assert!(u64::MAX.to_string().parse::<BuildId>().is_err());
-        assert!("abc".parse::<BuildId>().is_err());
+    fn run_id_rejects_zero_negative_overflow_and_garbage() {
+        assert!("0".parse::<FactoryRunId>().is_err());
+        assert!("-1".parse::<FactoryRunId>().is_err());
+        assert!(u64::MAX.to_string().parse::<FactoryRunId>().is_err());
+        assert!("abc".parse::<FactoryRunId>().is_err());
     }
 
-    /// Exercise `list_builds` against a mock server, asserting:
+    /// Exercise `list_factory_runs` against a mock server, asserting:
     /// 1. The Authorization header carries the token supplied at construction.
     /// 2. The paginated response collapses into a `ResultsPage` correctly.
     #[tokio::test]
-    async fn list_builds_sends_auth_header_and_deserialises_response() {
+    async fn list_factory_runs_sends_auth_header_and_deserialises_response() {
         let server = MockServer::start_async().await;
 
         let auth = make_test_auth("flox_pat_test");
@@ -445,10 +460,10 @@ pub mod tests {
 
         let mock = server.mock(|when, then| {
             when.method("GET")
-                .path("/api/v1/factory/builds")
+                .path("/api/v1/factory/runs")
                 .header("authorization", expected_header);
             then.status(200).json_body(json!({
-                "builds": [],
+                "runs": [],
                 "page": 1,
                 "page_size": 20,
                 "total": 0
@@ -461,7 +476,10 @@ pub mod tests {
             ..client_config(&server.base_url())
         };
         let client = crate::FloxhubClient::new(config).unwrap();
-        let result = client.list_builds(&BuildFilters::default()).await.unwrap();
+        let result = client
+            .list_factory_runs(&FactoryRunFilters::default())
+            .await
+            .unwrap();
 
         mock.assert();
         assert_eq!(result, ResultsPage {
@@ -470,19 +488,19 @@ pub mod tests {
         });
     }
 
-    /// Verify `list_builds` forwards each status as a repeated `status` query
+    /// Verify `list_factory_runs` forwards each status as a repeated `status` query
     /// param; the server ORs them.
     #[tokio::test]
-    async fn list_builds_forwards_status_filter() {
+    async fn list_factory_runs_forwards_status_filter() {
         let server = MockServer::start_async().await;
 
         let mock = server.mock(|when, then| {
             when.method("GET")
-                .path("/api/v1/factory/builds")
+                .path("/api/v1/factory/runs")
                 .query_param("status", "running")
                 .query_param("status", "failed");
             then.status(200).json_body(json!({
-                "builds": [],
+                "runs": [],
                 "page": 0,
                 "page_size": 50,
                 "total": 0
@@ -494,11 +512,11 @@ pub mod tests {
             ..client_config(&server.base_url())
         };
         let client = crate::FloxhubClient::new(config).unwrap();
-        let filters = BuildFilters {
-            status: vec![EffectiveBuildStatus::Running, EffectiveBuildStatus::Failed],
+        let filters = FactoryRunFilters {
+            status: vec![EffectiveRunStatus::Running, EffectiveRunStatus::Failed],
             ..Default::default()
         };
-        let result = client.list_builds(&filters).await.unwrap();
+        let result = client.list_factory_runs(&filters).await.unwrap();
 
         mock.assert();
         assert_eq!(result, ResultsPage {
@@ -507,21 +525,21 @@ pub mod tests {
         });
     }
 
-    /// Verify `list_builds` forwards the system, attr_path, source_commit_sha,
+    /// Verify `list_factory_runs` forwards the system, attr_path, source_commit_sha,
     /// and since filters as query params.
     #[tokio::test]
-    async fn list_builds_forwards_remaining_filter_params() {
+    async fn list_factory_runs_forwards_remaining_filter_params() {
         let server = MockServer::start_async().await;
 
         let mock = server.mock(|when, then| {
             when.method("GET")
-                .path("/api/v1/factory/builds")
+                .path("/api/v1/factory/runs")
                 .query_param("system", "aarch64-darwin")
                 .query_param("attr_path", "hello")
                 .query_param("source_commit_sha", "abc123")
                 .query_param("since", SINCE);
             then.status(200).json_body(json!({
-                "builds": [],
+                "runs": [],
                 "page": 0,
                 "page_size": 50,
                 "total": 0
@@ -533,14 +551,14 @@ pub mod tests {
             ..client_config(&server.base_url())
         };
         let client = crate::FloxhubClient::new(config).unwrap();
-        let filters = BuildFilters {
+        let filters = FactoryRunFilters {
             system: vec!["aarch64-darwin".parse().unwrap()],
             attr_path: vec!["hello".parse().unwrap()],
             source_commit_sha: vec!["abc123".parse().unwrap()],
             since: Some(SINCE.parse().unwrap()),
             ..Default::default()
         };
-        let result = client.list_builds(&filters).await.unwrap();
+        let result = client.list_factory_runs(&filters).await.unwrap();
 
         mock.assert();
         assert_eq!(result, ResultsPage {
@@ -551,21 +569,21 @@ pub mod tests {
 
     /// The filters are re-sent on every page, not just the first. The depaging
     /// loop holds them across iterations, so a change that dropped them after
-    /// page one would return unfiltered builds presented as matches: a wrong
+    /// page one would return unfiltered runs presented as matches: a wrong
     /// answer with no error to signal it.
     #[tokio::test]
-    async fn list_builds_forwards_filters_on_every_page() {
+    async fn list_factory_runs_forwards_filters_on_every_page() {
         let server = MockServer::start_async().await;
 
         // A full page is what makes the loop ask for a second one, and the
         // total must exceed one page so it does not stop on the count check.
         let full_page: Vec<serde_json::Value> = (0..200)
-            .map(|_| valid_build_json(EffectiveBuildStatus::Completed))
+            .map(|_| valid_run_json(EffectiveRunStatus::Completed))
             .collect();
 
         let page_zero = server.mock(|when, then| {
             when.method("GET")
-                .path("/api/v1/factory/builds")
+                .path("/api/v1/factory/runs")
                 .query_param("page", "0")
                 .query_param("status", "running")
                 .query_param("system", "aarch64-darwin")
@@ -573,7 +591,7 @@ pub mod tests {
                 .query_param("source_commit_sha", "abc123")
                 .query_param("since", SINCE);
             then.status(200).json_body(json!({
-                "builds": full_page,
+                "runs": full_page,
                 "page": 0,
                 "page_size": 200,
                 "total": 201
@@ -582,7 +600,7 @@ pub mod tests {
 
         let page_one = server.mock(|when, then| {
             when.method("GET")
-                .path("/api/v1/factory/builds")
+                .path("/api/v1/factory/runs")
                 .query_param("page", "1")
                 .query_param("status", "running")
                 .query_param("system", "aarch64-darwin")
@@ -590,7 +608,7 @@ pub mod tests {
                 .query_param("source_commit_sha", "abc123")
                 .query_param("since", SINCE);
             then.status(200).json_body(json!({
-                "builds": [valid_build_json(EffectiveBuildStatus::Completed)],
+                "runs": [valid_run_json(EffectiveRunStatus::Completed)],
                 "page": 1,
                 "page_size": 200,
                 "total": 201
@@ -602,14 +620,14 @@ pub mod tests {
             ..client_config(&server.base_url())
         };
         let client = crate::FloxhubClient::new(config).unwrap();
-        let filters = BuildFilters {
-            status: vec![EffectiveBuildStatus::Running],
+        let filters = FactoryRunFilters {
+            status: vec![EffectiveRunStatus::Running],
             system: vec!["aarch64-darwin".parse().unwrap()],
             attr_path: vec!["hello".parse().unwrap()],
             source_commit_sha: vec!["abc123".parse().unwrap()],
             since: Some(SINCE.parse().unwrap()),
         };
-        let result = client.list_builds(&filters).await.unwrap();
+        let result = client.list_factory_runs(&filters).await.unwrap();
 
         // The second mock only matches a request carrying the filters, so both
         // assertions passing is what proves they survived the page boundary.
@@ -619,22 +637,22 @@ pub mod tests {
         assert_eq!(result.results.len(), 201);
     }
 
-    /// A default (empty) `BuildFilters` sends no filter query params, so the
+    /// A default (empty) `FactoryRunFilters` sends no filter query params, so the
     /// request is byte-identical to an unfiltered call.
     #[tokio::test]
-    async fn list_builds_empty_filters_send_no_filter_params() {
+    async fn list_factory_runs_empty_filters_send_no_filter_params() {
         let server = MockServer::start_async().await;
 
         let mock = server.mock(|when, then| {
             when.method("GET")
-                .path("/api/v1/factory/builds")
+                .path("/api/v1/factory/runs")
                 .query_param_missing("status")
                 .query_param_missing("system")
                 .query_param_missing("attr_path")
                 .query_param_missing("source_commit_sha")
                 .query_param_missing("since");
             then.status(200).json_body(json!({
-                "builds": [],
+                "runs": [],
                 "page": 0,
                 "page_size": 50,
                 "total": 0
@@ -646,7 +664,10 @@ pub mod tests {
             ..client_config(&server.base_url())
         };
         let client = crate::FloxhubClient::new(config).unwrap();
-        let result = client.list_builds(&BuildFilters::default()).await.unwrap();
+        let result = client
+            .list_factory_runs(&FactoryRunFilters::default())
+            .await
+            .unwrap();
 
         mock.assert();
         assert_eq!(result, ResultsPage {
@@ -667,7 +688,7 @@ pub mod tests {
             when.header("flox-test", "test-value")
                 .and(|when| when.header("flox-test2", "test-value2"));
             then.status(200).json_body(json!({
-                "builds": [],
+                "runs": [],
                 "page": 1,
                 "page_size": 20,
                 "total": 0
@@ -680,7 +701,9 @@ pub mod tests {
         };
 
         let client = crate::FloxhubClient::new(config).unwrap();
-        let _ = client.list_builds(&BuildFilters::default()).await;
+        let _ = client
+            .list_factory_runs(&FactoryRunFilters::default())
+            .await;
         mock.assert();
     }
 
@@ -765,11 +788,11 @@ pub mod tests {
     #[tokio::test]
     async fn map_api_error_does_not_collapse_404_error_response() {
         // The shared funnel no longer treats a 404 as a missing resource; only
-        // resource-specific callers (get_build) do that. A 404 here stays an
+        // resource-specific callers (get_factory_run) do that. A 404 here stays an
         // APIError carrying the server detail.
         let status = StatusCode::NOT_FOUND;
         let error_body = ErrorResponse {
-            detail: "Build not found".to_string(),
+            detail: "Run not found".to_string(),
         };
 
         let mut headers = HeaderMap::new();
@@ -778,7 +801,7 @@ pub mod tests {
 
         let result: Result<(), APIError<ErrorResponse>> = Err(APIError::ErrorResponse(resp_val));
         let err = result.map_api_error().await.unwrap_err();
-        assert_eq!(err.to_string(), "404 Not Found: Build not found");
+        assert_eq!(err.to_string(), "404 Not Found: Run not found");
     }
 
     #[tokio::test]
@@ -786,7 +809,7 @@ pub mod tests {
         let status = StatusCode::NOT_FOUND;
         let resp = http::Response::builder()
             .status(status)
-            .body("Build not found".to_string())
+            .body("Run not found".to_string())
             .unwrap()
             .into();
 
@@ -814,15 +837,15 @@ pub mod tests {
     }
 
     #[tokio::test]
-    async fn get_build_maps_404_to_not_found() {
-        // On a resource-specific endpoint a 404 unambiguously means the build
-        // does not exist, so get_build classifies it as NotFound.
+    async fn get_factory_run_maps_404_to_not_found() {
+        // On a resource-specific endpoint a 404 unambiguously means the run
+        // does not exist, so get_factory_run classifies it as NotFound.
         let server = MockServer::start_async().await;
         let mock = server.mock(|when, then| {
             when.method("GET")
-                .path(format!("/api/v1/factory/builds/{BUILD_ID}"));
+                .path(format!("/api/v1/factory/runs/{RUN_ID}"));
             then.status(404)
-                .json_body(json!({ "detail": "Build not found" }));
+                .json_body(json!({ "detail": "Run not found" }));
         });
 
         let config = FloxhubClientConfig {
@@ -830,7 +853,10 @@ pub mod tests {
             ..client_config(&server.base_url())
         };
         let client = crate::FloxhubClient::new(config).unwrap();
-        let err = client.get_build(BuildId(BUILD_ID)).await.unwrap_err();
+        let err = client
+            .get_factory_run(FactoryRunId(RUN_ID))
+            .await
+            .unwrap_err();
 
         mock.assert();
         assert!(
@@ -840,24 +866,24 @@ pub mod tests {
     }
 
     // -------------------------------------------------------------------------
-    // cancel_build / classify_build_error
+    // cancel_factory_run / classify_run_error
     //
-    // Each test drives `cancel_build` against a mock and asserts the DELETE
+    // Each test drives `cancel_factory_run` against a mock and asserts the DELETE
     // outcome maps to the right `FactoryClientError` variant — the exhaustive
     // coverage of the classification the verb's exit-code space depends on.
     // -------------------------------------------------------------------------
 
-    /// The build ID every single-build mock in this module serves.
-    const BUILD_ID: i64 = 7;
+    /// The run ID every single-run mock in this module serves.
+    const RUN_ID: i64 = 7;
 
-    /// A complete `BuildResponse` body with the given effective `status`, built
-    /// from the typed `BuildResponse` and serialized so the wire fixture fails
+    /// A complete `RunResponse` body with the given effective `status`, built
+    /// from the typed `RunResponse` and serialized so the wire fixture fails
     /// loudly if a required field is added or changed, rather than silently
     /// omitting it and parsing a degenerate body.
-    fn valid_build_json(status: EffectiveBuildStatus) -> serde_json::Value {
-        serde_json::to_value(BuildResponse {
+    fn valid_run_json(status: EffectiveRunStatus) -> serde_json::Value {
+        serde_json::to_value(RunResponse {
             attr_path: "hello".to_string(),
-            build_id: BUILD_ID,
+            run_id: RUN_ID,
             build_type: "nixpkgs".to_string(),
             catalog_name: "my-catalog".to_string(),
             created_at: "2025-01-01T00:00:00Z".parse().unwrap(),
@@ -872,19 +898,19 @@ pub mod tests {
             // Trigger provenance isn't under test here.
             trigger: None,
         })
-        .expect("BuildResponse serializes")
+        .expect("RunResponse serializes")
     }
 
-    /// Start a mock server returning `status`/`body` for the single-build DELETE,
-    /// then call `cancel_build` and return its result.
-    async fn cancel_build_against_mock(
+    /// Start a mock server returning `status`/`body` for the single-run DELETE,
+    /// then call `cancel_factory_run` and return its result.
+    async fn cancel_factory_run_against_mock(
         status: u16,
         body: serde_json::Value,
-    ) -> Result<BuildResponse, FactoryClientError> {
+    ) -> Result<RunResponse, FactoryClientError> {
         let server = MockServer::start_async().await;
         let mock = server.mock(|when, then| {
             when.method("DELETE")
-                .path(format!("/api/v1/factory/builds/{BUILD_ID}"));
+                .path(format!("/api/v1/factory/runs/{RUN_ID}"));
             then.status(status).json_body(body);
         });
 
@@ -893,23 +919,23 @@ pub mod tests {
             ..client_config(&server.base_url())
         };
         let client = crate::FloxhubClient::new(config).unwrap();
-        let result = client.cancel_build(BuildId(BUILD_ID)).await;
+        let result = client.cancel_factory_run(FactoryRunId(RUN_ID)).await;
 
         mock.assert();
         result
     }
 
     #[tokio::test]
-    async fn cancel_build_returns_build_on_200() {
-        // A satisfied cancel returns the build; the caller reads the effective
-        // `status` to tell a fresh cancellation from an already-terminal build.
-        let build =
-            cancel_build_against_mock(200, valid_build_json(EffectiveBuildStatus::Cancelled))
+    async fn cancel_factory_run_returns_run_on_200() {
+        // A satisfied cancel returns the run; the caller reads the effective
+        // `status` to tell a fresh cancellation from an already-terminal run.
+        let run =
+            cancel_factory_run_against_mock(200, valid_run_json(EffectiveRunStatus::Cancelled))
                 .await
                 .unwrap();
-        let expected = BuildResponse {
+        let expected = RunResponse {
             attr_path: "hello".to_string(),
-            build_id: BUILD_ID,
+            run_id: RUN_ID,
             build_type: "nixpkgs".to_string(),
             catalog_name: "my-catalog".to_string(),
             created_at: "2025-01-01T00:00:00Z".parse().unwrap(),
@@ -918,17 +944,17 @@ pub mod tests {
             published_package: None,
             source_commit_sha: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2".to_string(),
             source_repo_url: "https://github.com/example/repo".to_string(),
-            status: EffectiveBuildStatus::Cancelled,
+            status: EffectiveRunStatus::Cancelled,
             system: "x86_64-linux".to_string(),
             task: None,
             trigger: None,
         };
-        assert_eq!(build, expected);
+        assert_eq!(run, expected);
     }
 
     #[tokio::test]
-    async fn cancel_build_maps_404_to_not_found() {
-        let err = cancel_build_against_mock(404, json!({ "detail": "Build not found" }))
+    async fn cancel_factory_run_maps_404_to_not_found() {
+        let err = cancel_factory_run_against_mock(404, json!({ "detail": "Run not found" }))
             .await
             .unwrap_err();
         assert!(
@@ -938,8 +964,8 @@ pub mod tests {
     }
 
     #[tokio::test]
-    async fn cancel_build_maps_401_to_auth_rejected() {
-        let err = cancel_build_against_mock(401, json!({ "detail": "Unauthorized" }))
+    async fn cancel_factory_run_maps_401_to_auth_rejected() {
+        let err = cancel_factory_run_against_mock(401, json!({ "detail": "Unauthorized" }))
             .await
             .unwrap_err();
         assert!(
@@ -949,8 +975,8 @@ pub mod tests {
     }
 
     #[tokio::test]
-    async fn cancel_build_maps_403_to_auth_rejected() {
-        let err = cancel_build_against_mock(403, json!({ "detail": "Forbidden" }))
+    async fn cancel_factory_run_maps_403_to_auth_rejected() {
+        let err = cancel_factory_run_against_mock(403, json!({ "detail": "Forbidden" }))
             .await
             .unwrap_err();
         assert!(
@@ -960,11 +986,13 @@ pub mod tests {
     }
 
     #[tokio::test]
-    async fn cancel_build_maps_502_to_server() {
-        let err =
-            cancel_build_against_mock(502, json!({ "detail": "Build Coordinator unreachable" }))
-                .await
-                .unwrap_err();
+    async fn cancel_factory_run_maps_502_to_server() {
+        let err = cancel_factory_run_against_mock(
+            502,
+            json!({ "detail": "Build Coordinator unreachable" }),
+        )
+        .await
+        .unwrap_err();
         assert!(
             matches!(err, FactoryClientError::Server(_)),
             "expected Server, got {err:?}"
@@ -978,10 +1006,10 @@ pub mod tests {
     }
 
     #[tokio::test]
-    async fn cancel_build_maps_409_to_server() {
-        let err = cancel_build_against_mock(
+    async fn cancel_factory_run_maps_409_to_server() {
+        let err = cancel_factory_run_against_mock(
             409,
-            json!({ "detail": "Build registration still in flight" }),
+            json!({ "detail": "Run registration still in flight" }),
         )
         .await
         .unwrap_err();
@@ -992,8 +1020,8 @@ pub mod tests {
     }
 
     #[tokio::test]
-    async fn cancel_build_maps_422_to_server() {
-        let err = cancel_build_against_mock(422, json!({ "detail": "Unprocessable" }))
+    async fn cancel_factory_run_maps_422_to_server() {
+        let err = cancel_factory_run_against_mock(422, json!({ "detail": "Unprocessable" }))
             .await
             .unwrap_err();
         assert!(
@@ -1003,11 +1031,11 @@ pub mod tests {
     }
 
     #[tokio::test]
-    async fn cancel_build_maps_200_wrong_shape_to_api_error() {
-        // A 200 whose body is not a `BuildResponse` degrades to the generic API
+    async fn cancel_factory_run_maps_200_wrong_shape_to_api_error() {
+        // A 200 whose body is not a `RunResponse` degrades to the generic API
         // error rather than escalating to a bespoke variant; the verb reports it
         // as a retryable service error.
-        let err = cancel_build_against_mock(200, json!({ "unexpected": "shape" }))
+        let err = cancel_factory_run_against_mock(200, json!({ "unexpected": "shape" }))
             .await
             .unwrap_err();
         assert!(
@@ -1017,7 +1045,7 @@ pub mod tests {
     }
 
     #[tokio::test]
-    async fn cancel_build_maps_connection_failure_to_transport() {
+    async fn cancel_factory_run_maps_connection_failure_to_transport() {
         // Port 0 is never a valid connection target, so the DELETE always fails
         // at the transport layer regardless of which ports are closed.
         let config = FloxhubClientConfig {
@@ -1025,7 +1053,10 @@ pub mod tests {
             ..client_config("http://127.0.0.1:0")
         };
         let client = crate::FloxhubClient::new(config).unwrap();
-        let err = client.cancel_build(BuildId(7)).await.unwrap_err();
+        let err = client
+            .cancel_factory_run(FactoryRunId(7))
+            .await
+            .unwrap_err();
         assert!(
             matches!(err, FactoryClientError::Transport(_)),
             "expected Transport, got {err:?}"
@@ -1033,16 +1064,16 @@ pub mod tests {
     }
 
     #[tokio::test]
-    async fn get_build_logs_maps_404_to_not_found() {
-        // The logs endpoint returns 404 when the build does not exist, was
+    async fn get_factory_run_logs_maps_404_to_not_found() {
+        // The logs endpoint returns 404 when the run does not exist, was
         // never dispatched (no task), or the coordinator itself 404s. All three
-        // mean "no logs available", so get_build_logs classifies the 404 as
+        // mean "no logs available", so get_factory_run_logs classifies the 404 as
         // NotFound and lets the verb render a cause-agnostic message.
         let server = MockServer::start_async().await;
         let mock = server.mock(|when, then| {
-            when.method("GET").path("/api/v1/factory/builds/7/logs");
+            when.method("GET").path("/api/v1/factory/runs/7/logs");
             then.status(404)
-                .json_body(json!({ "detail": "Build not found" }));
+                .json_body(json!({ "detail": "Run not found" }));
         });
 
         let config = FloxhubClientConfig {
@@ -1051,7 +1082,7 @@ pub mod tests {
         };
         let client = crate::FloxhubClient::new(config).unwrap();
         // `ByteStream` is not `Debug`, so destructure rather than `unwrap_err`.
-        let Err(err) = client.get_build_logs(BuildId(7)).await else {
+        let Err(err) = client.get_factory_run_logs(FactoryRunId(7)).await else {
             panic!("expected an error, got an Ok stream");
         };
 
@@ -1063,13 +1094,13 @@ pub mod tests {
     }
 
     #[tokio::test]
-    async fn list_builds_404_is_not_collapsed_to_not_found() {
+    async fn list_factory_runs_404_is_not_collapsed_to_not_found() {
         // A 404 on the listing endpoint is a route or configuration error, not
         // a missing resource, so it is left as the underlying API error rather
         // than reported as NotFound.
         let server = MockServer::start_async().await;
         let _mock = server.mock(|when, then| {
-            when.method("GET").path("/api/v1/factory/builds");
+            when.method("GET").path("/api/v1/factory/runs");
             then.status(404).json_body(json!({ "detail": "Not Found" }));
         });
 
@@ -1079,7 +1110,7 @@ pub mod tests {
         };
         let client = crate::FloxhubClient::new(config).unwrap();
         let err = client
-            .list_builds(&BuildFilters::default())
+            .list_factory_runs(&FactoryRunFilters::default())
             .await
             .unwrap_err();
 
@@ -1099,23 +1130,23 @@ pub mod tests {
         assert_eq!(err.to_string(), "Invalid Request: something bad");
     }
 
-    /// Verify that a `list_builds` call routes through the shared MockGuard
+    /// Verify that a `list_factory_runs` call routes through the shared MockGuard
     /// in Replay mode — proving that the factory inner client respects
     /// `FloxhubMockMode::Replay` without extra wiring.
     #[tokio::test]
-    async fn list_builds_routes_through_mock_guard_in_replay_mode() {
+    async fn list_factory_runs_routes_through_mock_guard_in_replay_mode() {
         // Use a temporary directory to write and replay a recording.
         let tmp = tempfile::tempdir().unwrap();
         let recording_path = tmp.path().join("factory_mock.json");
 
         // Record phase: start a real mock server, configure FloxhubClient
-        // in Record mode, call list_builds, and let the guard write the file.
+        // in Record mode, call list_factory_runs, and let the guard write the file.
         {
             let server = MockServer::start_async().await;
             let _mock = server.mock(|when, then| {
-                when.method("GET").path("/api/v1/factory/builds");
+                when.method("GET").path("/api/v1/factory/runs");
                 then.status(200).json_body(json!({
-                    "builds": [],
+                    "runs": [],
                     "page": 1,
                     "page_size": 20,
                     "total": 0
@@ -1128,7 +1159,10 @@ pub mod tests {
                 ..client_config(&server.base_url())
             };
             let client = crate::FloxhubClient::new(config).unwrap();
-            let result = client.list_builds(&BuildFilters::default()).await.unwrap();
+            let result = client
+                .list_factory_runs(&FactoryRunFilters::default())
+                .await
+                .unwrap();
             assert_eq!(result, ResultsPage {
                 results: vec![],
                 count: Some(0),
@@ -1152,7 +1186,10 @@ pub mod tests {
                 ..client_config("http://localhost:0")
             };
             let client = crate::FloxhubClient::new(config).unwrap();
-            let result = client.list_builds(&BuildFilters::default()).await.unwrap();
+            let result = client
+                .list_factory_runs(&FactoryRunFilters::default())
+                .await
+                .unwrap();
             assert_eq!(result, ResultsPage {
                 results: vec![],
                 count: Some(0),

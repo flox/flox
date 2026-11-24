@@ -17,5 +17,5 @@ pub use hooks::RequestHooks;
 
 pub mod types {
     pub use crate::client::types::*;
-    pub use crate::status::EffectiveBuildStatus;
+    pub use crate::status::EffectiveRunStatus;
 }

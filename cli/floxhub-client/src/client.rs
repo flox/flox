@@ -205,7 +205,7 @@ pub struct CheckBuildQuery<'a> {
     pub locked_inputs: &'a BTreeMap<String, api_types::LockedInputEntry>,
     /// Forwarded, uninterpreted, from the caller's process environment.
     /// `None` for an ordinary `flox publish`.
-    pub factory_build_token: Option<&'a str>,
+    pub factory_run_token: Option<&'a str>,
     /// This package's selected root keys, identical to publish's roots.
     pub direct_inputs: &'a [String],
     /// The target's full upstream ref, e.g.
@@ -736,7 +736,7 @@ impl CatalogClientTrait for FloxhubClient {
         // Keep the public query ordered for deterministic projections; only
         // the generated wire request needs the server's HashMap.
         let body = api_types::CheckBuildRequest {
-            factory_build_token: query.factory_build_token.map(str::to_string),
+            factory_run_token: query.factory_run_token.map(str::to_string),
             source_url: query.source_url.to_string(),
             source_rev: query.source_rev.to_string(),
             nixpkgs_rev: query.nixpkgs_rev.to_string(),
@@ -1950,7 +1950,7 @@ pub mod tests {
             nixpkgs_rev: "cafebabe",
             system: api_types::PackageSystem::X8664Linux,
             locked_inputs,
-            factory_build_token: None,
+            factory_run_token: None,
             direct_inputs,
             source_ref: "refs/heads/main",
             dot_flox_dir: ".flox",
@@ -1978,7 +1978,7 @@ pub mod tests {
                             }
                         },
                         "direct_inputs": ["dep-key"],
-                        "factory_build_token": "factory:abc123",
+                        "factory_run_token": "factory:abc123",
                         "source_ref": "refs/heads/release",
                         "dot_flox_dir": "nested/.flox"
                     })
@@ -2017,7 +2017,7 @@ pub mod tests {
         let mut query = check_build_query(&source_url, &locked_inputs, &direct_inputs);
         query.source_ref = "refs/heads/release";
         query.dot_flox_dir = "nested/.flox";
-        query.factory_build_token = Some("factory:abc123");
+        query.factory_run_token = Some("factory:abc123");
         let result = client.check_build_already_recorded(query).await;
 
         mock.assert();
@@ -2115,16 +2115,16 @@ pub mod tests {
     }
 
     // ---------------------------------------------------------------------------
-    // factory_build_token: forwarded uninterpreted on check-build and
+    // factory_run_token: forwarded uninterpreted on check-build and
     // publish, omitted rather than sent null when absent.
     // ---------------------------------------------------------------------------
 
     const PUBLISH_PATH: &str = "/api/v1/catalog/catalogs/myorg/packages/mypkg/builds";
 
     /// A structurally valid [`UserBuildPublish`] for wire-shape tests. Every
-    /// field but `factory_build_token` is an arbitrary value satisfying the
+    /// field but `factory_run_token` is an arbitrary value satisfying the
     /// schema.
-    fn minimal_build_info(factory_build_token: Option<&str>) -> UserBuildPublish {
+    fn minimal_build_info(factory_run_token: Option<&str>) -> UserBuildPublish {
         use catalog_api_v1::types as api_types;
 
         UserBuildPublish {
@@ -2151,7 +2151,7 @@ pub mod tests {
             direct_inputs: None,
             dot_flox_dir: ".flox".to_string(),
             expected_registered_source: None,
-            factory_build_token: factory_build_token.map(str::to_string),
+            factory_run_token: factory_run_token.map(str::to_string),
             locked_base_catalog_url: None,
             locked_inputs: None,
             narinfos: None,
@@ -2172,12 +2172,12 @@ pub mod tests {
     /// wire covers both; omission is proven separately by the four
     /// existing publish cassettes replaying byte-identical.
     #[tokio::test]
-    async fn publish_build_includes_factory_build_token_when_present() {
+    async fn publish_build_includes_factory_run_token_when_present() {
         let server = MockServer::start_async().await;
         let mock = server.mock(|when, then| {
             when.method("POST")
                 .path(PUBLISH_PATH)
-                .json_body_includes(json!({ "factory_build_token": "factory:abc123" }).to_string());
+                .json_body_includes(json!({ "factory_run_token": "factory:abc123" }).to_string());
             then.status(200).json_body(json!({}));
         });
 
