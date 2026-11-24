@@ -5,6 +5,10 @@ description: Use when adding or changing user-facing errors, warnings, success o
 
 ## User-facing message conventions
 
+- **Where messages are printed:** Don't print messages from
+  `flox-rust-sdk`. Return data and let the CLI print it.
+  If there is no clean way to factor the code so the CLI can print,
+  use `discouraged_sdk_message` and say in a comment why.
 - **User-visible message syntax, structure, and content:**
   - Use complete sentences. Do not use "I", "we", or "flox"
     as the subject — drop it instead

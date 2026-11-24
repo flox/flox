@@ -1,3 +1,18 @@
+use std::fmt::Display;
+
+use tracing::info;
+
+/// Print a message to the user from inside the SDK.
+///
+/// A last resort: the SDK should return data and let the CLI print it.
+///
+/// The CLI's message layer matches the `flox::utils::message` target prefix,
+/// so the message follows its verbosity filters and writes alongside progress
+/// spinners. Nothing else may use this target.
+pub fn discouraged_sdk_message(msg: impl Display) {
+    info!(target: "flox::utils::message::sdk_discouraged", "{msg}");
+}
+
 #[cfg(any(test, feature = "tests"))]
 pub mod test_helpers {
     use std::fmt::Display;
