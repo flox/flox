@@ -194,8 +194,10 @@ fn discard_failed_start(
 
 /// Start services with a new process-compose instance.
 ///
-/// The CLI has already decided that a new process-compose is needed.
-/// This function starts process-compose and then starts the specified services.
+/// If process-compose is already running and current for the active environment
+/// (e.g. started by a concurrent activation), start the requested services via
+/// its socket without restarting the manager. Otherwise, start a new
+/// process-compose instance.
 pub fn start_services_with_new_process_compose(
     activation_state_dir: &Path,
     project: &AttachProjectCtx,
@@ -204,8 +206,18 @@ pub fn start_services_with_new_process_compose(
     let (activations_opt, lock) = read_activations_json(&activations_json_path)?;
     let activations = activations_opt.expect("state.json should exist");
     let executive_pid = activations.executive_pid();
+    let is_current = activations.process_compose_is_current(None);
     // Don't hold a lock because the executive will need it when starting `process-compose`
     drop(lock);
+
+    if manager_responds(&project.flox_services_socket) && is_current {
+        debug!("process-compose is already running and current, starting services via socket");
+        return start_services_via_socket(
+            &project.process_compose_bin,
+            &project.flox_services_socket,
+            &project.services_to_start,
+        );
+    }
 
     debug!("starting new process-compose for services");
     signal_new_process_compose(project, executive_pid)?;

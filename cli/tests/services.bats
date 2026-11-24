@@ -2054,6 +2054,36 @@ EOF
   "${TESTS_DIR}"/services/wait_for_service_status.sh one:Stopped two:Stopped
 }
 
+@test "services: concurrent activations do not restart services" {
+  setup_sleeping_services
+
+  mkfifo started_1 finished_1 started_2 finished_2
+  TEARDOWN_FIFO="$PROJECT_DIR/finished_1"
+
+  # Start two concurrent activations with -s at the same time
+  "$FLOX_BIN" activate -s -- bash -c "echo > started_1 && cat finished_1" 3>&- &
+  pid_act1=$!
+  "$FLOX_BIN" activate -s -- bash -c "echo > started_2 && cat finished_2" 3>&- &
+  pid_act2=$!
+
+  timeout 10 cat started_1
+  timeout 10 cat started_2
+
+  "${TESTS_DIR}"/services/wait_for_service_status.sh one:Running two:Running
+
+  # Verify only a single service manager was started
+  run bash -c "ls -1 $PROJECT_DIR/.flox/log/services.*.log.* | wc -l"
+  assert_success
+  assert_output "1"
+
+  TEARDOWN_FIFO="$PROJECT_DIR/finished_2"
+  echo > finished_1
+  echo > finished_2
+  unset TEARDOWN_FIFO
+  wait "$pid_act1"
+  wait "$pid_act2"
+}
+
 # bats test_tags=services:auto-deactivate
 @test "services stop after auto-activated environment is deactivated" {
   # The only services test that drives the prompt hook: it needs `_flox_hook`
