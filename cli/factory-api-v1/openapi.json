@@ -13,7 +13,7 @@
           "runs"
         ],
         "summary": "List Runs",
-        "description": "Return a paginated list of runs, newest first.\n\nThe ``status`` filter matches runs by an effective status derived\nfrom the run's lifecycle (never stored), drawn from a six-value\nvocabulary:\n\n- ``pending``: accepted but not yet building, whether waiting for\n  dispatch or in the build coordinator's queue.\n- ``running``: building.\n- ``completed``: finished successfully.\n- ``failed``: finished unsuccessfully. Excludes timed-out runs,\n  which match ``timed_out``.\n- ``timed_out``: terminated for exceeding its time budget.\n- ``cancelled``: cancelled, whether before or after dispatch.\n\nThese six values are both the filter vocabulary and the response\nvocabulary: a timed-out run matches ``?status=timed_out`` and\nreports ``status: \"timed_out\"`` in the response body.\n\nFilters:\n\n- ``status``: match one or more effective-status values.\n- ``system``: match system names exactly. A name outside the\n  server's system vocabulary returns 422 naming the accepted\n  values, which are the systems this deployment's catalog holds\n  and so may differ between deployments.\n- ``attr_path``: match attr_path by prefix.\n- ``source_commit_sha``: match source commit SHA by prefix.\n- ``since``: return runs created at or after this time. An ISO\n  8601 timestamp carrying a UTC offset, e.g.\n  ``2026-07-17T08:30:00Z``.\n\nFilters combine with AND across parameters and OR within a repeated\none: ``?status=running&status=failed`` matches either status, and\nadding ``&system=x86_64-linux`` further requires that system. Each\nrepeated parameter accepts at most 50 values.\n\n``cursor`` and ``sort`` are reserved for future use and have no\neffect in v1; results are always ordered newest-first.",
+        "description": "Return a paginated list of runs, newest first.\n\nThe ``status`` filter matches runs by an effective status derived\nfrom the run's lifecycle (never stored), drawn from a six-value\nvocabulary:\n\n- ``pending``: accepted but not yet building, whether waiting for\n  dispatch or in the build coordinator's queue.\n- ``running``: building.\n- ``completed``: finished successfully.\n- ``failed``: finished unsuccessfully. Excludes timed-out runs,\n  which match ``timed_out``.\n- ``timed_out``: terminated for exceeding its time budget.\n- ``cancelled``: cancelled, whether before or after dispatch.\n\nThese six values are both the filter vocabulary and the response\nvocabulary: a timed-out run matches ``?status=timed_out`` and\nreports ``status: \"timed_out\"`` in the response body.\n\nFilters:\n\n- ``status``: match one or more effective-status values.\n- ``system``: match system names exactly. A name outside the\n  server's system vocabulary returns 422 naming the accepted\n  values, which are the systems this deployment's catalog holds\n  and so may differ between deployments.\n- ``pkg_path``: match pkgPath, ``<catalog>/<attr_path>``, by a\n  case-insensitive substring, as ``flox search`` does.\n- ``source_commit_sha``: match source commit SHA by prefix.\n- ``since``: return runs created at or after this time. An ISO\n  8601 timestamp carrying a UTC offset, e.g.\n  ``2026-07-17T08:30:00Z``.\n\nFilters combine with AND across parameters and OR within a repeated\none: ``?status=running&status=failed`` matches either status, and\nadding ``&system=x86_64-linux`` further requires that system. Each\nrepeated parameter accepts at most 50 values.\n\n``cursor`` and ``sort`` are reserved for future use and have no\neffect in v1; results are always ordered newest-first.",
         "operationId": "list_runs_api_v1_factory_runs_get",
         "security": [
           {
@@ -58,12 +58,12 @@
             "description": "Filter by system, matched exactly; repeatable, matched as OR. Values must be non-empty, and a value outside the server's system vocabulary returns 422 naming the accepted values."
           },
           {
-            "name": "attr_path",
+            "name": "pkg_path",
             "in": "query",
             "required": false,
             "schema": {
-              "description": "Filter by attr_path prefix; repeatable, matched as OR. Values must be non-empty.",
-              "title": "Attr Path",
+              "description": "Filter by pkgPath, `<catalog>/<attr_path>`, containing the value, ignoring case; repeatable, matched as OR. Values must be non-empty.",
+              "title": "Pkg Path",
               "nullable": true,
               "type": "array",
               "items": {
@@ -72,7 +72,7 @@
               },
               "maxItems": 50
             },
-            "description": "Filter by attr_path prefix; repeatable, matched as OR. Values must be non-empty."
+            "description": "Filter by pkgPath, `<catalog>/<attr_path>`, containing the value, ignoring case; repeatable, matched as OR. Values must be non-empty."
           },
           {
             "name": "source_commit_sha",
