@@ -105,10 +105,7 @@ fn pkg_group_key(install_id: &str) -> String {
 
 /// `value` as a TOML string to copy, which [wrap] doesn't break.
 fn toml_string(value: &str) -> String {
-    toml_edit::Value::from(value)
-        .to_string()
-        .trim()
-        .replace(' ', &NO_BREAK_SPACE.to_string())
+    no_break(toml_edit::Value::from(value).to_string().trim())
 }
 
 /// A name for the package group of `install_id` alone that no package group in
@@ -140,6 +137,11 @@ fn new_group_name(install_id: &str, manifest: &ManifestLatest) -> String {
 /// `flox edit` refuses a manifest where such a package isn't in 'toplevel'
 /// (`buildenv/builder.pl` in this repository). The notice then says so, for
 /// each such holder, instead of giving steps to isolate any holder.
+///
+/// A single holder that has a build on some systems can also be limited to
+/// those systems, which lets the group resolve to the newest revision
+/// available to it once `flox upgrade` locks the manifest again. With several
+/// holders, limiting one would leave the others holding the group back.
 fn render_held_back_group(
     group: &HeldBackGroup,
     merged: &ManifestLatest,
@@ -164,25 +166,61 @@ fn render_held_back_group(
 
     let holders = group.holding_back.keys().map(String::as_str).collect_vec();
     let holders_list = quoted_list(&holders);
+    let limit = match group.holding_back.iter().collect_vec().as_slice() {
+        [(install_id, systems)] if !systems.with_build.is_empty() => {
+            let with_build = no_break(&format!(
+                "[{}]",
+                systems
+                    .with_build
+                    .iter()
+                    .map(|system| toml_string(system))
+                    .join(", ")
+            ));
+            Some((
+                install_id.as_str(),
+                quoted_list(
+                    &systems
+                        .without_build
+                        .iter()
+                        .map(String::as_str)
+                        .collect_vec(),
+                ),
+                format!(
+                    "{} to {with_build}",
+                    quoted(&format!(
+                        "install.{}.systems",
+                        toml_edit::Key::new(install_id.as_str())
+                    ))
+                ),
+            ))
+        },
+        _ => None,
+    };
 
-    let holding = if holders.len() > 1 {
-        format!(
+    let holding = match &limit {
+        Some((install_id, without_build, _)) => format!(
+            "{} can't be upgraded on {without_build}, so it is holding the package group {} back and prevents other packages from upgrading.",
+            quoted(install_id),
+            quoted(&group.group)
+        ),
+        None if holders.len() > 1 => format!(
             "{holders_list} are holding the package group {} back and prevent other packages from upgrading.",
             quoted(&group.group)
-        )
-    } else {
-        format!(
+        ),
+        None => format!(
             "{holders_list} is holding the package group {} back and prevents other packages from upgrading.",
             quoted(&group.group)
-        )
+        ),
+    };
+    let without = match &limit {
+        Some((_, without_build, _)) => format!("{holders_list} on {without_build}"),
+        None => holders_list.clone(),
     };
     let mut paragraphs = vec![
         wrap(&[holding]),
         format!(
             "{}\n{}",
-            wrap(&[format!(
-                "Without {holders_list}, these packages have upgrades:"
-            )]),
+            wrap(&[format!("Without {without}, these packages have upgrades:")]),
             changes.join("\n")
         ),
     ];
@@ -223,29 +261,65 @@ fn render_held_back_group(
                 })
                 .collect_vec(),
         ));
-    } else {
-        paragraphs.push(wrap(&isolate_steps(&holders, group, merged, user)));
+    }
+    let declare = declare_step(&holders, user);
+    let isolate = isolate_settings(&holders, group, merged);
+    match (&limit, listed_in_builds.is_empty()) {
+        (None, false) => {},
+        (None, true) => {
+            let own_groups = if holders.len() > 1 {
+                "their own package groups"
+            } else {
+                "its own package group"
+            };
+            paragraphs.push(wrap(&steps(
+                &format!("isolate {holders_list} into {own_groups}"),
+                declare,
+                &isolate,
+            )));
+        },
+        (Some((install_id, without_build, set_systems)), false) => {
+            paragraphs.push(wrap(&steps(
+                &format!("remove {} from {without_build}", quoted(install_id)),
+                declare,
+                set_systems,
+            )));
+        },
+        (Some((install_id, without_build, set_systems)), true) => {
+            paragraphs.extend(declare.map(|declare| wrap(&[declare])));
+            paragraphs.push(format!(
+                "{}\n{}\n{}",
+                wrap(&[format!(
+                    "To allow other packages to upgrade, run {} and do one of the following:",
+                    quoted("flox edit")
+                )]),
+                wrap_bullets(&[
+                    format!(
+                        "Remove {} from {without_build}: set {set_systems}.",
+                        quoted(install_id)
+                    ),
+                    format!("Isolate {holders_list} into its own package group: set {isolate}."),
+                ]),
+                wrap(&[format!("Then run {}.", quoted("flox upgrade"))])
+            ));
+        },
     }
     paragraphs.join("\n\n")
 }
 
-/// The steps that isolate each of `holders` into a group of its own.
-fn isolate_steps(
-    holders: &[&str],
-    group: &HeldBackGroup,
-    merged: &ManifestLatest,
-    user: &ManifestLatest,
-) -> Vec<String> {
-    let holders_list = quoted_list(holders);
-    let own_groups = if holders.len() > 1 {
-        "their own package groups"
-    } else {
-        "its own package group"
-    };
-    let mut steps = vec![format!(
-        "To allow other packages to upgrade, isolate {holders_list} into {own_groups}."
-    )];
-    steps.extend(declare_step(holders, user));
+/// The sentences that make the change in the manifest to `action`: the sentence
+/// to declare the holders that need it, then the settings to make with `flox
+/// edit`.
+fn steps(action: &str, declare: Option<String>, settings: &str) -> Vec<String> {
+    let mut steps = vec![format!("To allow other packages to upgrade, {action}.")];
+    steps.extend(declare);
+    steps.push(format!("Run {} and set {settings}.", quoted("flox edit")));
+    steps.push(format!("Then run {}.", quoted("flox upgrade")));
+    steps
+}
+
+/// The settings that isolate each of `holders` into a group of its own.
+fn isolate_settings(holders: &[&str], group: &HeldBackGroup, merged: &ManifestLatest) -> String {
     // A package isolated into a group of its own leaves the settings of the
     // group it was in, which the new group doesn't have.
     let stability = merged.group_stability_override(&group.group);
@@ -268,13 +342,7 @@ fn isolate_steps(
             [Some(pkg_group), stability].into_iter().flatten()
         })
         .collect_vec();
-    steps.push(format!(
-        "Run {} and set {}.",
-        quoted("flox edit"),
-        join_and(&sets)
-    ));
-    steps.push(format!("Then run {}.", quoted("flox upgrade")));
-    steps
+    join_and(&sets)
 }
 
 /// The sentence that says to declare the packages among `holders` that only an
@@ -303,22 +371,39 @@ fn declare_step(holders: &[&str], user: &ManifestLatest) -> Option<String> {
 /// [wrap] doesn't break at.
 const NO_BREAK_SPACE: char = '\u{a0}';
 
+/// `text` with its spaces made unbreakable, for text to copy whole.
+fn no_break(text: &str) -> String {
+    text.replace(' ', &NO_BREAK_SPACE.to_string())
+}
+
 /// `text` in single quotes, for a key, a name or a command to copy.
 fn quoted(text: &str) -> String {
-    format!("'{}'", text.replace(' ', &NO_BREAK_SPACE.to_string()))
+    format!("'{}'", no_break(text))
 }
 
 /// Each sentence on its own line, wrapped at 80 columns, between the
 /// words and not inside them, so a line that has a long name or a key in it
 /// is longer.
 fn wrap(sentences: &[String]) -> String {
+    wrap_items(sentences, "", "")
+}
+
+/// Each item as a bullet, with the lines after the first indented under its
+/// text, wrapped like [wrap].
+fn wrap_bullets(items: &[String]) -> String {
+    wrap_items(items, "- ", "  ")
+}
+
+fn wrap_items(items: &[String], first_indent: &str, other_indent: &str) -> String {
     let options = textwrap::Options::new(80)
         .word_separator(textwrap::WordSeparator::AsciiSpace)
         .word_splitter(textwrap::WordSplitter::NoHyphenation)
-        .break_words(false);
-    sentences
+        .break_words(false)
+        .initial_indent(first_indent)
+        .subsequent_indent(other_indent);
+    items
         .iter()
-        .map(|sentence| textwrap::fill(sentence, &options))
+        .map(|item| textwrap::fill(item, &options))
         .join("\n")
         .replace(NO_BREAK_SPACE, " ")
 }
@@ -1547,6 +1632,427 @@ mod tests {
 
             To allow other packages to upgrade, isolate 'wget' into its own package group.
             Run 'flox edit' and set 'install.wget.pkg-group' to "wget".
+            Then run 'flox upgrade'."#});
+    }
+
+    /// A package without a build on some systems only can be limited to the
+    /// systems that have one, which releases the group when it is the only
+    /// package holding it back.
+    #[test]
+    fn holder_without_build_on_some_systems_can_be_limited_to_the_others() {
+        let lockfile = Lockfile {
+            manifest: mk_test_manifest_from_contents(with_latest_schema(indoc! {r#"
+                [install]
+                curl.pkg-path = "curl"
+                hello.pkg-path = "hello"
+            "#}))
+            .as_typed_only(),
+            ..Lockfile::default()
+        };
+        let groups = vec![HeldBackGroup {
+            group: "toplevel".to_string(),
+            holding_back: BTreeMap::from([("curl".to_string(), HolderSystems {
+                without_build: BTreeSet::from(["aarch64-darwin".to_string()]),
+                with_build: BTreeSet::from([
+                    "aarch64-linux".to_string(),
+                    "x86_64-linux".to_string(),
+                ]),
+            })]),
+            different_builds: BTreeMap::from([(
+                "hello".to_string(),
+                BTreeMap::from([("x86_64-linux".to_string(), BuildChange {
+                    version: "2.12.1".to_string(),
+                    newest_version: "2.12.3".to_string(),
+                })]),
+            )]),
+        }];
+
+        let notice = render_held_back_groups(&groups, &lockfile, "x86_64-linux").unwrap();
+
+        assert_eq!(notice, indoc! {r#"
+            'curl' can't be upgraded on 'aarch64-darwin', so it is holding the package group
+            'toplevel' back and prevents other packages from upgrading.
+
+            Without 'curl' on 'aarch64-darwin', these packages have upgrades:
+            - hello: 2.12.1 -> 2.12.3
+
+            To allow other packages to upgrade, run 'flox edit' and do one of the following:
+            - Remove 'curl' from 'aarch64-darwin': set 'install.curl.systems' to
+              ["aarch64-linux", "x86_64-linux"].
+            - Isolate 'curl' into its own package group: set 'install.curl.pkg-group' to
+              "curl".
+            Then run 'flox upgrade'."#});
+    }
+
+    /// Systems without a build are named together, in the sentence, in the list
+    /// of upgrades and in the step to remove the package from them.
+    #[test]
+    fn several_systems_without_a_build_are_named_in_one_list() {
+        let lockfile = Lockfile {
+            manifest: mk_test_manifest_from_contents(with_latest_schema(indoc! {r#"
+                [install]
+                curl.pkg-path = "curl"
+                hello.pkg-path = "hello"
+            "#}))
+            .as_typed_only(),
+            ..Lockfile::default()
+        };
+        let groups = vec![HeldBackGroup {
+            group: "toplevel".to_string(),
+            holding_back: BTreeMap::from([("curl".to_string(), HolderSystems {
+                without_build: BTreeSet::from([
+                    "aarch64-darwin".to_string(),
+                    "x86_64-darwin".to_string(),
+                ]),
+                with_build: BTreeSet::from(["x86_64-linux".to_string()]),
+            })]),
+            different_builds: BTreeMap::from([(
+                "hello".to_string(),
+                BTreeMap::from([("x86_64-linux".to_string(), BuildChange {
+                    version: "2.12.1".to_string(),
+                    newest_version: "2.12.3".to_string(),
+                })]),
+            )]),
+        }];
+
+        let notice = render_held_back_groups(&groups, &lockfile, "x86_64-linux").unwrap();
+
+        assert_eq!(notice, indoc! {r#"
+            'curl' can't be upgraded on 'aarch64-darwin' and 'x86_64-darwin', so it is
+            holding the package group 'toplevel' back and prevents other packages from
+            upgrading.
+
+            Without 'curl' on 'aarch64-darwin' and 'x86_64-darwin', these packages have
+            upgrades:
+            - hello: 2.12.1 -> 2.12.3
+
+            To allow other packages to upgrade, run 'flox edit' and do one of the following:
+            - Remove 'curl' from 'aarch64-darwin' and 'x86_64-darwin': set
+              'install.curl.systems' to ["x86_64-linux"].
+            - Isolate 'curl' into its own package group: set 'install.curl.pkg-group' to
+              "curl".
+            Then run 'flox upgrade'."#});
+    }
+
+    /// The stability of the group is set on the new group in the bullet that
+    /// isolates the package, as when that is the only step.
+    #[test]
+    fn stability_of_the_group_is_set_in_the_bullet_that_isolates() {
+        let lockfile = Lockfile {
+            manifest: mk_test_manifest_from_contents(with_latest_schema(indoc! {r#"
+                [install]
+                curl.pkg-path = "curl"
+                hello.pkg-path = "hello"
+
+                [pkg-groups.toplevel]
+                stability = "lts"
+            "#}))
+            .as_typed_only(),
+            ..Lockfile::default()
+        };
+        let groups = vec![HeldBackGroup {
+            group: "toplevel".to_string(),
+            holding_back: BTreeMap::from([("curl".to_string(), HolderSystems {
+                without_build: BTreeSet::from(["aarch64-darwin".to_string()]),
+                with_build: BTreeSet::from(["x86_64-linux".to_string()]),
+            })]),
+            different_builds: BTreeMap::from([(
+                "hello".to_string(),
+                BTreeMap::from([("x86_64-linux".to_string(), BuildChange {
+                    version: "2.12.1".to_string(),
+                    newest_version: "2.12.3".to_string(),
+                })]),
+            )]),
+        }];
+
+        let notice = render_held_back_groups(&groups, &lockfile, "x86_64-linux").unwrap();
+
+        assert_eq!(notice, indoc! {r#"
+            'curl' can't be upgraded on 'aarch64-darwin', so it is holding the package group
+            'toplevel' back and prevents other packages from upgrading.
+
+            Without 'curl' on 'aarch64-darwin', these packages have upgrades:
+            - hello: 2.12.1 -> 2.12.3
+
+            To allow other packages to upgrade, run 'flox edit' and do one of the following:
+            - Remove 'curl' from 'aarch64-darwin': set 'install.curl.systems' to
+              ["x86_64-linux"].
+            - Isolate 'curl' into its own package group: set 'install.curl.pkg-group' to
+              "curl" and 'pkg-groups.curl.stability' to "lts".
+            Then run 'flox upgrade'."#});
+    }
+
+    /// A name to copy stays whole in a bullet, whose lines after the first are
+    /// indented under its text.
+    #[test]
+    fn name_to_copy_is_never_split_in_a_bullet() {
+        let lockfile = Lockfile {
+            manifest: mk_test_manifest_from_contents(with_latest_schema(indoc! {r#"
+                [install]
+                "my package name with spaces".pkg-path = "curl"
+                hello.pkg-path = "hello"
+            "#}))
+            .as_typed_only(),
+            ..Lockfile::default()
+        };
+        let groups = vec![HeldBackGroup {
+            group: "toplevel".to_string(),
+            holding_back: BTreeMap::from([(
+                "my package name with spaces".to_string(),
+                HolderSystems {
+                    without_build: BTreeSet::from(["aarch64-darwin".to_string()]),
+                    with_build: BTreeSet::from(["x86_64-linux".to_string()]),
+                },
+            )]),
+            different_builds: BTreeMap::from([(
+                "hello".to_string(),
+                BTreeMap::from([("x86_64-linux".to_string(), BuildChange {
+                    version: "2.12.1".to_string(),
+                    newest_version: "2.12.3".to_string(),
+                })]),
+            )]),
+        }];
+
+        let notice = render_held_back_groups(&groups, &lockfile, "x86_64-linux").unwrap();
+
+        assert_eq!(notice, indoc! {r#"
+            'my package name with spaces' can't be upgraded on 'aarch64-darwin', so it
+            is holding the package group 'toplevel' back and prevents other packages from
+            upgrading.
+
+            Without 'my package name with spaces' on 'aarch64-darwin', these packages have
+            upgrades:
+            - hello: 2.12.1 -> 2.12.3
+
+            To allow other packages to upgrade, run 'flox edit' and do one of the following:
+            - Remove 'my package name with spaces' from 'aarch64-darwin': set
+              'install."my package name with spaces".systems' to ["x86_64-linux"].
+            - Isolate 'my package name with spaces' into its own package
+              group: set 'install."my package name with spaces".pkg-group' to
+              "my package name with spaces".
+            Then run 'flox upgrade'."#});
+    }
+
+    /// An install ID that isn't a bare TOML key is quoted in the key for the
+    /// systems as well.
+    #[test]
+    fn systems_key_of_install_id_that_is_not_a_bare_key_is_quoted() {
+        let lockfile = Lockfile {
+            manifest: mk_test_manifest_from_contents(with_latest_schema(indoc! {r#"
+                [install]
+                "curl.8".pkg-path = "curl"
+                hello.pkg-path = "hello"
+            "#}))
+            .as_typed_only(),
+            ..Lockfile::default()
+        };
+        let groups = vec![HeldBackGroup {
+            group: "toplevel".to_string(),
+            holding_back: BTreeMap::from([("curl.8".to_string(), HolderSystems {
+                without_build: BTreeSet::from(["aarch64-darwin".to_string()]),
+                with_build: BTreeSet::from(["x86_64-linux".to_string()]),
+            })]),
+            different_builds: BTreeMap::from([(
+                "hello".to_string(),
+                BTreeMap::from([("x86_64-linux".to_string(), BuildChange {
+                    version: "2.12.1".to_string(),
+                    newest_version: "2.12.3".to_string(),
+                })]),
+            )]),
+        }];
+
+        let notice = render_held_back_groups(&groups, &lockfile, "x86_64-linux").unwrap();
+
+        assert_eq!(notice, indoc! {r#"
+            'curl.8' can't be upgraded on 'aarch64-darwin', so it is holding the package
+            group 'toplevel' back and prevents other packages from upgrading.
+
+            Without 'curl.8' on 'aarch64-darwin', these packages have upgrades:
+            - hello: 2.12.1 -> 2.12.3
+
+            To allow other packages to upgrade, run 'flox edit' and do one of the following:
+            - Remove 'curl.8' from 'aarch64-darwin': set 'install."curl.8".systems' to
+              ["x86_64-linux"].
+            - Isolate 'curl.8' into its own package group: set 'install."curl.8".pkg-group'
+              to "curl.8".
+            Then run 'flox upgrade'."#});
+    }
+
+    /// A package that only an included environment declares is declared in this
+    /// manifest once, before the options that change it.
+    #[test]
+    fn holder_from_an_included_environment_is_declared_before_the_options_to_limit_it() {
+        let lockfile = Lockfile {
+            manifest: mk_test_manifest_from_contents(with_latest_schema(indoc! {r#"
+                [install]
+                curl.pkg-path = "curl"
+                hello.pkg-path = "hello"
+            "#}))
+            .as_typed_only(),
+            compose: Some(Compose {
+                composer: mk_test_manifest_from_contents(with_latest_schema(indoc! {r#"
+                    [install]
+                    hello.pkg-path = "hello"
+                "#}))
+                .as_typed_only(),
+                include: vec![],
+                warnings: vec![],
+            }),
+            ..Lockfile::default()
+        };
+        let groups = vec![HeldBackGroup {
+            group: "toplevel".to_string(),
+            holding_back: BTreeMap::from([("curl".to_string(), HolderSystems {
+                without_build: BTreeSet::from(["aarch64-darwin".to_string()]),
+                with_build: BTreeSet::from([
+                    "aarch64-linux".to_string(),
+                    "x86_64-linux".to_string(),
+                ]),
+            })]),
+            different_builds: BTreeMap::from([(
+                "hello".to_string(),
+                BTreeMap::from([("x86_64-linux".to_string(), BuildChange {
+                    version: "2.12.1".to_string(),
+                    newest_version: "2.12.3".to_string(),
+                })]),
+            )]),
+        }];
+
+        let notice = render_held_back_groups(&groups, &lockfile, "x86_64-linux").unwrap();
+
+        assert_eq!(notice, indoc! {r#"
+            'curl' can't be upgraded on 'aarch64-darwin', so it is holding the package group
+            'toplevel' back and prevents other packages from upgrading.
+
+            Without 'curl' on 'aarch64-darwin', these packages have upgrades:
+            - hello: 2.12.1 -> 2.12.3
+
+            'curl' comes from an included environment, so first declare it in this manifest,
+            with the options it has there.
+
+            To allow other packages to upgrade, run 'flox edit' and do one of the following:
+            - Remove 'curl' from 'aarch64-darwin': set 'install.curl.systems' to
+              ["aarch64-linux", "x86_64-linux"].
+            - Isolate 'curl' into its own package group: set 'install.curl.pkg-group' to
+              "curl".
+            Then run 'flox upgrade'."#});
+    }
+
+    /// A holder that a build lists in `runtime-packages` can't be isolated, but
+    /// can still be limited to the systems that have a build of it.
+    #[test]
+    fn holder_listed_in_runtime_packages_is_still_limited_to_systems() {
+        let lockfile = Lockfile {
+            manifest: mk_test_manifest_from_contents(with_latest_schema(indoc! {r#"
+                [install]
+                curl.pkg-path = "curl"
+                hello.pkg-path = "hello"
+
+                [build.hello-build]
+                command = "echo hello"
+                runtime-packages = ["curl", "hello"]
+            "#}))
+            .as_typed_only(),
+            ..Lockfile::default()
+        };
+        let groups = vec![HeldBackGroup {
+            group: "toplevel".to_string(),
+            holding_back: BTreeMap::from([("curl".to_string(), HolderSystems {
+                without_build: BTreeSet::from(["aarch64-darwin".to_string()]),
+                with_build: BTreeSet::from([
+                    "aarch64-linux".to_string(),
+                    "x86_64-linux".to_string(),
+                ]),
+            })]),
+            different_builds: BTreeMap::from([(
+                "hello".to_string(),
+                BTreeMap::from([("x86_64-linux".to_string(), BuildChange {
+                    version: "2.12.1".to_string(),
+                    newest_version: "2.12.3".to_string(),
+                })]),
+            )]),
+        }];
+
+        let notice = render_held_back_groups(&groups, &lockfile, "x86_64-linux").unwrap();
+
+        assert_eq!(notice, indoc! {r#"
+            'curl' can't be upgraded on 'aarch64-darwin', so it is holding the package group
+            'toplevel' back and prevents other packages from upgrading.
+
+            Without 'curl' on 'aarch64-darwin', these packages have upgrades:
+            - hello: 2.12.1 -> 2.12.3
+
+            'curl' can't be isolated into its own package group, because build 'hello-build'
+            lists it in 'runtime-packages'.
+
+            To allow other packages to upgrade, remove 'curl' from 'aarch64-darwin'.
+            Run 'flox edit' and set 'install.curl.systems' to
+            ["aarch64-linux", "x86_64-linux"].
+            Then run 'flox upgrade'."#});
+    }
+
+    /// A holder that an included environment declares and a build lists is
+    /// declared once, in the one step that is left.
+    #[test]
+    fn holder_from_an_included_environment_listed_in_runtime_packages_is_declared_before_limiting_it()
+     {
+        let lockfile = Lockfile {
+            manifest: mk_test_manifest_from_contents(with_latest_schema(indoc! {r#"
+                [install]
+                curl.pkg-path = "curl"
+                hello.pkg-path = "hello"
+
+                [build.hello-build]
+                command = "echo hello"
+                runtime-packages = ["curl", "hello"]
+            "#}))
+            .as_typed_only(),
+            compose: Some(Compose {
+                composer: mk_test_manifest_from_contents(with_latest_schema(indoc! {r#"
+                    [install]
+                    hello.pkg-path = "hello"
+                "#}))
+                .as_typed_only(),
+                include: vec![],
+                warnings: vec![],
+            }),
+            ..Lockfile::default()
+        };
+        let groups = vec![HeldBackGroup {
+            group: "toplevel".to_string(),
+            holding_back: BTreeMap::from([("curl".to_string(), HolderSystems {
+                without_build: BTreeSet::from(["aarch64-darwin".to_string()]),
+                with_build: BTreeSet::from([
+                    "aarch64-linux".to_string(),
+                    "x86_64-linux".to_string(),
+                ]),
+            })]),
+            different_builds: BTreeMap::from([(
+                "hello".to_string(),
+                BTreeMap::from([("x86_64-linux".to_string(), BuildChange {
+                    version: "2.12.1".to_string(),
+                    newest_version: "2.12.3".to_string(),
+                })]),
+            )]),
+        }];
+
+        let notice = render_held_back_groups(&groups, &lockfile, "x86_64-linux").unwrap();
+
+        assert_eq!(notice, indoc! {r#"
+            'curl' can't be upgraded on 'aarch64-darwin', so it is holding the package group
+            'toplevel' back and prevents other packages from upgrading.
+
+            Without 'curl' on 'aarch64-darwin', these packages have upgrades:
+            - hello: 2.12.1 -> 2.12.3
+
+            'curl' can't be isolated into its own package group, because build 'hello-build'
+            lists it in 'runtime-packages'.
+
+            To allow other packages to upgrade, remove 'curl' from 'aarch64-darwin'.
+            'curl' comes from an included environment, so first declare it in this manifest,
+            with the options it has there.
+            Run 'flox edit' and set 'install.curl.systems' to
+            ["aarch64-linux", "x86_64-linux"].
             Then run 'flox upgrade'."#});
     }
 }
