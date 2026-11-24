@@ -158,7 +158,7 @@ jobs:
       matrix:
         os:
           - "blacksmith-8vcpu-ubuntu-2204"
-          - "blacksmith-12vcpu-macos-15"
+          - "blacksmith-12vcpu-macos-26"
 
     # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
     permissions:
@@ -323,7 +323,7 @@ jobs:
       matrix:
         os:
           - "blacksmith-8vcpu-ubuntu-2204"
-          - "blacksmith-12vcpu-macos-15"
+          - "blacksmith-12vcpu-macos-26"
 
     steps:
       - name: "Checkout"
