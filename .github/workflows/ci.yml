@@ -482,12 +482,12 @@ jobs:
           path: "/nix"
           # Only main saves snapshots, so a PR run can never leave a broken
           # store behind for everyone else.
-          # TODO: drop the head_ref exception before merging; it lets this
-          # PR's own runs save, so it can measure warm builds.
-          commit: "${{ github.ref == 'refs/heads/main' || github.head_ref == 'ci/linux-builds-on-blacksmith' }}"
+          commit: "${{ github.ref == 'refs/heads/main' }}"
 
+      # Only on main, which is the only branch that saves the snapshot: a PR
+      # run would pay 1-2 minutes to check a store it never saves.
       - name: "Verify Nix store"
-        if: ${{ matrix.local && needs.scope.outputs.heavy != 'false' }}
+        if: ${{ matrix.local && github.ref == 'refs/heads/main' && needs.scope.outputs.heavy != 'false' }}
         run: ".github/scripts/verify-nix-store.sh"
 
       - name: "Setup upterm session"
@@ -625,12 +625,12 @@ jobs:
           path: "/nix"
           # Only main saves snapshots, so a PR run can never leave a broken
           # store behind for everyone else.
-          # TODO: drop the head_ref exception before merging; it lets this
-          # PR's own runs save, so it can measure warm builds.
-          commit: "${{ github.ref == 'refs/heads/main' || github.head_ref == 'ci/linux-builds-on-blacksmith' }}"
+          commit: "${{ github.ref == 'refs/heads/main' }}"
 
+      # Only on main, which is the only branch that saves the snapshot: a PR
+      # run would pay 1-2 minutes to check a store it never saves.
       - name: "Verify Nix store"
-        if: ${{ matrix.local && needs.scope.outputs.heavy != 'false' }}
+        if: ${{ matrix.local && github.ref == 'refs/heads/main' && needs.scope.outputs.heavy != 'false' }}
         run: ".github/scripts/verify-nix-store.sh"
 
       - name: "Setup upterm session"
