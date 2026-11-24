@@ -908,9 +908,12 @@ if ($manifest) {
         # See DEV-370.
         if ($envName eq "dev") {
             for my $dir ("$out/lib", "$out/include") {
-                unless (-e $dir) {
-                    mkpath $dir or die "cannot create directory `$dir': $!";
+                next if -d $dir;
+                if (-l $dir || -e $dir) {
+                    my $ref = prependDangling($dir);
+                    die "cannot create compiler/linker search path directory $ref: path already exists but is not a directory\n";
                 }
+                mkpath $dir or die "cannot create directory `$dir': $!";
             }
         }
 
