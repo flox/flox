@@ -18,7 +18,7 @@ use commands::{
 };
 use flox_config::Config;
 use flox_core::sentry::init_sentry;
-use flox_core::util::capture_startup_tls_env;
+use flox_core::util::{capture_startup_tls_env, set_nix_cache_home};
 use flox_core::vars::{FLOX_VERSION_STRING, FLOX_VERSION_VAR};
 use flox_events::{EventsHub, LifecycleFields};
 use flox_rust_sdk::flox::FLOX_VERSION;
@@ -128,6 +128,14 @@ fn main() -> ExitCode {
             return ExitCode::from(1);
         },
     };
+    if let Some(cache_home) = config
+        .flox
+        .nix
+        .as_ref()
+        .and_then(|nix| nix.cache_home.clone())
+    {
+        set_nix_cache_home(cache_home);
+    }
     let args = commands::flox_cli().run_inner(Args::current_args());
     // Completion must not print the first-run notice or create its device ID.
     // Let bpaf recognize completion requests rather than inspecting raw flags.

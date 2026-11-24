@@ -250,6 +250,81 @@ mod tests {
     }
 
     #[test]
+    fn nix_cache_home_accepts_system_config_and_environment_override() {
+        let user_config_dir = tempfile::tempdir().unwrap();
+        let system_config_dir = tempfile::tempdir().unwrap();
+        fs::write(
+            system_config_dir.path().join(FLOX_CONFIG_FILE),
+            "[nix]\ncache_home = '/system/cache'",
+        )
+        .unwrap();
+
+        let parse = |env| {
+            Config::parse_with(
+                &mock_flox_dirs(),
+                user_config_dir.path(),
+                Some(system_config_dir.path()),
+                env,
+            )
+            .unwrap()
+            .flox
+            .nix
+            .unwrap()
+            .cache_home
+        };
+        assert_eq!(parse(vec![]), Some(PathBuf::from("/system/cache")));
+        assert_eq!(
+            parse(vec![("FLOX_NIX_CACHE_HOME".into(), "/env/cache".into())]),
+            Some(PathBuf::from("/env/cache"))
+        );
+    }
+
+    #[test]
+    fn nix_cache_home_rejects_relative_system_config() {
+        let user_config_dir = tempfile::tempdir().unwrap();
+        let system_config_dir = tempfile::tempdir().unwrap();
+        fs::write(
+            system_config_dir.path().join(FLOX_CONFIG_FILE),
+            "[nix]\ncache_home = 'relative/cache'",
+        )
+        .unwrap();
+
+        let error = Config::parse_with(
+            &mock_flox_dirs(),
+            user_config_dir.path(),
+            Some(system_config_dir.path()),
+            [],
+        )
+        .unwrap_err();
+
+        assert!(
+            error
+                .root_cause()
+                .to_string()
+                .contains("nix.cache_home must be an absolute path"),
+            "{error:#}"
+        );
+    }
+
+    #[test]
+    fn nix_cache_home_rejects_relative_environment_override() {
+        let user_config_dir = tempfile::tempdir().unwrap();
+        let error = Config::parse_with(&mock_flox_dirs(), user_config_dir.path(), None, [(
+            "FLOX_NIX_CACHE_HOME".into(),
+            "relative/cache".into(),
+        )])
+        .unwrap_err();
+
+        assert!(
+            error
+                .root_cause()
+                .to_string()
+                .contains("nix.cache_home must be an absolute path"),
+            "{error:#}"
+        );
+    }
+
+    #[test]
     fn set_by_system_config() {
         let user_config_dir = tempfile::tempdir().unwrap();
         let system_config_dir = tempfile::tempdir().unwrap();
