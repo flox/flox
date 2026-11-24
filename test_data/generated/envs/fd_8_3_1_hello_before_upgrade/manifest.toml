@@ -1,0 +1,23 @@
+schema-version = "1.19.0"
+
+[install.fd]
+pkg-path = "fd"
+version = "8.3.1"
+
+[install.hello]
+pkg-path = "hello"
+
+[vars]
+
+[hook]
+
+[profile]
+
+[services]
+
+[include]
+
+[build]
+
+[options]
+systems = ["aarch64-darwin", "aarch64-linux", "x86_64-linux"]

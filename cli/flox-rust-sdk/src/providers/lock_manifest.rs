@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::Display;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -40,6 +40,7 @@ use flox_manifest::parsed::{Inner, latest};
 use flox_manifest::raw::DEFAULT_SYSTEMS_STR;
 use flox_manifest::{Manifest, ManifestError, MigratedTypedOnly};
 use floxhub_client::{
+    CatalogPage,
     FloxhubClientError,
     MessageLevel,
     MsgAttrPathNotFoundNotFoundForAllSystems,
@@ -49,6 +50,7 @@ use floxhub_client::{
     MsgUnknown,
     MsgVersionNotFound,
     PackageGroup,
+    PackageResolutionInfo,
     ResolutionMessage,
     ResolvedPackageGroup,
     StabilityAvailability,
@@ -267,6 +269,154 @@ impl From<LockResult> for Lockfile {
             LockResult::Changed(lockfile) => lockfile,
             LockResult::Unchanged(lockfile) => lockfile,
         }
+    }
+}
+
+/// A package group that resolved to an older catalog revision than the
+/// newest one available to it, because of some of its packages.
+///
+/// The newest revision available to a group is the newest page of the group's
+/// stability that has a candidate for at least one of its packages
+/// (`get_candidate_derivations` in flox/floxhub at
+/// src/catalog-server/catalog_server/db/catalog_db.py).
+/// A group resolves to the newest page that lists every package of the group
+/// on every system it is resolved for (`GroupResolver` in the same
+/// repository's src/catalog-server/catalog_server/core/resolver.py), so the
+/// packages a newer page doesn't list keep all the others on the older page.
+/// The catalog lists a package on a page only if it passes every check there:
+/// missing builds, version, unfree, broken, insecure and license. A package
+/// that isn't listed is therefore not necessarily unknown to the catalog.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HeldBackGroup {
+    pub group: String,
+    /// The packages that the newest revision available to the group doesn't
+    /// list on some or all of the systems the group resolved them on, by
+    /// install ID.
+    pub holding_back: BTreeMap<String, HolderSystems>,
+    /// The group's other packages that the newest revision lists with a
+    /// different build than the resolved one, by install ID and system.
+    ///
+    /// A different build can be an upgrade, a rebuild of the same version, or
+    /// an older version.
+    pub different_builds: BTreeMap<String, BTreeMap<System, BuildChange>>,
+}
+
+/// The systems a package resolved on, split by whether the newest revision
+/// lists it for them.
+///
+/// These are the systems the package was requested for, so a `systems` list
+/// on the package in the manifest has already limited them.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct HolderSystems {
+    /// Systems the newest revision doesn't list the package for.
+    pub without_build: BTreeSet<System>,
+    /// Systems the newest revision lists the package for.
+    pub with_build: BTreeSet<System>,
+}
+
+/// The versions of a package's resolved build and of its different build on
+/// the newest revision, on one system.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BuildChange {
+    pub version: String,
+    pub newest_version: String,
+}
+
+/// Whether the catalog flags `package` as lacking a confirmed pre-built copy
+/// where it expects one.
+///
+/// The catalog sets `missing_builds` on a package that is unfree, insecure or
+/// broken as well, but it expects a build only for one that is none of those
+/// (a flag it hasn't set counts as false)
+/// (`Checker.check_missing_builds` in flox/floxhub at
+/// src/catalog-server/catalog_server/core/resolver.py).
+fn expects_build_missing(package: &PackageResolutionInfo) -> bool {
+    package.missing_builds == Some(true)
+        && !package.unfree.unwrap_or(false)
+        && !package.insecure.unwrap_or(false)
+        && !package.broken.unwrap_or(false)
+}
+
+/// The packages a page lists, by install ID and system.
+fn packages_by_install_id_and_system(
+    page: &CatalogPage,
+) -> BTreeMap<(&str, System), &PackageResolutionInfo> {
+    page.packages
+        .iter()
+        .flatten()
+        .map(|package| {
+            (
+                (package.install_id.as_str(), package.system.to_string()),
+                package,
+            )
+        })
+        .collect()
+}
+
+impl HeldBackGroup {
+    /// Compare the page `group` resolved to with the newest page the catalog
+    /// sent for it, by install ID and system.
+    ///
+    /// Returns `None` unless the newest page doesn't list a package that the
+    /// resolved page has and lists a different build of another. That includes
+    /// when the catalog sent no page newer than the resolved one, which is
+    /// also the case when the resolved page is the newest.
+    ///
+    /// Also returns `None` when the newest page lists a package with an
+    /// expected build missing ([expects_build_missing]). The catalog passes
+    /// such a package only when no page passed the strict resolution of the
+    /// whole group (`GroupResolver.smart_resolver` in flox/floxhub at
+    /// src/catalog-server/catalog_server/core/resolver.py), so the group
+    /// without its holders needn't resolve to that page.
+    fn find(group: &ResolvedPackageGroup) -> Option<Self> {
+        let resolved = group.page.as_ref()?;
+        let newest = group
+            .candidate_pages
+            .iter()
+            .filter(|candidate| candidate.page > resolved.page)
+            .max_by_key(|candidate| candidate.page)?;
+        let resolved = packages_by_install_id_and_system(resolved);
+        let newest = packages_by_install_id_and_system(newest);
+        if newest
+            .values()
+            .any(|package| expects_build_missing(package))
+        {
+            return None;
+        }
+
+        let mut holding_back: BTreeMap<String, HolderSystems> = BTreeMap::new();
+        for (install_id, system) in resolved.keys() {
+            let systems = holding_back.entry(install_id.to_string()).or_default();
+            if newest.contains_key(&(*install_id, system.clone())) {
+                systems.with_build.insert(system.clone());
+            } else {
+                systems.without_build.insert(system.clone());
+            }
+        }
+        holding_back.retain(|_, systems| !systems.without_build.is_empty());
+
+        let mut different_builds: BTreeMap<String, BTreeMap<System, BuildChange>> = BTreeMap::new();
+        for ((install_id, system), package) in &resolved {
+            let Some(newer) = newest.get(&(*install_id, system.clone())) else {
+                continue;
+            };
+            if holding_back.contains_key(*install_id) || newer.derivation == package.derivation {
+                continue;
+            }
+            different_builds
+                .entry(install_id.to_string())
+                .or_default()
+                .insert(system.clone(), BuildChange {
+                    version: package.version.clone(),
+                    newest_version: newer.version.clone(),
+                });
+        }
+
+        (!holding_back.is_empty() && !different_builds.is_empty()).then(|| Self {
+            group: group.name.clone(),
+            holding_back,
+            different_builds,
+        })
     }
 }
 
@@ -511,6 +661,43 @@ impl LockManifest {
         };
 
         Ok(lockfile)
+    }
+
+    /// Find the groups that some of their packages keep from upgrading.
+    ///
+    /// Resolves the groups of `manifest` that `seed_lockfile` leaves entirely
+    /// unlocked once more, asking for the newest page too, which makes the
+    /// catalog evaluate every page of those groups. Nothing is sent when there
+    /// are none.
+    ///
+    /// A group with a single package has nothing to hold it back.
+    /// A group with a locked package is resolved with that package's
+    /// derivation as a constraint before the catalog relaxes any
+    /// (`GroupResolver.smart_resolver` in flox/floxhub at
+    /// src/catalog-server/catalog_server/core/resolver.py), so the page it
+    /// resolves to need not be the page the group would choose unlocked, and
+    /// comparing pages wouldn't show what keeps the group from upgrading.
+    pub async fn find_held_back_groups(
+        manifest: &ManifestLatest,
+        seed_lockfile: Option<&Lockfile>,
+        client: &impl floxhub_client::CatalogClientTrait,
+    ) -> Result<Vec<HeldBackGroup>, ResolveError> {
+        let groups = Self::collect_resolution_package_groups(manifest, seed_lockfile)?
+            .filter(|group| group.descriptors.iter().all(|d| d.derivation.is_none()))
+            .filter(|group| {
+                group
+                    .descriptors
+                    .iter()
+                    .unique_by(|d| &d.install_id)
+                    .count()
+                    > 1
+            })
+            .collect::<Vec<_>>();
+        if groups.is_empty() {
+            return Ok(vec![]);
+        }
+        let resolved = client.resolve_with_candidate_pages(groups, 1).await?;
+        Ok(resolved.iter().filter_map(HeldBackGroup::find).collect())
     }
 
     /// Fetch included environments and merge them with the manifest, returning
@@ -2605,6 +2792,7 @@ mod tests {
     #[test]
     fn ungroup_response() {
         let groups = vec![ResolvedPackageGroup {
+            candidate_pages: vec![],
             page: Some(CatalogPage {
                 page: 1,
                 complete: true,
@@ -4614,6 +4802,7 @@ mod tests {
                 msgs,
                 name: DEFAULT_GROUP_NAME.to_string(),
                 page: None,
+                candidate_pages: vec![],
             },
         ])]);
         let err = LockManifest::resolve_manifest(
@@ -5096,5 +5285,917 @@ mod tests {
             unavailable("pnpm", "pnpm", DEFAULT_GROUP_NAME),
             unavailable("node", "nodejs", "js"),
         ]);
+    }
+
+    /// The newest page lists neither curl on any system nor a build of hello
+    /// that the resolved page has, so curl is what keeps hello where it is.
+    #[test]
+    fn held_back_group_has_package_without_build_on_every_system() {
+        let hello = PackageResolutionInfo {
+            catalog: None,
+            attr_path: "hello".to_string(),
+            pkg_path: "hello".to_string(),
+            broken: Some(false),
+            derivation: "/nix/store/0mvzg2dqivqc8ndvy2dxsh1zx9385ysn-hello-2.12.1.drv".to_string(),
+            description: None,
+            insecure: Some(false),
+            install_id: "hello".to_string(),
+            license: None,
+            locked_url:
+                "https://github.com/flox/nixpkgs?rev=04906337b6d53e8bb0eaf0470ae9f070a4d4eb55"
+                    .to_string(),
+            name: "hello-2.12.1".to_string(),
+            outputs: PackageOutputs(vec![PackageOutput {
+                name: "out".to_string(),
+                store_path: "/nix/store/sd779x86bjaqxj2lzh2jsir4h0zjz6d1-hello-2.12.1".to_string(),
+            }]),
+            outputs_to_install: None,
+            pname: "hello".to_string(),
+            rev: "04906337b6d53e8bb0eaf0470ae9f070a4d4eb55".to_string(),
+            rev_count: 1122823,
+            rev_date: chrono::DateTime::parse_from_rfc3339("2026-11-17T04:43:17Z")
+                .unwrap()
+                .with_timezone(&chrono::offset::Utc),
+            scrape_date: None,
+            stabilities: None,
+            unfree: Some(false),
+            version: "2.12.1".to_string(),
+            system: PackageSystem::X8664Linux,
+            cache_uri: None,
+            missing_builds: Some(false),
+        };
+        let curl = PackageResolutionInfo {
+            attr_path: "curl".to_string(),
+            pkg_path: "curl".to_string(),
+            derivation: "/nix/store/g74fva8jrj7hc8q0m2x17g7gx8ljc6zy-curl-8.1.0.drv".to_string(),
+            install_id: "curl".to_string(),
+            name: "curl-8.1.0".to_string(),
+            outputs: PackageOutputs(vec![PackageOutput {
+                name: "out".to_string(),
+                store_path: "/nix/store/645jbhmkv28xpcm2x17g7gx8ljc6zyfp-curl-8.1.0".to_string(),
+            }]),
+            pname: "curl".to_string(),
+            version: "8.1.0".to_string(),
+            ..hello.clone()
+        };
+        let group = ResolvedPackageGroup {
+            name: DEFAULT_GROUP_NAME.to_string(),
+            msgs: vec![],
+            page: Some(CatalogPage {
+                page: 1122823,
+                complete: true,
+                url: "".to_string(),
+                msgs: vec![],
+                packages: Some(vec![
+                    hello.clone(),
+                    PackageResolutionInfo {
+                        system: PackageSystem::Aarch64Darwin,
+                        ..hello.clone()
+                    },
+                    curl.clone(),
+                    PackageResolutionInfo {
+                        system: PackageSystem::Aarch64Darwin,
+                        ..curl.clone()
+                    },
+                ]),
+            }),
+            candidate_pages: vec![CatalogPage {
+                page: 1122900,
+                complete: false,
+                url: "".to_string(),
+                msgs: vec![],
+                packages: Some(vec![
+                    PackageResolutionInfo {
+                        derivation: "/nix/store/qp9skpdza7yi4ncbwzraab2x456l0mvz-hello-2.12.3.drv"
+                            .to_string(),
+                        version: "2.12.3".to_string(),
+                        ..hello.clone()
+                    },
+                    PackageResolutionInfo {
+                        derivation: "/nix/store/bwzraab2x456lqp9skpdza7yi4ncxsh1-hello-2.12.3.drv"
+                            .to_string(),
+                        version: "2.12.3".to_string(),
+                        system: PackageSystem::Aarch64Darwin,
+                        ..hello.clone()
+                    },
+                ]),
+            }],
+        };
+
+        assert_eq!(
+            HeldBackGroup::find(&group),
+            Some(HeldBackGroup {
+                group: "toplevel".to_string(),
+                holding_back: BTreeMap::from([("curl".to_string(), HolderSystems {
+                    without_build: BTreeSet::from([
+                        "aarch64-darwin".to_string(),
+                        "x86_64-linux".to_string()
+                    ]),
+                    with_build: BTreeSet::new(),
+                })]),
+                different_builds: BTreeMap::from([(
+                    "hello".to_string(),
+                    BTreeMap::from([
+                        ("aarch64-darwin".to_string(), BuildChange {
+                            version: "2.12.1".to_string(),
+                            newest_version: "2.12.3".to_string(),
+                        }),
+                        ("x86_64-linux".to_string(), BuildChange {
+                            version: "2.12.1".to_string(),
+                            newest_version: "2.12.3".to_string(),
+                        }),
+                    ])
+                )]),
+            })
+        );
+    }
+
+    /// A package the newest page lists on only some of its systems holds the
+    /// group back on all of them, so its build there isn't reported as a
+    /// different build.
+    #[test]
+    fn held_back_group_has_package_without_build_on_some_systems() {
+        let hello = PackageResolutionInfo {
+            catalog: None,
+            attr_path: "hello".to_string(),
+            pkg_path: "hello".to_string(),
+            broken: Some(false),
+            derivation: "/nix/store/0mvzg2dqivqc8ndvy2dxsh1zx9385ysn-hello-2.12.1.drv".to_string(),
+            description: None,
+            insecure: Some(false),
+            install_id: "hello".to_string(),
+            license: None,
+            locked_url:
+                "https://github.com/flox/nixpkgs?rev=04906337b6d53e8bb0eaf0470ae9f070a4d4eb55"
+                    .to_string(),
+            name: "hello-2.12.1".to_string(),
+            outputs: PackageOutputs(vec![PackageOutput {
+                name: "out".to_string(),
+                store_path: "/nix/store/sd779x86bjaqxj2lzh2jsir4h0zjz6d1-hello-2.12.1".to_string(),
+            }]),
+            outputs_to_install: None,
+            pname: "hello".to_string(),
+            rev: "04906337b6d53e8bb0eaf0470ae9f070a4d4eb55".to_string(),
+            rev_count: 1122823,
+            rev_date: chrono::DateTime::parse_from_rfc3339("2026-11-17T04:43:17Z")
+                .unwrap()
+                .with_timezone(&chrono::offset::Utc),
+            scrape_date: None,
+            stabilities: None,
+            unfree: Some(false),
+            version: "2.12.1".to_string(),
+            system: PackageSystem::X8664Linux,
+            cache_uri: None,
+            missing_builds: Some(false),
+        };
+        let curl = PackageResolutionInfo {
+            attr_path: "curl".to_string(),
+            pkg_path: "curl".to_string(),
+            derivation: "/nix/store/g74fva8jrj7hc8q0m2x17g7gx8ljc6zy-curl-8.1.0.drv".to_string(),
+            install_id: "curl".to_string(),
+            name: "curl-8.1.0".to_string(),
+            outputs: PackageOutputs(vec![PackageOutput {
+                name: "out".to_string(),
+                store_path: "/nix/store/645jbhmkv28xpcm2x17g7gx8ljc6zyfp-curl-8.1.0".to_string(),
+            }]),
+            pname: "curl".to_string(),
+            version: "8.1.0".to_string(),
+            ..hello.clone()
+        };
+        let group = ResolvedPackageGroup {
+            name: "tools".to_string(),
+            msgs: vec![],
+            page: Some(CatalogPage {
+                page: 1122823,
+                complete: true,
+                url: "".to_string(),
+                msgs: vec![],
+                packages: Some(vec![hello.clone(), curl.clone(), PackageResolutionInfo {
+                    system: PackageSystem::Aarch64Darwin,
+                    ..curl.clone()
+                }]),
+            }),
+            candidate_pages: vec![CatalogPage {
+                page: 1122900,
+                complete: false,
+                url: "".to_string(),
+                msgs: vec![],
+                packages: Some(vec![
+                    PackageResolutionInfo {
+                        derivation: "/nix/store/qp9skpdza7yi4ncbwzraab2x456l0mvz-hello-2.12.3.drv"
+                            .to_string(),
+                        version: "2.12.3".to_string(),
+                        ..hello.clone()
+                    },
+                    PackageResolutionInfo {
+                        derivation: "/nix/store/bwzraab2x456lqp9skpdza7yi4ncxsh1-curl-8.2.0.drv"
+                            .to_string(),
+                        version: "8.2.0".to_string(),
+                        ..curl.clone()
+                    },
+                ]),
+            }],
+        };
+
+        assert_eq!(
+            HeldBackGroup::find(&group),
+            Some(HeldBackGroup {
+                group: "tools".to_string(),
+                holding_back: BTreeMap::from([("curl".to_string(), HolderSystems {
+                    without_build: BTreeSet::from(["aarch64-darwin".to_string()]),
+                    with_build: BTreeSet::from(["x86_64-linux".to_string()]),
+                })]),
+                different_builds: BTreeMap::from([(
+                    "hello".to_string(),
+                    BTreeMap::from([("x86_64-linux".to_string(), BuildChange {
+                        version: "2.12.1".to_string(),
+                        newest_version: "2.12.3".to_string(),
+                    })])
+                )]),
+            })
+        );
+    }
+
+    /// The catalog sends the first page other than the resolved one, which is
+    /// an older page when the group already resolved to the newest.
+    #[test]
+    fn held_back_group_is_none_when_candidate_page_is_older() {
+        let hello = PackageResolutionInfo {
+            catalog: None,
+            attr_path: "hello".to_string(),
+            pkg_path: "hello".to_string(),
+            broken: Some(false),
+            derivation: "/nix/store/0mvzg2dqivqc8ndvy2dxsh1zx9385ysn-hello-2.12.1.drv".to_string(),
+            description: None,
+            insecure: Some(false),
+            install_id: "hello".to_string(),
+            license: None,
+            locked_url:
+                "https://github.com/flox/nixpkgs?rev=04906337b6d53e8bb0eaf0470ae9f070a4d4eb55"
+                    .to_string(),
+            name: "hello-2.12.1".to_string(),
+            outputs: PackageOutputs(vec![PackageOutput {
+                name: "out".to_string(),
+                store_path: "/nix/store/sd779x86bjaqxj2lzh2jsir4h0zjz6d1-hello-2.12.1".to_string(),
+            }]),
+            outputs_to_install: None,
+            pname: "hello".to_string(),
+            rev: "04906337b6d53e8bb0eaf0470ae9f070a4d4eb55".to_string(),
+            rev_count: 1122823,
+            rev_date: chrono::DateTime::parse_from_rfc3339("2026-11-17T04:43:17Z")
+                .unwrap()
+                .with_timezone(&chrono::offset::Utc),
+            scrape_date: None,
+            stabilities: None,
+            unfree: Some(false),
+            version: "2.12.1".to_string(),
+            system: PackageSystem::X8664Linux,
+            cache_uri: None,
+            missing_builds: Some(false),
+        };
+        let curl = PackageResolutionInfo {
+            attr_path: "curl".to_string(),
+            pkg_path: "curl".to_string(),
+            derivation: "/nix/store/g74fva8jrj7hc8q0m2x17g7gx8ljc6zy-curl-8.1.0.drv".to_string(),
+            install_id: "curl".to_string(),
+            name: "curl-8.1.0".to_string(),
+            outputs: PackageOutputs(vec![PackageOutput {
+                name: "out".to_string(),
+                store_path: "/nix/store/645jbhmkv28xpcm2x17g7gx8ljc6zyfp-curl-8.1.0".to_string(),
+            }]),
+            pname: "curl".to_string(),
+            version: "8.1.0".to_string(),
+            ..hello.clone()
+        };
+        let group = ResolvedPackageGroup {
+            name: DEFAULT_GROUP_NAME.to_string(),
+            msgs: vec![],
+            page: Some(CatalogPage {
+                page: 1122823,
+                complete: true,
+                url: "".to_string(),
+                msgs: vec![],
+                packages: Some(vec![hello.clone(), curl.clone()]),
+            }),
+            candidate_pages: vec![CatalogPage {
+                page: 1122700,
+                complete: false,
+                url: "".to_string(),
+                msgs: vec![],
+                packages: Some(vec![PackageResolutionInfo {
+                    derivation: "/nix/store/qp9skpdza7yi4ncbwzraab2x456l0mvz-hello-2.12.0.drv"
+                        .to_string(),
+                    version: "2.12.0".to_string(),
+                    ..hello.clone()
+                }]),
+            }],
+        };
+
+        assert_eq!(HeldBackGroup::find(&group), None);
+    }
+
+    /// Without a different build of another package on the newest page, a
+    /// package it doesn't list isn't holding anything back.
+    #[test]
+    fn held_back_group_is_none_when_no_other_package_has_a_different_build() {
+        let hello = PackageResolutionInfo {
+            catalog: None,
+            attr_path: "hello".to_string(),
+            pkg_path: "hello".to_string(),
+            broken: Some(false),
+            derivation: "/nix/store/0mvzg2dqivqc8ndvy2dxsh1zx9385ysn-hello-2.12.1.drv".to_string(),
+            description: None,
+            insecure: Some(false),
+            install_id: "hello".to_string(),
+            license: None,
+            locked_url:
+                "https://github.com/flox/nixpkgs?rev=04906337b6d53e8bb0eaf0470ae9f070a4d4eb55"
+                    .to_string(),
+            name: "hello-2.12.1".to_string(),
+            outputs: PackageOutputs(vec![PackageOutput {
+                name: "out".to_string(),
+                store_path: "/nix/store/sd779x86bjaqxj2lzh2jsir4h0zjz6d1-hello-2.12.1".to_string(),
+            }]),
+            outputs_to_install: None,
+            pname: "hello".to_string(),
+            rev: "04906337b6d53e8bb0eaf0470ae9f070a4d4eb55".to_string(),
+            rev_count: 1122823,
+            rev_date: chrono::DateTime::parse_from_rfc3339("2026-11-17T04:43:17Z")
+                .unwrap()
+                .with_timezone(&chrono::offset::Utc),
+            scrape_date: None,
+            stabilities: None,
+            unfree: Some(false),
+            version: "2.12.1".to_string(),
+            system: PackageSystem::X8664Linux,
+            cache_uri: None,
+            missing_builds: Some(false),
+        };
+        let curl = PackageResolutionInfo {
+            attr_path: "curl".to_string(),
+            pkg_path: "curl".to_string(),
+            derivation: "/nix/store/g74fva8jrj7hc8q0m2x17g7gx8ljc6zy-curl-8.1.0.drv".to_string(),
+            install_id: "curl".to_string(),
+            name: "curl-8.1.0".to_string(),
+            outputs: PackageOutputs(vec![PackageOutput {
+                name: "out".to_string(),
+                store_path: "/nix/store/645jbhmkv28xpcm2x17g7gx8ljc6zyfp-curl-8.1.0".to_string(),
+            }]),
+            pname: "curl".to_string(),
+            version: "8.1.0".to_string(),
+            ..hello.clone()
+        };
+        let group = ResolvedPackageGroup {
+            name: DEFAULT_GROUP_NAME.to_string(),
+            msgs: vec![],
+            page: Some(CatalogPage {
+                page: 1122823,
+                complete: true,
+                url: "".to_string(),
+                msgs: vec![],
+                packages: Some(vec![hello.clone(), curl.clone()]),
+            }),
+            candidate_pages: vec![CatalogPage {
+                page: 1122900,
+                complete: false,
+                url: "".to_string(),
+                msgs: vec![],
+                packages: Some(vec![hello.clone()]),
+            }],
+        };
+
+        assert_eq!(HeldBackGroup::find(&group), None);
+    }
+
+    /// When the newest page lists every package, none of them holds the group
+    /// back, however many have a different build there.
+    #[test]
+    fn held_back_group_is_none_when_newest_page_lists_every_package() {
+        let hello = PackageResolutionInfo {
+            catalog: None,
+            attr_path: "hello".to_string(),
+            pkg_path: "hello".to_string(),
+            broken: Some(false),
+            derivation: "/nix/store/0mvzg2dqivqc8ndvy2dxsh1zx9385ysn-hello-2.12.1.drv".to_string(),
+            description: None,
+            insecure: Some(false),
+            install_id: "hello".to_string(),
+            license: None,
+            locked_url:
+                "https://github.com/flox/nixpkgs?rev=04906337b6d53e8bb0eaf0470ae9f070a4d4eb55"
+                    .to_string(),
+            name: "hello-2.12.1".to_string(),
+            outputs: PackageOutputs(vec![PackageOutput {
+                name: "out".to_string(),
+                store_path: "/nix/store/sd779x86bjaqxj2lzh2jsir4h0zjz6d1-hello-2.12.1".to_string(),
+            }]),
+            outputs_to_install: None,
+            pname: "hello".to_string(),
+            rev: "04906337b6d53e8bb0eaf0470ae9f070a4d4eb55".to_string(),
+            rev_count: 1122823,
+            rev_date: chrono::DateTime::parse_from_rfc3339("2026-11-17T04:43:17Z")
+                .unwrap()
+                .with_timezone(&chrono::offset::Utc),
+            scrape_date: None,
+            stabilities: None,
+            unfree: Some(false),
+            version: "2.12.1".to_string(),
+            system: PackageSystem::X8664Linux,
+            cache_uri: None,
+            missing_builds: Some(false),
+        };
+        let curl = PackageResolutionInfo {
+            attr_path: "curl".to_string(),
+            pkg_path: "curl".to_string(),
+            derivation: "/nix/store/g74fva8jrj7hc8q0m2x17g7gx8ljc6zy-curl-8.1.0.drv".to_string(),
+            install_id: "curl".to_string(),
+            name: "curl-8.1.0".to_string(),
+            outputs: PackageOutputs(vec![PackageOutput {
+                name: "out".to_string(),
+                store_path: "/nix/store/645jbhmkv28xpcm2x17g7gx8ljc6zyfp-curl-8.1.0".to_string(),
+            }]),
+            pname: "curl".to_string(),
+            version: "8.1.0".to_string(),
+            ..hello.clone()
+        };
+        let group = ResolvedPackageGroup {
+            name: DEFAULT_GROUP_NAME.to_string(),
+            msgs: vec![],
+            page: Some(CatalogPage {
+                page: 1122823,
+                complete: true,
+                url: "".to_string(),
+                msgs: vec![],
+                packages: Some(vec![hello.clone(), curl.clone()]),
+            }),
+            candidate_pages: vec![CatalogPage {
+                page: 1122900,
+                complete: false,
+                url: "".to_string(),
+                msgs: vec![],
+                packages: Some(vec![
+                    PackageResolutionInfo {
+                        derivation: "/nix/store/qp9skpdza7yi4ncbwzraab2x456l0mvz-hello-2.12.3.drv"
+                            .to_string(),
+                        version: "2.12.3".to_string(),
+                        ..hello.clone()
+                    },
+                    PackageResolutionInfo {
+                        derivation: "/nix/store/bwzraab2x456lqp9skpdza7yi4ncxsh1-curl-8.2.0.drv"
+                            .to_string(),
+                        version: "8.2.0".to_string(),
+                        ..curl.clone()
+                    },
+                ]),
+            }],
+        };
+
+        assert_eq!(HeldBackGroup::find(&group), None);
+    }
+
+    /// The catalog relaxes the missing-builds check when no page passes it, so
+    /// a newest page can list hello without a build. Moving curl out of the
+    /// group would then not make hello resolve to that page, because hello
+    /// alone passes the check on an older page only.
+    #[test]
+    fn held_back_group_is_none_when_newest_page_lists_package_with_expected_build_missing() {
+        let hello = PackageResolutionInfo {
+            catalog: None,
+            attr_path: "hello".to_string(),
+            pkg_path: "hello".to_string(),
+            broken: Some(false),
+            derivation: "/nix/store/0mvzg2dqivqc8ndvy2dxsh1zx9385ysn-hello-2.12.1.drv".to_string(),
+            description: None,
+            insecure: Some(false),
+            install_id: "hello".to_string(),
+            license: None,
+            locked_url:
+                "https://github.com/flox/nixpkgs?rev=04906337b6d53e8bb0eaf0470ae9f070a4d4eb55"
+                    .to_string(),
+            name: "hello-2.12.1".to_string(),
+            outputs: PackageOutputs(vec![PackageOutput {
+                name: "out".to_string(),
+                store_path: "/nix/store/sd779x86bjaqxj2lzh2jsir4h0zjz6d1-hello-2.12.1".to_string(),
+            }]),
+            outputs_to_install: None,
+            pname: "hello".to_string(),
+            rev: "04906337b6d53e8bb0eaf0470ae9f070a4d4eb55".to_string(),
+            rev_count: 1122823,
+            rev_date: chrono::DateTime::parse_from_rfc3339("2026-11-17T04:43:17Z")
+                .unwrap()
+                .with_timezone(&chrono::offset::Utc),
+            scrape_date: None,
+            stabilities: None,
+            unfree: Some(false),
+            version: "2.12.1".to_string(),
+            system: PackageSystem::X8664Linux,
+            cache_uri: None,
+            missing_builds: Some(false),
+        };
+        let curl = PackageResolutionInfo {
+            attr_path: "curl".to_string(),
+            pkg_path: "curl".to_string(),
+            derivation: "/nix/store/g74fva8jrj7hc8q0m2x17g7gx8ljc6zy-curl-8.1.0.drv".to_string(),
+            install_id: "curl".to_string(),
+            name: "curl-8.1.0".to_string(),
+            outputs: PackageOutputs(vec![PackageOutput {
+                name: "out".to_string(),
+                store_path: "/nix/store/645jbhmkv28xpcm2x17g7gx8ljc6zyfp-curl-8.1.0".to_string(),
+            }]),
+            pname: "curl".to_string(),
+            version: "8.1.0".to_string(),
+            ..hello.clone()
+        };
+        let group = ResolvedPackageGroup {
+            name: DEFAULT_GROUP_NAME.to_string(),
+            msgs: vec![],
+            page: Some(CatalogPage {
+                page: 1122823,
+                complete: true,
+                url: "".to_string(),
+                msgs: vec![],
+                packages: Some(vec![hello.clone(), curl.clone()]),
+            }),
+            candidate_pages: vec![CatalogPage {
+                page: 1122900,
+                complete: false,
+                url: "".to_string(),
+                msgs: vec![],
+                packages: Some(vec![PackageResolutionInfo {
+                    derivation: "/nix/store/qp9skpdza7yi4ncbwzraab2x456l0mvz-hello-2.12.3.drv"
+                        .to_string(),
+                    version: "2.12.3".to_string(),
+                    missing_builds: Some(true),
+                    ..hello.clone()
+                }]),
+            }],
+        };
+
+        assert_eq!(HeldBackGroup::find(&group), None);
+    }
+
+    /// The catalog doesn't expect a build of a package that is unfree, so its
+    /// missing-builds flag doesn't keep the newest page from being the one the
+    /// group would resolve to.
+    #[test]
+    fn held_back_group_ignores_missing_builds_flag_of_unfree_package() {
+        let hello = PackageResolutionInfo {
+            catalog: None,
+            attr_path: "hello".to_string(),
+            pkg_path: "hello".to_string(),
+            broken: Some(false),
+            derivation: "/nix/store/0mvzg2dqivqc8ndvy2dxsh1zx9385ysn-hello-2.12.1.drv".to_string(),
+            description: None,
+            insecure: Some(false),
+            install_id: "hello".to_string(),
+            license: None,
+            locked_url:
+                "https://github.com/flox/nixpkgs?rev=04906337b6d53e8bb0eaf0470ae9f070a4d4eb55"
+                    .to_string(),
+            name: "hello-2.12.1".to_string(),
+            outputs: PackageOutputs(vec![PackageOutput {
+                name: "out".to_string(),
+                store_path: "/nix/store/sd779x86bjaqxj2lzh2jsir4h0zjz6d1-hello-2.12.1".to_string(),
+            }]),
+            outputs_to_install: None,
+            pname: "hello".to_string(),
+            rev: "04906337b6d53e8bb0eaf0470ae9f070a4d4eb55".to_string(),
+            rev_count: 1122823,
+            rev_date: chrono::DateTime::parse_from_rfc3339("2026-11-17T04:43:17Z")
+                .unwrap()
+                .with_timezone(&chrono::offset::Utc),
+            scrape_date: None,
+            stabilities: None,
+            unfree: Some(false),
+            version: "2.12.1".to_string(),
+            system: PackageSystem::X8664Linux,
+            cache_uri: None,
+            missing_builds: Some(false),
+        };
+        let curl = PackageResolutionInfo {
+            attr_path: "curl".to_string(),
+            pkg_path: "curl".to_string(),
+            derivation: "/nix/store/g74fva8jrj7hc8q0m2x17g7gx8ljc6zy-curl-8.1.0.drv".to_string(),
+            install_id: "curl".to_string(),
+            name: "curl-8.1.0".to_string(),
+            outputs: PackageOutputs(vec![PackageOutput {
+                name: "out".to_string(),
+                store_path: "/nix/store/645jbhmkv28xpcm2x17g7gx8ljc6zyfp-curl-8.1.0".to_string(),
+            }]),
+            pname: "curl".to_string(),
+            version: "8.1.0".to_string(),
+            ..hello.clone()
+        };
+        let group = ResolvedPackageGroup {
+            name: DEFAULT_GROUP_NAME.to_string(),
+            msgs: vec![],
+            page: Some(CatalogPage {
+                page: 1122823,
+                complete: true,
+                url: "".to_string(),
+                msgs: vec![],
+                packages: Some(vec![hello.clone(), curl.clone()]),
+            }),
+            candidate_pages: vec![CatalogPage {
+                page: 1122900,
+                complete: false,
+                url: "".to_string(),
+                msgs: vec![],
+                packages: Some(vec![PackageResolutionInfo {
+                    derivation: "/nix/store/qp9skpdza7yi4ncbwzraab2x456l0mvz-hello-2.12.3.drv"
+                        .to_string(),
+                    version: "2.12.3".to_string(),
+                    missing_builds: Some(true),
+                    unfree: Some(true),
+                    ..hello.clone()
+                }]),
+            }],
+        };
+
+        assert_eq!(
+            HeldBackGroup::find(&group),
+            Some(HeldBackGroup {
+                group: "toplevel".to_string(),
+                holding_back: BTreeMap::from([("curl".to_string(), HolderSystems {
+                    without_build: BTreeSet::from(["x86_64-linux".to_string()]),
+                    with_build: BTreeSet::new(),
+                })]),
+                different_builds: BTreeMap::from([(
+                    "hello".to_string(),
+                    BTreeMap::from([("x86_64-linux".to_string(), BuildChange {
+                        version: "2.12.1".to_string(),
+                        newest_version: "2.12.3".to_string(),
+                    })])
+                )]),
+            })
+        );
+    }
+
+    /// The catalog doesn't expect a build of a package that is insecure, so its
+    /// missing-builds flag doesn't keep the newest page from being the one the
+    /// group would resolve to.
+    #[test]
+    fn held_back_group_ignores_missing_builds_flag_of_insecure_package() {
+        let hello = PackageResolutionInfo {
+            catalog: None,
+            attr_path: "hello".to_string(),
+            pkg_path: "hello".to_string(),
+            broken: Some(false),
+            derivation: "/nix/store/0mvzg2dqivqc8ndvy2dxsh1zx9385ysn-hello-2.12.1.drv".to_string(),
+            description: None,
+            insecure: Some(false),
+            install_id: "hello".to_string(),
+            license: None,
+            locked_url:
+                "https://github.com/flox/nixpkgs?rev=04906337b6d53e8bb0eaf0470ae9f070a4d4eb55"
+                    .to_string(),
+            name: "hello-2.12.1".to_string(),
+            outputs: PackageOutputs(vec![PackageOutput {
+                name: "out".to_string(),
+                store_path: "/nix/store/sd779x86bjaqxj2lzh2jsir4h0zjz6d1-hello-2.12.1".to_string(),
+            }]),
+            outputs_to_install: None,
+            pname: "hello".to_string(),
+            rev: "04906337b6d53e8bb0eaf0470ae9f070a4d4eb55".to_string(),
+            rev_count: 1122823,
+            rev_date: chrono::DateTime::parse_from_rfc3339("2026-11-17T04:43:17Z")
+                .unwrap()
+                .with_timezone(&chrono::offset::Utc),
+            scrape_date: None,
+            stabilities: None,
+            unfree: Some(false),
+            version: "2.12.1".to_string(),
+            system: PackageSystem::X8664Linux,
+            cache_uri: None,
+            missing_builds: Some(false),
+        };
+        let curl = PackageResolutionInfo {
+            attr_path: "curl".to_string(),
+            pkg_path: "curl".to_string(),
+            derivation: "/nix/store/g74fva8jrj7hc8q0m2x17g7gx8ljc6zy-curl-8.1.0.drv".to_string(),
+            install_id: "curl".to_string(),
+            name: "curl-8.1.0".to_string(),
+            outputs: PackageOutputs(vec![PackageOutput {
+                name: "out".to_string(),
+                store_path: "/nix/store/645jbhmkv28xpcm2x17g7gx8ljc6zyfp-curl-8.1.0".to_string(),
+            }]),
+            pname: "curl".to_string(),
+            version: "8.1.0".to_string(),
+            ..hello.clone()
+        };
+        let group = ResolvedPackageGroup {
+            name: DEFAULT_GROUP_NAME.to_string(),
+            msgs: vec![],
+            page: Some(CatalogPage {
+                page: 1122823,
+                complete: true,
+                url: "".to_string(),
+                msgs: vec![],
+                packages: Some(vec![hello.clone(), curl.clone()]),
+            }),
+            candidate_pages: vec![CatalogPage {
+                page: 1122900,
+                complete: false,
+                url: "".to_string(),
+                msgs: vec![],
+                packages: Some(vec![PackageResolutionInfo {
+                    derivation: "/nix/store/qp9skpdza7yi4ncbwzraab2x456l0mvz-hello-2.12.3.drv"
+                        .to_string(),
+                    version: "2.12.3".to_string(),
+                    missing_builds: Some(true),
+                    insecure: Some(true),
+                    ..hello.clone()
+                }]),
+            }],
+        };
+
+        assert_eq!(
+            HeldBackGroup::find(&group),
+            Some(HeldBackGroup {
+                group: "toplevel".to_string(),
+                holding_back: BTreeMap::from([("curl".to_string(), HolderSystems {
+                    without_build: BTreeSet::from(["x86_64-linux".to_string()]),
+                    with_build: BTreeSet::new(),
+                })]),
+                different_builds: BTreeMap::from([(
+                    "hello".to_string(),
+                    BTreeMap::from([("x86_64-linux".to_string(), BuildChange {
+                        version: "2.12.1".to_string(),
+                        newest_version: "2.12.3".to_string(),
+                    })])
+                )]),
+            })
+        );
+    }
+
+    /// The catalog doesn't expect a build of a package that is broken, so its
+    /// missing-builds flag doesn't keep the newest page from being the one the
+    /// group would resolve to.
+    #[test]
+    fn held_back_group_ignores_missing_builds_flag_of_broken_package() {
+        let hello = PackageResolutionInfo {
+            catalog: None,
+            attr_path: "hello".to_string(),
+            pkg_path: "hello".to_string(),
+            broken: Some(false),
+            derivation: "/nix/store/0mvzg2dqivqc8ndvy2dxsh1zx9385ysn-hello-2.12.1.drv".to_string(),
+            description: None,
+            insecure: Some(false),
+            install_id: "hello".to_string(),
+            license: None,
+            locked_url:
+                "https://github.com/flox/nixpkgs?rev=04906337b6d53e8bb0eaf0470ae9f070a4d4eb55"
+                    .to_string(),
+            name: "hello-2.12.1".to_string(),
+            outputs: PackageOutputs(vec![PackageOutput {
+                name: "out".to_string(),
+                store_path: "/nix/store/sd779x86bjaqxj2lzh2jsir4h0zjz6d1-hello-2.12.1".to_string(),
+            }]),
+            outputs_to_install: None,
+            pname: "hello".to_string(),
+            rev: "04906337b6d53e8bb0eaf0470ae9f070a4d4eb55".to_string(),
+            rev_count: 1122823,
+            rev_date: chrono::DateTime::parse_from_rfc3339("2026-11-17T04:43:17Z")
+                .unwrap()
+                .with_timezone(&chrono::offset::Utc),
+            scrape_date: None,
+            stabilities: None,
+            unfree: Some(false),
+            version: "2.12.1".to_string(),
+            system: PackageSystem::X8664Linux,
+            cache_uri: None,
+            missing_builds: Some(false),
+        };
+        let curl = PackageResolutionInfo {
+            attr_path: "curl".to_string(),
+            pkg_path: "curl".to_string(),
+            derivation: "/nix/store/g74fva8jrj7hc8q0m2x17g7gx8ljc6zy-curl-8.1.0.drv".to_string(),
+            install_id: "curl".to_string(),
+            name: "curl-8.1.0".to_string(),
+            outputs: PackageOutputs(vec![PackageOutput {
+                name: "out".to_string(),
+                store_path: "/nix/store/645jbhmkv28xpcm2x17g7gx8ljc6zyfp-curl-8.1.0".to_string(),
+            }]),
+            pname: "curl".to_string(),
+            version: "8.1.0".to_string(),
+            ..hello.clone()
+        };
+        let group = ResolvedPackageGroup {
+            name: DEFAULT_GROUP_NAME.to_string(),
+            msgs: vec![],
+            page: Some(CatalogPage {
+                page: 1122823,
+                complete: true,
+                url: "".to_string(),
+                msgs: vec![],
+                packages: Some(vec![hello.clone(), curl.clone()]),
+            }),
+            candidate_pages: vec![CatalogPage {
+                page: 1122900,
+                complete: false,
+                url: "".to_string(),
+                msgs: vec![],
+                packages: Some(vec![PackageResolutionInfo {
+                    derivation: "/nix/store/qp9skpdza7yi4ncbwzraab2x456l0mvz-hello-2.12.3.drv"
+                        .to_string(),
+                    version: "2.12.3".to_string(),
+                    missing_builds: Some(true),
+                    broken: Some(true),
+                    ..hello.clone()
+                }]),
+            }],
+        };
+
+        assert_eq!(
+            HeldBackGroup::find(&group),
+            Some(HeldBackGroup {
+                group: "toplevel".to_string(),
+                holding_back: BTreeMap::from([("curl".to_string(), HolderSystems {
+                    without_build: BTreeSet::from(["x86_64-linux".to_string()]),
+                    with_build: BTreeSet::new(),
+                })]),
+                different_builds: BTreeMap::from([(
+                    "hello".to_string(),
+                    BTreeMap::from([("x86_64-linux".to_string(), BuildChange {
+                        version: "2.12.1".to_string(),
+                        newest_version: "2.12.3".to_string(),
+                    })])
+                )]),
+            })
+        );
+    }
+
+    /// A group whose packages are all unlocked is resolved again, asking for
+    /// one candidate page.
+    #[tokio::test]
+    async fn find_held_back_groups_asks_for_one_candidate_page() {
+        let manifest = mk_test_manifest_from_contents(with_latest_schema(indoc! {r#"
+            [install]
+            hello.pkg-path = "hello"
+            hello.pkg-group = "group"
+            curl.pkg-path = "curl"
+            curl.pkg-group = "group"
+
+            [options]
+            systems = ["aarch64-darwin", "aarch64-linux", "x86_64-linux"]
+        "#}));
+        let mut client = MockClient::new();
+        reset_mocks(&mut client, vec![Response::Resolve(vec![])]);
+
+        let found = LockManifest::find_held_back_groups(manifest.as_latest_schema(), None, &client)
+            .await
+            .unwrap();
+
+        assert_eq!(found, vec![]);
+        assert_eq!(*client.last_candidate_pages.lock().unwrap(), Some(1));
+    }
+
+    /// A group with a locked package is resolved around that package's
+    /// derivation, so the catalog is not asked about it.
+    #[tokio::test]
+    async fn find_held_back_groups_sends_nothing_for_group_with_locked_package() {
+        let manifest = mk_test_manifest_from_contents(with_latest_schema(indoc! {r#"
+            [install]
+            hello_install_id.pkg-path = "hello"
+            hello_install_id.pkg-group = "group"
+            curl.pkg-path = "curl"
+            curl.pkg-group = "group"
+
+            [options]
+            systems = ["aarch64-darwin", "aarch64-linux", "x86_64-linux"]
+        "#}));
+        let client = MockClient::new();
+
+        let found = LockManifest::find_held_back_groups(
+            manifest.as_latest_schema(),
+            Some(&*TEST_LOCKED_MANIFEST),
+            &client,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(found, vec![]);
+        assert_eq!(*client.last_candidate_pages.lock().unwrap(), None);
+    }
+
+    /// A package alone in its group has nothing to hold it back, however many
+    /// systems the manifest has, which gives the group a request per system.
+    #[tokio::test]
+    async fn find_held_back_groups_sends_nothing_for_single_package_on_several_systems() {
+        let manifest = mk_test_manifest_from_contents(with_latest_schema(indoc! {r#"
+            [install]
+            curl.pkg-path = "curl"
+
+            [options]
+            systems = ["aarch64-darwin", "aarch64-linux", "x86_64-linux"]
+        "#}));
+        let client = MockClient::new();
+
+        let found = LockManifest::find_held_back_groups(manifest.as_latest_schema(), None, &client)
+            .await
+            .unwrap();
+
+        assert_eq!(found, vec![]);
+        assert_eq!(*client.last_candidate_pages.lock().unwrap(), None);
     }
 }

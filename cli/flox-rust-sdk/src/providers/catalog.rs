@@ -163,6 +163,8 @@ pub struct MockClient {
     /// call, for tests that assert on what a caller actually sent rather
     /// than just on the canned response.
     pub last_publish_build_info: MockField<Option<UserBuildPublish>>,
+    /// How many candidate pages the most recent resolve asked for.
+    pub last_candidate_pages: MockField<Option<u32>>,
 }
 
 impl MockClient {
@@ -171,6 +173,7 @@ impl MockClient {
         Self {
             mock_responses: Arc::new(Mutex::new(VecDeque::new())),
             last_publish_build_info: Arc::new(Mutex::new(None)),
+            last_candidate_pages: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -194,10 +197,15 @@ impl MockClient {
 }
 
 impl CatalogClientTrait for MockClient {
-    async fn resolve(
+    async fn resolve_with_candidate_pages(
         &self,
         _package_groups: Vec<PackageGroup>,
+        candidate_pages: u32,
     ) -> Result<Vec<ResolvedPackageGroup>, ResolveError> {
+        *self
+            .last_candidate_pages
+            .lock()
+            .expect("couldn't acquire mock lock") = Some(candidate_pages);
         let mock_resp = self
             .mock_responses
             .lock()
@@ -645,6 +653,22 @@ pub mod test_helpers {
             stability: None,
         };
         FloxhubClient::new(catalog_config).expect("failed to create catalog client")
+    }
+
+    /// The bodies of the resolve responses recorded at `path`, in the order
+    /// they were recorded.
+    pub fn recorded_resolve_responses(path: impl AsRef<Path>) -> Vec<serde_json::Value> {
+        let recording = std::fs::read_to_string(path.as_ref()).expect("failed to read recording");
+        serde_yaml::Deserializer::from_str(&recording)
+            .map(|document| {
+                let interaction =
+                    serde_yaml::Value::deserialize(document).expect("recording is YAML");
+                let body = interaction["then"]["body"]
+                    .as_str()
+                    .expect("recording has a response body");
+                serde_json::from_str(body).expect("response body is JSON")
+            })
+            .collect()
     }
 
     /// Create a [`FloxhubClient`] that will either record to or replay from a
