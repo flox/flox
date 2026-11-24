@@ -18,7 +18,12 @@ use super::{EnvironmentSelect, environment_select};
 use crate::commands::{ensure_auth, environment_description};
 use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message::{self, stderr_supports_color};
-use crate::utils::upgrade_output::{count_upgrade_categories, format_upgrade_summary, render_diff};
+use crate::utils::upgrade_output::{
+    count_upgrade_categories,
+    format_upgrade_summary,
+    render_diff,
+    render_held_back_groups,
+};
 use crate::{environment_subcommand_metric, subcommand_metric};
 
 // Upgrade packages in an environment
@@ -95,6 +100,9 @@ impl Upgrade {
                 concrete_environment.upgrade(&flox, groups_or_iids)
             }
         })?;
+        // The progress message of the upgrade ends here, so that only the one
+        // for the second request shows while it runs.
+        drop(span);
 
         let diff = result.diff();
 
@@ -107,6 +115,23 @@ impl Upgrade {
                 message::plain(format!(
                     "No upgrades available for the specified packages in {description}."
                 ));
+            }
+            let held_back_groups = info_span!(
+                "find_held_back_groups",
+                progress = "Looking for packages holding groups back"
+            )
+            .in_scope(|| {
+                let groups_or_iids = self
+                    .groups_or_iids
+                    .iter()
+                    .map(String::as_str)
+                    .collect::<Vec<_>>();
+                result.find_held_back_groups(&flox, &groups_or_iids)
+            });
+            if let Some(notice) =
+                render_held_back_groups(&held_back_groups, &result.new_lockfile, &flox.system)
+            {
+                message::plain(format!("\n{notice}"));
             }
             return Ok(());
         }
@@ -222,15 +247,27 @@ mod tests {
     use flox_manifest::lockfile::test_helpers::fake_catalog_package_lock;
     use flox_manifest::parsed::latest::PackageDescriptorCatalog;
     use flox_manifest::raw::PackageToInstall;
+    use flox_manifest::test_helpers::with_latest_schema;
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::models::environment::Environment;
-    use flox_rust_sdk::models::environment::path_environment::test_helpers::new_named_path_environment;
-    use flox_rust_sdk::providers::catalog::test_helpers::catalog_replay_client;
+    use flox_rust_sdk::models::environment::path_environment::test_helpers::{
+        new_named_path_environment,
+        new_named_path_environment_from_env_files,
+        new_named_path_environment_in,
+    };
+    use flox_rust_sdk::providers::catalog::test_helpers::{
+        catalog_replay_client,
+        recorded_resolve_responses,
+    };
     use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use flox_test_utils::GENERATED_DATA;
     use flox_test_utils::manifests::HELLO;
+    use floxhub_client::FloxhubClient;
+    use floxhub_client::client::test_helpers::client_config;
+    use httpmock::MockServer;
     use indoc::indoc;
     use pretty_assertions::{assert_eq, assert_str_eq};
+    use serde_json::json;
     use serial_test::serial;
     use tempfile::TempDir;
     use tracing::instrument::WithSubscriber;
@@ -425,6 +462,727 @@ mod tests {
         let printed = writer.to_string();
 
         assert_eq!(printed, "No upgrades available for packages in 'name'.\n");
+    }
+
+    /// With nothing to upgrade, a dry run resolves a second time, asking for
+    /// the newest revision, and names the package holding the group back and
+    /// what to do about it.
+    ///
+    /// Serves the two responses recorded for fd 8.3.1 keeping hello on the
+    /// 2022-01-25 revision. The recording keeps both requests without their
+    /// query strings, so the second response is only served to the request that
+    /// asks for candidate pages.
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial(global_events_client)]
+    async fn dry_run_names_package_holding_group_back() {
+        let (mut flox, _tempdir) = flox_instance();
+        let (subscriber, writer) = test_subscriber_message_only();
+        let mut responses = recorded_resolve_responses(
+            GENERATED_DATA.join("resolve/upgrade_dry_run_fd_8_3_1_hello.yaml"),
+        );
+        let upgraded = responses.remove(1);
+        let locked = responses.remove(0);
+        let server = MockServer::start_async().await;
+        let with_candidate_page = server.mock(|when, then| {
+            when.method("POST")
+                .path("/api/v1/catalog/resolve")
+                .query_param("candidate_pages", "1");
+            then.status(200).json_body(upgraded);
+        });
+        let without_candidate_page = server.mock(|when, then| {
+            when.method("POST").path("/api/v1/catalog/resolve");
+            then.status(200).json_body(locked);
+        });
+        flox.floxhub_client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        let environment = new_named_path_environment_from_env_files(
+            &flox,
+            GENERATED_DATA.join("envs/fd_8_3_1_hello_before_upgrade"),
+            "name",
+        );
+        let dot_flox = environment.parent_path().unwrap().join(".flox");
+
+        Upgrade {
+            environment: EnvironmentSelect::Dir(environment.parent_path().unwrap()),
+            dry_run: true,
+            groups_or_iids: Vec::new(),
+        }
+        .handle(flox)
+        .with_subscriber(subscriber)
+        .await
+        .unwrap();
+
+        without_candidate_page.assert_calls(1);
+        with_candidate_page.assert_calls(1);
+        assert_eq!(writer.to_string(), indoc! {r#"
+            No upgrades available for packages in 'name'.
+
+            'fd' is holding the package group 'toplevel' back and prevents other packages
+            from upgrading.
+
+            Without 'fd', these packages have upgrades:
+            - hello: 2.10 -> 2.12.3
+
+            To allow other packages to upgrade, isolate 'fd' into its own package group.
+            Run 'flox edit' and set 'install.fd.pkg-group' to "fd".
+            Then run 'flox upgrade'.
+        "#});
+        // A dry run neither writes the lockfile nor builds the environment.
+        assert_eq!(
+            std::fs::read_to_string(dot_flox.join("env/manifest.lock")).unwrap(),
+            std::fs::read_to_string(
+                GENERATED_DATA.join("envs/fd_8_3_1_hello_before_upgrade/manifest.lock")
+            )
+            .unwrap()
+        );
+        assert_eq!(std::fs::read_dir(dot_flox.join("run")).unwrap().count(), 0);
+    }
+
+    /// An upgrade that isn't a dry run finds nothing to upgrade in the same
+    /// way and explains in the same way, without writing the lockfile or
+    /// building the environment.
+    ///
+    /// Serves the same two recorded responses as the dry run above.
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial(global_events_client)]
+    async fn upgrade_names_package_holding_group_back() {
+        let (mut flox, _tempdir) = flox_instance();
+        let (subscriber, writer) = test_subscriber_message_only();
+        let mut responses = recorded_resolve_responses(
+            GENERATED_DATA.join("resolve/upgrade_dry_run_fd_8_3_1_hello.yaml"),
+        );
+        let upgraded = responses.remove(1);
+        let locked = responses.remove(0);
+        let server = MockServer::start_async().await;
+        let with_candidate_page = server.mock(|when, then| {
+            when.method("POST")
+                .path("/api/v1/catalog/resolve")
+                .query_param("candidate_pages", "1");
+            then.status(200).json_body(upgraded);
+        });
+        let without_candidate_page = server.mock(|when, then| {
+            when.method("POST").path("/api/v1/catalog/resolve");
+            then.status(200).json_body(locked);
+        });
+        flox.floxhub_client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        let environment = new_named_path_environment_from_env_files(
+            &flox,
+            GENERATED_DATA.join("envs/fd_8_3_1_hello_before_upgrade"),
+            "name",
+        );
+        let dot_flox = environment.parent_path().unwrap().join(".flox");
+
+        Upgrade {
+            environment: EnvironmentSelect::Dir(environment.parent_path().unwrap()),
+            dry_run: false,
+            groups_or_iids: Vec::new(),
+        }
+        .handle(flox)
+        .with_subscriber(subscriber)
+        .await
+        .unwrap();
+
+        without_candidate_page.assert_calls(1);
+        with_candidate_page.assert_calls(1);
+        assert_eq!(writer.to_string(), indoc! {r#"
+            No upgrades available for packages in 'name'.
+
+            'fd' is holding the package group 'toplevel' back and prevents other packages
+            from upgrading.
+
+            Without 'fd', these packages have upgrades:
+            - hello: 2.10 -> 2.12.3
+
+            To allow other packages to upgrade, isolate 'fd' into its own package group.
+            Run 'flox edit' and set 'install.fd.pkg-group' to "fd".
+            Then run 'flox upgrade'.
+        "#});
+        assert_eq!(
+            std::fs::read_to_string(dot_flox.join("env/manifest.lock")).unwrap(),
+            std::fs::read_to_string(
+                GENERATED_DATA.join("envs/fd_8_3_1_hello_before_upgrade/manifest.lock")
+            )
+            .unwrap()
+        );
+        assert_eq!(std::fs::read_dir(dot_flox.join("run")).unwrap().count(), 0);
+    }
+
+    /// Naming the package group that holds hello back is enough to get the
+    /// notice, which follows the line that says nothing upgraded.
+    ///
+    /// The recorded environment has the one package group, so this does not
+    /// show that a group that wasn't named goes unasked about.
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial(global_events_client)]
+    async fn upgrade_of_named_group_names_package_holding_it_back() {
+        let (mut flox, _tempdir) = flox_instance();
+        let (subscriber, writer) = test_subscriber_message_only();
+        let mut responses = recorded_resolve_responses(
+            GENERATED_DATA.join("resolve/upgrade_dry_run_fd_8_3_1_hello.yaml"),
+        );
+        let upgraded = responses.remove(1);
+        let locked = responses.remove(0);
+        let server = MockServer::start_async().await;
+        let with_candidate_page = server.mock(|when, then| {
+            when.method("POST")
+                .path("/api/v1/catalog/resolve")
+                .query_param("candidate_pages", "1");
+            then.status(200).json_body(upgraded);
+        });
+        let without_candidate_page = server.mock(|when, then| {
+            when.method("POST").path("/api/v1/catalog/resolve");
+            then.status(200).json_body(locked);
+        });
+        flox.floxhub_client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        let environment = new_named_path_environment_from_env_files(
+            &flox,
+            GENERATED_DATA.join("envs/fd_8_3_1_hello_before_upgrade"),
+            "name",
+        );
+        let dot_flox = environment.parent_path().unwrap().join(".flox");
+
+        Upgrade {
+            environment: EnvironmentSelect::Dir(environment.parent_path().unwrap()),
+            dry_run: true,
+            groups_or_iids: vec!["toplevel".to_string()],
+        }
+        .handle(flox)
+        .with_subscriber(subscriber)
+        .await
+        .unwrap();
+
+        without_candidate_page.assert_calls(1);
+        with_candidate_page.assert_calls(1);
+        assert_eq!(writer.to_string(), indoc! {r#"
+            No upgrades available for the specified packages in 'name'.
+
+            'fd' is holding the package group 'toplevel' back and prevents other packages
+            from upgrading.
+
+            Without 'fd', these packages have upgrades:
+            - hello: 2.10 -> 2.12.3
+
+            To allow other packages to upgrade, isolate 'fd' into its own package group.
+            Run 'flox edit' and set 'install.fd.pkg-group' to "fd".
+            Then run 'flox upgrade'.
+        "#});
+        assert_eq!(
+            std::fs::read_to_string(dot_flox.join("env/manifest.lock")).unwrap(),
+            std::fs::read_to_string(
+                GENERATED_DATA.join("envs/fd_8_3_1_hello_before_upgrade/manifest.lock")
+            )
+            .unwrap()
+        );
+        assert_eq!(std::fs::read_dir(dot_flox.join("run")).unwrap().count(), 0);
+    }
+
+    /// When the second resolve fails the upgrade still finds nothing to
+    /// upgrade, and says only that.
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial(global_events_client)]
+    async fn says_only_that_nothing_upgrades_when_second_resolve_fails() {
+        let (mut flox, _tempdir) = flox_instance();
+        let (subscriber, writer) = test_subscriber_message_only();
+        let server = MockServer::start_async().await;
+        let with_candidate_page = server.mock(|when, then| {
+            when.method("POST")
+                .path("/api/v1/catalog/resolve")
+                .query_param("candidate_pages", "1");
+            then.status(500);
+        });
+        server.mock(|when, then| {
+            when.method("POST").path("/api/v1/catalog/resolve");
+            then.status(200).json_body(
+                recorded_resolve_responses(GENERATED_DATA.join("resolve/curl_hello.yaml"))
+                    .remove(0),
+            );
+        });
+        flox.floxhub_client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        let mut environment = new_named_path_environment(
+            &flox,
+            &with_latest_schema(indoc! {r#"
+                [install]
+                curl.pkg-path = "curl"
+                hello.pkg-path = "hello"
+            "#}),
+            "name",
+        );
+        environment.lockfile(&flox).unwrap();
+
+        Upgrade {
+            environment: EnvironmentSelect::Dir(environment.parent_path().unwrap()),
+            dry_run: true,
+            groups_or_iids: Vec::new(),
+        }
+        .handle(flox)
+        .with_subscriber(subscriber)
+        .await
+        .unwrap();
+
+        with_candidate_page.assert_calls(1);
+        assert_eq!(
+            writer.to_string(),
+            "No upgrades available for packages in 'name'.\n"
+        );
+    }
+
+    /// A package that an included environment declares is declared in this
+    /// manifest and isolated into a group of its own there, which lets hello
+    /// upgrade, because the descriptor in this manifest replaces the included
+    /// one.
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial(global_events_client)]
+    async fn following_notice_for_package_from_included_environment_upgrades_group() {
+        let (mut flox, tempdir) = flox_instance();
+        let (subscriber, writer) = test_subscriber_message_only();
+        let mut responses = recorded_resolve_responses(
+            GENERATED_DATA.join("resolve/upgrade_dry_run_fd_8_3_1_hello.yaml"),
+        );
+        let upgraded = responses.remove(1);
+        let locked = responses.remove(0);
+        // Once fd is isolated into a group of its own, fd stays on the resolved
+        // page and hello resolves to the newest page.
+        let mut fd_group = locked["items"][0].clone();
+        fd_group["name"] = json!("fd");
+        fd_group["page"]["packages"]
+            .as_array_mut()
+            .unwrap()
+            .retain(|package| package["install_id"] == "fd");
+        let mut hello_group = locked["items"][0].clone();
+        hello_group["page"] = upgraded["items"][0]["candidate_pages"][0].clone();
+        hello_group["candidate_pages"] = json!([]);
+        let regrouped = json!({ "items": [fd_group, hello_group] });
+        let server = MockServer::start_async().await;
+        server.mock(|when, then| {
+            when.method("POST")
+                .path("/api/v1/catalog/resolve")
+                .query_param("candidate_pages", "1");
+            then.status(200).json_body(upgraded);
+        });
+        server.mock(|when, then| {
+            when.method("POST").path("/api/v1/catalog/resolve");
+            then.status(200).json_body(locked);
+        });
+        flox.floxhub_client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        let base_dir = tempdir.path().join("base");
+        std::fs::create_dir(&base_dir).unwrap();
+        let mut base = new_named_path_environment_in(
+            &flox,
+            &with_latest_schema(indoc! {r#"
+                [install]
+                fd.pkg-path = "fd"
+                fd.version = "8.3.1"
+            "#}),
+            &base_dir,
+            "base",
+        );
+        base.lockfile(&flox).unwrap();
+        let mut environment = new_named_path_environment(
+            &flox,
+            &with_latest_schema(formatdoc! {r#"
+                [install]
+                hello.pkg-path = "hello"
+
+                [include]
+                environments = [{{ dir = "{}" }}]
+            "#, base_dir.display()}),
+            "name",
+        );
+        environment.lockfile(&flox).unwrap();
+
+        Upgrade {
+            environment: EnvironmentSelect::Dir(environment.parent_path().unwrap()),
+            dry_run: true,
+            groups_or_iids: Vec::new(),
+        }
+        .handle(flox)
+        .with_subscriber(subscriber)
+        .await
+        .unwrap();
+
+        assert_eq!(writer.to_string(), indoc! {r#"
+            No upgrades available for packages in 'name'.
+
+            'fd' is holding the package group 'toplevel' back and prevents other packages
+            from upgrading.
+
+            Without 'fd', these packages have upgrades:
+            - hello: 2.10 -> 2.12.3
+
+            To allow other packages to upgrade, isolate 'fd' into its own package group.
+            'fd' comes from an included environment, so first declare it in this manifest,
+            with the options it has there.
+            Run 'flox edit' and set 'install.fd.pkg-group' to "fd".
+            Then run 'flox upgrade'.
+        "#});
+
+        // Following the notice: declare fd here with the options it has in the
+        // included environment, then isolate it into its own group.
+        std::fs::write(
+            environment
+                .parent_path()
+                .unwrap()
+                .join(".flox/env/manifest.toml"),
+            with_latest_schema(formatdoc! {r#"
+                [install]
+                hello.pkg-path = "hello"
+                fd.pkg-path = "fd"
+                fd.version = "8.3.1"
+                fd.pkg-group = "fd"
+
+                [include]
+                environments = [{{ dir = "{}" }}]
+            "#, base_dir.display()}),
+        )
+        .unwrap();
+        let server = MockServer::start_async().await;
+        let both_groups = server.mock(|when, then| {
+            when.method("POST")
+                .path("/api/v1/catalog/resolve")
+                .body_includes(r#""name":"fd""#)
+                .body_includes(r#""name":"toplevel""#);
+            then.status(200).json_body(regrouped.clone());
+        });
+        // Locking the edited manifest first resolves only the new group.
+        server.mock(|when, then| {
+            when.method("POST").path("/api/v1/catalog/resolve");
+            then.status(200).json_body(regrouped);
+        });
+        let (mut flox, _tempdir) = flox_instance();
+        flox.floxhub_client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        let (subscriber, writer) = test_subscriber_message_only();
+
+        Upgrade {
+            environment: EnvironmentSelect::Dir(environment.parent_path().unwrap()),
+            dry_run: true,
+            groups_or_iids: Vec::new(),
+        }
+        .handle(flox)
+        .with_subscriber(subscriber)
+        .await
+        .unwrap();
+
+        both_groups.assert_calls(1);
+        assert_eq!(writer.to_string(), indoc! {r#"
+            Dry run: 1 version change in 'name':
+            - hello: 2.10 -> 2.12.3
+
+            To apply these changes, run upgrade without the '--dry-run' flag.
+
+        "#});
+    }
+
+    /// The same change lets hello upgrade when the package comes from an
+    /// environment that the included environment includes, which declares no
+    /// package itself.
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial(global_events_client)]
+    async fn following_notice_for_package_from_nested_include_upgrades_group() {
+        let (mut flox, tempdir) = flox_instance();
+        let (subscriber, writer) = test_subscriber_message_only();
+        let mut responses = recorded_resolve_responses(
+            GENERATED_DATA.join("resolve/upgrade_dry_run_fd_8_3_1_hello.yaml"),
+        );
+        let upgraded = responses.remove(1);
+        let locked = responses.remove(0);
+        // Once fd is isolated into a group of its own, fd stays on the resolved
+        // page and hello resolves to the newest page.
+        let mut fd_group = locked["items"][0].clone();
+        fd_group["name"] = json!("fd");
+        fd_group["page"]["packages"]
+            .as_array_mut()
+            .unwrap()
+            .retain(|package| package["install_id"] == "fd");
+        let mut hello_group = locked["items"][0].clone();
+        hello_group["page"] = upgraded["items"][0]["candidate_pages"][0].clone();
+        hello_group["candidate_pages"] = json!([]);
+        let regrouped = json!({ "items": [fd_group, hello_group] });
+        let server = MockServer::start_async().await;
+        server.mock(|when, then| {
+            when.method("POST")
+                .path("/api/v1/catalog/resolve")
+                .query_param("candidate_pages", "1");
+            then.status(200).json_body(upgraded);
+        });
+        server.mock(|when, then| {
+            when.method("POST").path("/api/v1/catalog/resolve");
+            then.status(200).json_body(locked);
+        });
+        flox.floxhub_client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        let base_dir = tempdir.path().join("base");
+        std::fs::create_dir(&base_dir).unwrap();
+        let mut base = new_named_path_environment_in(
+            &flox,
+            &with_latest_schema(indoc! {r#"
+                [install]
+                fd.pkg-path = "fd"
+                fd.version = "8.3.1"
+            "#}),
+            &base_dir,
+            "base",
+        );
+        base.lockfile(&flox).unwrap();
+        let mid_dir = tempdir.path().join("mid");
+        std::fs::create_dir(&mid_dir).unwrap();
+        let mut mid = new_named_path_environment_in(
+            &flox,
+            &with_latest_schema(formatdoc! {r#"
+                [include]
+                environments = [{{ dir = "{}" }}]
+            "#, base_dir.display()}),
+            &mid_dir,
+            "mid",
+        );
+        mid.lockfile(&flox).unwrap();
+        let mut environment = new_named_path_environment(
+            &flox,
+            &with_latest_schema(formatdoc! {r#"
+                [install]
+                hello.pkg-path = "hello"
+
+                [include]
+                environments = [{{ dir = "{}" }}]
+            "#, mid_dir.display()}),
+            "name",
+        );
+        environment.lockfile(&flox).unwrap();
+
+        Upgrade {
+            environment: EnvironmentSelect::Dir(environment.parent_path().unwrap()),
+            dry_run: true,
+            groups_or_iids: Vec::new(),
+        }
+        .handle(flox)
+        .with_subscriber(subscriber)
+        .await
+        .unwrap();
+
+        assert_eq!(writer.to_string(), indoc! {r#"
+            No upgrades available for packages in 'name'.
+
+            'fd' is holding the package group 'toplevel' back and prevents other packages
+            from upgrading.
+
+            Without 'fd', these packages have upgrades:
+            - hello: 2.10 -> 2.12.3
+
+            To allow other packages to upgrade, isolate 'fd' into its own package group.
+            'fd' comes from an included environment, so first declare it in this manifest,
+            with the options it has there.
+            Run 'flox edit' and set 'install.fd.pkg-group' to "fd".
+            Then run 'flox upgrade'.
+        "#});
+
+        // Following the notice: declare fd here with the options it has in the
+        // included environment, then isolate it into its own group.
+        std::fs::write(
+            environment
+                .parent_path()
+                .unwrap()
+                .join(".flox/env/manifest.toml"),
+            with_latest_schema(formatdoc! {r#"
+                [install]
+                hello.pkg-path = "hello"
+                fd.pkg-path = "fd"
+                fd.version = "8.3.1"
+                fd.pkg-group = "fd"
+
+                [include]
+                environments = [{{ dir = "{}" }}]
+            "#, mid_dir.display()}),
+        )
+        .unwrap();
+        let server = MockServer::start_async().await;
+        let both_groups = server.mock(|when, then| {
+            when.method("POST")
+                .path("/api/v1/catalog/resolve")
+                .body_includes(r#""name":"fd""#)
+                .body_includes(r#""name":"toplevel""#);
+            then.status(200).json_body(regrouped.clone());
+        });
+        // Locking the edited manifest first resolves only the new group.
+        server.mock(|when, then| {
+            when.method("POST").path("/api/v1/catalog/resolve");
+            then.status(200).json_body(regrouped);
+        });
+        let (mut flox, _tempdir) = flox_instance();
+        flox.floxhub_client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        let (subscriber, writer) = test_subscriber_message_only();
+
+        Upgrade {
+            environment: EnvironmentSelect::Dir(environment.parent_path().unwrap()),
+            dry_run: true,
+            groups_or_iids: Vec::new(),
+        }
+        .handle(flox)
+        .with_subscriber(subscriber)
+        .await
+        .unwrap();
+
+        both_groups.assert_calls(1);
+        assert_eq!(writer.to_string(), indoc! {r#"
+            Dry run: 1 version change in 'name':
+            - hello: 2.10 -> 2.12.3
+
+            To apply these changes, run upgrade without the '--dry-run' flag.
+
+        "#});
+    }
+
+    /// A package named on its own that shares its group with a package of an
+    /// included environment has a locked package in its group, which the group
+    /// resolves around, so there is nothing to compare pages for and the
+    /// catalog is asked once.
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial(global_events_client)]
+    async fn package_named_alone_in_group_shared_through_include_sends_one_resolve() {
+        let (mut flox, tempdir) = flox_instance();
+        let (subscriber, writer) = test_subscriber_message_only();
+        let server = MockServer::start_async().await;
+        let with_candidate_page = server.mock(|when, then| {
+            when.method("POST")
+                .path("/api/v1/catalog/resolve")
+                .query_param_exists("candidate_pages");
+            then.status(500);
+        });
+        server.mock(|when, then| {
+            when.method("POST").path("/api/v1/catalog/resolve");
+            then.status(200).json_body(
+                recorded_resolve_responses(GENERATED_DATA.join("resolve/curl_hello.yaml"))
+                    .remove(0),
+            );
+        });
+        flox.floxhub_client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        let base_dir = tempdir.path().join("base");
+        std::fs::create_dir(&base_dir).unwrap();
+        let mut base = new_named_path_environment_in(
+            &flox,
+            &with_latest_schema(indoc! {r#"
+                [install]
+                curl.pkg-path = "curl"
+            "#}),
+            &base_dir,
+            "base",
+        );
+        base.lockfile(&flox).unwrap();
+        let mut environment = new_named_path_environment(
+            &flox,
+            &with_latest_schema(formatdoc! {r#"
+                [install]
+                hello.pkg-path = "hello"
+
+                [include]
+                environments = [{{ dir = "{}" }}]
+            "#, base_dir.display()}),
+            "name",
+        );
+        environment.lockfile(&flox).unwrap();
+
+        Upgrade {
+            environment: EnvironmentSelect::Dir(environment.parent_path().unwrap()),
+            dry_run: true,
+            groups_or_iids: vec!["hello".to_string()],
+        }
+        .handle(flox)
+        .with_subscriber(subscriber)
+        .await
+        .unwrap();
+
+        with_candidate_page.assert_calls(0);
+        assert_eq!(
+            writer.to_string(),
+            "No upgrades available for the specified packages in 'name'.\n"
+        );
+    }
+
+    /// With something to upgrade in a group of several packages, the upgrade
+    /// sends one resolve, without candidate pages.
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial(global_events_client)]
+    async fn sends_one_resolve_without_candidate_pages_when_something_upgrades() {
+        let (mut flox, _tempdir) = flox_instance();
+        let (subscriber, writer) = test_subscriber_message_only();
+        let mut environment = new_named_path_environment(
+            &flox,
+            &with_latest_schema(indoc! {r#"
+                [install]
+                curl.pkg-path = "curl"
+                hello.pkg-path = "hello"
+            "#}),
+            "name",
+        );
+        flox.floxhub_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/curl_hello.yaml")).await;
+        environment.lockfile(&flox).unwrap();
+        let server = MockServer::start_async().await;
+        let with_candidate_pages = server.mock(|when, then| {
+            when.method("POST")
+                .path("/api/v1/catalog/resolve")
+                .query_param_exists("candidate_pages");
+            then.status(500);
+        });
+        let without_candidate_pages = server.mock(|when, then| {
+            when.method("POST").path("/api/v1/catalog/resolve");
+            then.status(200).json_body(
+                recorded_resolve_responses(
+                    GENERATED_DATA.join("resolve/curl_three_systems_after_hello.yaml"),
+                )
+                .remove(0),
+            );
+        });
+        flox.floxhub_client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+
+        Upgrade {
+            environment: EnvironmentSelect::Dir(environment.parent_path().unwrap()),
+            dry_run: true,
+            groups_or_iids: Vec::new(),
+        }
+        .handle(flox)
+        .with_subscriber(subscriber)
+        .await
+        .unwrap();
+
+        with_candidate_pages.assert_calls(0);
+        without_candidate_pages.assert_calls(1);
+        assert_eq!(writer.to_string(), indoc! {"
+            Dry run: 1 version change and 1 rebuild in 'name':
+            - curl: 8.23.0 -> 8.20.0
+            - hello: 2.12.3 (rebuild, rev 2026-11-17 -> 2026-07-05)
+
+            To apply these changes, run upgrade without the '--dry-run' flag.
+
+        "});
     }
 
     /// Run an upgrade of an environment that only has upgrades on other systems
