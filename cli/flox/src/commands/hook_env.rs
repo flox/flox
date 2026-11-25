@@ -999,7 +999,8 @@ async fn prompt_for_auto_activation(project_dirs: &[PathBuf]) -> Result<AutoActi
 /// The emitted command is itself evaluated by the shell's prompt hook, and
 /// runs `flox activate` with stdout captured — which selects in-place mode —
 /// so this reuses the full activation path (hooks, services, attach
-/// semantics) of `eval "$(flox activate)"`.
+/// semantics) of `eval "$(flox activate)"`. `--from-hook` marks the
+/// activation as launched by the hook rather than typed by the user.
 ///
 /// It runs flox through [`FLOX_BIN_FOR_SHELL`], the same command the hook
 /// used to start this process. `command` (`exec` in tcsh) keeps a user
@@ -1012,19 +1013,19 @@ fn write_activate_command(shell: Shell, project_dir: &Path, writer: &mut impl Wr
         Shell::Bash | Shell::Zsh => {
             writeln!(
                 writer,
-                r#"eval "$(command {escaped_bin} activate --dir {escaped_dir})";"#
+                r#"eval "$(command {escaped_bin} activate --dir {escaped_dir} --from-hook)";"#
             )?;
         },
         Shell::Fish => {
             writeln!(
                 writer,
-                "command {escaped_bin} activate --dir {escaped_dir} | source;"
+                "command {escaped_bin} activate --dir {escaped_dir} --from-hook | source;"
             )?;
         },
         Shell::Tcsh => {
             writeln!(
                 writer,
-                r#"eval "`exec {escaped_bin} activate --dir {escaped_dir}`";"#
+                r#"eval "`exec {escaped_bin} activate --dir {escaped_dir} --from-hook`";"#
             )?;
         },
     }
@@ -1841,21 +1842,40 @@ mod tests {
         });
     }
 
+    // The directory is passed through `shell_escape` (a space is the canonical
+    // needs-quoting case; the crate's own tests cover the rest), and the
+    // activation is marked `--from-hook` in each shell's wrapping.
     #[test]
-    fn activate_command_is_shell_escaped() {
-        // A smoke test that the directory is passed through `shell_escape` and
-        // the `eval "$(...)"` wrapping stays intact; a space is the canonical
-        // needs-quoting case. The full range of shell-significant characters
-        // (`&`, `;`, `$`, quotes, globs, ...) is exercised by the
-        // `shell-escape` crate's own tests, not re-tested here.
+    fn activate_command_bash_is_shell_escaped_and_marked_from_hook() {
+        let bin = shell_escape::escape(Cow::Borrowed(FLOX_BIN_FOR_SHELL.as_str()));
         let mut buf = Vec::new();
         write_activate_command(Shell::Bash, Path::new("/home/user/my proj"), &mut buf).unwrap();
-        let script = String::from_utf8(buf).unwrap();
-        assert!(
-            script.contains("activate --dir '/home/user/my proj'"),
-            "{script}"
+        assert_eq!(
+            String::from_utf8(buf).unwrap(),
+            format!("eval \"$(command {bin} activate --dir '/home/user/my proj' --from-hook)\";\n")
         );
-        assert!(script.starts_with(r#"eval "$(command "#), "{script}");
+    }
+
+    #[test]
+    fn activate_command_fish_is_shell_escaped_and_marked_from_hook() {
+        let bin = shell_escape::escape(Cow::Borrowed(FLOX_BIN_FOR_SHELL.as_str()));
+        let mut buf = Vec::new();
+        write_activate_command(Shell::Fish, Path::new("/home/user/my proj"), &mut buf).unwrap();
+        assert_eq!(
+            String::from_utf8(buf).unwrap(),
+            format!("command {bin} activate --dir '/home/user/my proj' --from-hook | source;\n")
+        );
+    }
+
+    #[test]
+    fn activate_command_tcsh_is_shell_escaped_and_marked_from_hook() {
+        let bin = shell_escape::escape(Cow::Borrowed(FLOX_BIN_FOR_SHELL.as_str()));
+        let mut buf = Vec::new();
+        write_activate_command(Shell::Tcsh, Path::new("/home/user/my proj"), &mut buf).unwrap();
+        assert_eq!(
+            String::from_utf8(buf).unwrap(),
+            format!("eval \"`exec {bin} activate --dir '/home/user/my proj' --from-hook`\";\n")
+        );
     }
 
     #[test]

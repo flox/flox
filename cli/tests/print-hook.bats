@@ -199,6 +199,25 @@ print_hook_unusable_environment_setup() {
   assert_output --partial complete
 }
 
+# `print-hook` is the outermost invocation, so it warns a logged-out user once,
+# and the activations the hook launches afterwards stay quiet even though no
+# environment is active to mark them as nested.
+# bats test_tags=print-hook:auto-activate:logged-out
+@test "print-hook: logged-out advisory is not repeated by hook-launched activations" {
+  print_hook_project_setup
+  unset FLOX_FLOXHUB_TOKEN
+  run bash -c '
+    export FLOX_SHELL=$(command -v bash)
+    eval "$($FLOX_BIN activate print-hook)"
+    cd "$PROJECT_DIR"
+    _flox_hook
+    [[ $FLOX_ENV_PROJECT == "$PROJECT_DIR" ]] || exit 1
+  '
+  assert_success
+  run grep -c "You are not logged in to FloxHub" <<< "$output"
+  assert_output "1"
+}
+
 # bats test_tags=print-hook:auto-activate:zsh
 @test "print-hook: zsh detects the caller and preserves hooks and fork ownership" {
   print_hook_project_setup

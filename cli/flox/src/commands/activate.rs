@@ -133,6 +133,18 @@ impl Activate {
         }
     }
 
+    /// Whether the prompt hook launched this activation for a directory it
+    /// entered, rather than the user running it.
+    pub fn launched_by_hook(&self) -> bool {
+        matches!(
+            self,
+            Self::Environment {
+                subcommand_or_options: ActivateSubcommandOrOptions::ActivateOptions { options },
+                ..
+            } if options.from_hook
+        )
+    }
+
     fn print_hook(config: &Config) -> Result<()> {
         if config.flox.disable_hook.unwrap_or(false) {
             bail!(indoc! {"
@@ -213,6 +225,10 @@ pub struct ActivateOptions {
     /// Activate a FloxHub environment at a specific generation.
     #[bpaf(long, short)]
     pub generation: Option<GenerationId>,
+
+    /// Set by the prompt hook on the activations it launches.
+    #[bpaf(long("from-hook"), hide)]
+    pub from_hook: bool,
 
     #[bpaf(external(command_select), optional)]
     pub command: Option<CommandSelect>,
@@ -1326,6 +1342,7 @@ mod tests {
             add_sbin: false,
             mode: None,
             generation: None,
+            from_hook: false,
             command: None,
         }
     }
