@@ -290,6 +290,29 @@ pub trait CatalogClientTrait {
         original_url: impl AsRef<str> + Send + Sync,
     ) -> Result<(), FloxhubClientError>;
 
+    /// Archive a package in a user catalog, recording an optional reason and
+    /// replacement.
+    ///
+    /// Returns whether the package changed, which it does not when it was
+    /// already archived with the same reason and replacement.
+    async fn archive_package(
+        &self,
+        catalog_name: impl AsRef<str> + Send + Sync,
+        package_name: impl AsRef<str> + Send + Sync,
+        reason: Option<String>,
+        replacement: Option<String>,
+    ) -> Result<bool, FloxhubClientError>;
+
+    /// Unarchive a package in a user catalog.
+    ///
+    /// Returns whether the package changed, which it does not when it was
+    /// not archived.
+    async fn unarchive_package(
+        &self,
+        catalog_name: impl AsRef<str> + Send + Sync,
+        package_name: impl AsRef<str> + Send + Sync,
+    ) -> Result<bool, FloxhubClientError>;
+
     /// Publish a build of a user package.
     ///
     /// Returns a [`PublishReceipt`] carrying any warnings the server
@@ -660,6 +683,62 @@ impl CatalogClientTrait for FloxhubClient {
         Ok(())
     }
 
+    async fn archive_package(
+        &self,
+        catalog_name: impl AsRef<str> + Send + Sync,
+        package_name: impl AsRef<str> + Send + Sync,
+        reason: Option<String>,
+        replacement: Option<String>,
+    ) -> Result<bool, FloxhubClientError> {
+        let catalog = str_to_catalog_name(catalog_name)?;
+        let package = str_to_package_name(package_name)?;
+        let invalid = |field: &str, err: api_types::error::ConversionError| {
+            FloxhubClientError::APIError(APIError::InvalidRequest(format!(
+                "{field} does not meet API requirements: {err}."
+            )))
+        };
+        let body = api_types::ArchiveRequest {
+            message: reason
+                .map(api_types::Message::try_from)
+                .transpose()
+                .map_err(|err| invalid("reason", err))?,
+            replacement: replacement
+                .map(api_types::Replacement::try_from)
+                .transpose()
+                .map_err(|err| invalid("replacement", err))?,
+        };
+        let response = self
+            .catalog
+            .archive_catalog_package_api_v1_catalog_catalogs_catalog_name_packages_package_name_archive_put(
+                &catalog,
+                &package,
+                Some(&body),
+            )
+            .await
+            .map_api_error()
+            .await?;
+        Ok(response.into_inner().changed)
+    }
+
+    async fn unarchive_package(
+        &self,
+        catalog_name: impl AsRef<str> + Send + Sync,
+        package_name: impl AsRef<str> + Send + Sync,
+    ) -> Result<bool, FloxhubClientError> {
+        let catalog = str_to_catalog_name(catalog_name)?;
+        let package = str_to_package_name(package_name)?;
+        let response = self
+            .catalog
+            .unarchive_catalog_package_api_v1_catalog_catalogs_catalog_name_packages_package_name_archive_delete(
+                &catalog,
+                &package,
+            )
+            .await
+            .map_api_error()
+            .await?;
+        Ok(response.into_inner().changed)
+    }
+
     async fn publish_build(
         &self,
         catalog_name: impl AsRef<str> + Send + Sync,
@@ -769,7 +848,7 @@ pub fn str_to_catalog_name(
 ) -> Result<api_types::CatalogName, FloxhubClientError> {
     api_types::CatalogName::from_str(name.as_ref()).map_err(|_e| {
         FloxhubClientError::APIError(APIError::InvalidRequest(format!(
-            "catalog name {} does not meet API requirements.",
+            "catalog name '{}' does not meet API requirements.",
             name.as_ref()
         )))
     })
@@ -781,7 +860,7 @@ pub fn str_to_package_name(
 ) -> Result<api_types::PackageName, FloxhubClientError> {
     api_types::PackageName::from_str(name.as_ref()).map_err(|_e| {
         FloxhubClientError::APIError(APIError::InvalidRequest(format!(
-            "package name {} does not meet API requirements.",
+            "package name '{}' does not meet API requirements.",
             name.as_ref()
         )))
     })
@@ -2190,5 +2269,79 @@ pub mod tests {
             .expect("expected Ok");
 
         mock.assert();
+    }
+
+    const ARCHIVE_PATH: &str = "/api/v1/catalog/catalogs/myorg/packages/mypkg/archive";
+
+    #[tokio::test]
+    async fn archive_package_sends_only_the_given_values() {
+        for (reason, replacement, body) in [
+            (None, None, json!({})),
+            (Some("superseded"), None, json!({ "message": "superseded" })),
+            (
+                None,
+                Some("neworg/mypkg"),
+                json!({ "replacement": "neworg/mypkg" }),
+            ),
+            (None, Some("hello"), json!({ "replacement": "hello" })),
+            (
+                Some("superseded"),
+                Some("neworg/mypkg"),
+                json!({ "message": "superseded", "replacement": "neworg/mypkg" }),
+            ),
+        ] {
+            let server = MockServer::start_async().await;
+            let mock = server.mock(|when, then| {
+                when.method("PUT")
+                    .path(ARCHIVE_PATH)
+                    .json_body(body.clone());
+                then.status(200).json_body(json!({ "changed": true }));
+            });
+            let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
+
+            let changed = client
+                .archive_package(
+                    "myorg",
+                    "mypkg",
+                    reason.map(str::to_string),
+                    replacement.map(str::to_string),
+                )
+                .await
+                .unwrap();
+
+            mock.assert();
+            assert!(changed, "{body}");
+        }
+    }
+
+    #[tokio::test]
+    async fn archive_package_rejects_values_over_the_api_limits() {
+        for (reason, replacement, expected) in [
+            (
+                "a".repeat(1025),
+                "hello".to_string(),
+                "Invalid Request: reason does not meet API requirements: longer than 1024 characters.",
+            ),
+            (
+                "superseded".to_string(),
+                "a".repeat(257),
+                "Invalid Request: replacement does not meet API requirements: longer than 256 characters.",
+            ),
+        ] {
+            let server = MockServer::start_async().await;
+            let mock = server.mock(|when, then| {
+                when.method("PUT").path(ARCHIVE_PATH);
+                then.status(200).json_body(json!({ "changed": true }));
+            });
+            let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
+
+            let result = client
+                .archive_package("myorg", "mypkg", Some(reason), Some(replacement))
+                .await
+                .map_err(|err| err.to_string());
+
+            mock.assert_calls(0);
+            assert_eq!(result, Err(expected.to_string()));
+        }
     }
 }

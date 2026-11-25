@@ -432,6 +432,24 @@ impl CatalogClientTrait for MockClient {
     ) -> Result<CheckBuildResponse, FloxhubClientError> {
         unimplemented!("check_build_already_recorded is not supported in MockClient")
     }
+
+    async fn archive_package(
+        &self,
+        _catalog_name: impl AsRef<str> + Send + Sync,
+        _package_name: impl AsRef<str> + Send + Sync,
+        _reason: Option<String>,
+        _replacement: Option<String>,
+    ) -> Result<bool, FloxhubClientError> {
+        unimplemented!("archive_package is not supported in MockClient")
+    }
+
+    async fn unarchive_package(
+        &self,
+        _catalog_name: impl AsRef<str> + Send + Sync,
+        _package_name: impl AsRef<str> + Send + Sync,
+    ) -> Result<bool, FloxhubClientError> {
+        unimplemented!("unarchive_package is not supported in MockClient")
+    }
 }
 
 /// An alias so the flox crate doesn't have to depend on the catalog-api crate
