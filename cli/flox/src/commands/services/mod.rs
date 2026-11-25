@@ -416,7 +416,6 @@ pub async fn start_services_with_new_process_compose(
         add_sbin: false,
         mode: Some(activate_mode),
         generation,
-        from_hook: false,
         // this isn't actually used because we pass invocation type below
         command: Some(CommandSelect::ExecCommand {
             command: "true".to_string(),

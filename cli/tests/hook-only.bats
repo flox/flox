@@ -99,27 +99,6 @@ hook_only_project_setup() {
   [ -z "$stderr" ]
 }
 
-# Like an auto-activation in a shell whose hook came from an in-place
-# activation, one launched by the hook stays quiet about being logged out.
-# A command the user runs still prints the reminder.
-@test "hook-only: auto-activation does not print the logged-out reminder" {
-  hook_only_project_setup
-  FLOX_FLOXHUB_TOKEN= run --separate-stderr bash --noprofile --norc -c '
-    set -e
-    export FLOX_SHELL=$(command -v bash)
-    eval "$($FLOX_BIN activate --hook-only)"
-    "$FLOX_BIN" config > /dev/null
-    cd "$PROJECT_DIR"
-    _flox_hook
-    [[ $FLOX_ENV_PROJECT == "$PROJECT_DIR" ]]
-    echo active
-  '
-  assert_success
-  assert_output --partial active
-  run grep -c "You are not logged in to FloxHub" <<< "$stderr"
-  assert_output 1
-}
-
 @test "hook-only: zsh detects the caller and preserves hooks and fork ownership" {
   hook_only_project_setup
   run --separate-stderr zsh -fic '
