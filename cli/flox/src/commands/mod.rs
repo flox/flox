@@ -2197,6 +2197,12 @@ mod subcommand_name_tests {
         assert_eq!(command.subcommand_name(), "activate::deny");
     }
 
+    #[test]
+    fn activate_print_hook_uses_parent_child_join_encoding() {
+        let command = parse_command(&["activate", "print-hook"]);
+        assert_eq!(command.subcommand_name(), "activate::print-hook");
+    }
+
     /// `flox build` has three pseudo-subcommands — `clean`,
     /// `import-nixpkgs`, and `update-catalogs` — that the legacy
     /// stream stamps as `build::clean` / `build::import-nixpkgs` /

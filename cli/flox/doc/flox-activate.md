@@ -111,6 +111,8 @@ file (for example `~/.bashrc`, `~/.zshrc`, `~/.config/fish/config.fish`, or
 `~/.tcshrc`).
 If you already activate a default or other environment in-place at startup,
 the hook is already installed.
+To install the hook without activating an environment, see
+[`flox-activate-print-hook(1)`](./flox-activate-print-hook.md).
 
 Run `flox config --set disable_hook true` to opt out of the hook entirely,
 which both disables auto-activation and other features like `flox deactivate`.
@@ -358,6 +360,7 @@ eval "$(flox activate)"
 [`flox-develop(1)`](./flox-develop.md),
 [`flox-activate-allow(1)`](./flox-activate-allow.md),
 [`flox-activate-deny(1)`](./flox-activate-deny.md),
+[`flox-activate-print-hook(1)`](./flox-activate-print-hook.md),
 [`flox-config(1)`](./flox-config.md),
 [`flox-push(1)`](./flox-push.md),
 [`flox-pull(1)`](./flox-pull.md),
