@@ -1408,6 +1408,7 @@ mod tests {
     use std::fs::OpenOptions;
     use std::io::Write;
     use std::os::unix::fs::PermissionsExt;
+    use std::time::{Duration, SystemTime};
 
     use flox_core::activate::mode::ActivateMode;
     use flox_manifest::interfaces::AsLatestSchema;
@@ -1775,18 +1776,30 @@ mod tests {
         assert!(environment.lockfile_if_up_to_date().unwrap().is_none());
     }
 
+    /// Set the mtime of `path` to an hour ago and return the mtime as stored.
+    ///
+    /// Filesystem timestamps can be coarser than the gap between two writes,
+    /// so a rewrite straight after an edit may keep the same mtime.
+    /// Backdating first means any rewrite shows up as a changed mtime.
+    /// The filesystem may also truncate the time it stores, so read it back
+    /// rather than returning the requested time.
+    fn backdate_mtime(path: &Path) -> SystemTime {
+        fs::File::options()
+            .write(true)
+            .open(path)
+            .unwrap()
+            .set_modified(SystemTime::now() - Duration::from_secs(60 * 60))
+            .unwrap();
+        path.metadata().unwrap().modified().unwrap()
+    }
+
     #[test]
     fn lock_does_not_write_lockfile_if_unchanged() {
         let (flox, _temp_dir_handle) = flox_instance();
         let mut environment =
             new_core_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
 
-        let mtime_original = environment
-            .lockfile_path()
-            .metadata()
-            .unwrap()
-            .modified()
-            .unwrap();
+        let mtime_original = backdate_mtime(&environment.lockfile_path());
 
         let _ = environment.lock(&flox).unwrap();
 
@@ -1817,17 +1830,9 @@ mod tests {
                 .unwrap();
 
             writeln!(lockfile, "\n\n\n",).unwrap();
-
-            // fsync metadata to ensure the mtime is updated
-            lockfile.sync_all().unwrap();
         }
 
-        let mtime_original = environment
-            .lockfile_path()
-            .metadata()
-            .unwrap()
-            .modified()
-            .unwrap();
+        let mtime_original = backdate_mtime(&environment.lockfile_path());
 
         let _ = environment.lock(&flox).unwrap();
 
@@ -1859,17 +1864,9 @@ mod tests {
             let lockfile_path = environment.lockfile_path();
             let mut file = OpenOptions::new().write(true).open(lockfile_path).unwrap();
             file.write_all(lockfile_contents.as_bytes()).unwrap();
-
-            // fsync metadata to ensure the mtime is updated
-            file.sync_all().unwrap();
         }
 
-        let mtime_original = environment
-            .lockfile_path()
-            .metadata()
-            .unwrap()
-            .modified()
-            .unwrap();
+        let mtime_original = backdate_mtime(&environment.lockfile_path());
 
         let _ = environment.lock(&flox).unwrap();
 
