@@ -445,6 +445,7 @@ EOF
     cat << EOF
 ✘ ERROR: resolution failed:$SPACE
 No version compatible with '14.16.1' found for 'nodejs' on 'aarch64-darwin'.
+Run 'flox show nodejs' to see the versions that exist.
 EOF
   )"
 }
