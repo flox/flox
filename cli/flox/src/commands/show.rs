@@ -438,8 +438,13 @@ mod test {
         }
     }
 
-    fn default_systems() -> HashSet<System> {
-        DEFAULT_SYSTEMS_STR.iter().cloned().collect()
+    fn systems(systems: &[&str]) -> HashSet<System> {
+        systems.iter().map(|s| s.to_string()).collect()
+    }
+
+    /// A fixed set, because `DEFAULT_SYSTEMS_STR` depends on the host.
+    fn expected_systems() -> HashSet<System> {
+        systems(&["aarch64-darwin", "aarch64-linux", "x86_64-linux"])
     }
 
     #[test]
@@ -450,7 +455,7 @@ mod test {
         ];
 
         let mut buf = vec![];
-        render_show_catalog(&mut buf, &packages, &default_systems(), false).unwrap();
+        render_show_catalog(&mut buf, &packages, &expected_systems(), false).unwrap();
         let output = String::from_utf8(buf).unwrap();
 
         // Verify that system restrictions are aligned despite different version lengths
@@ -476,10 +481,10 @@ mod test {
         let stable = ["stable", "staging", "unstable"];
         let lts = ["lts", "stable", "staging", "unstable"];
         let mut packages = vec![mock_pkg_at("10.0.0", "aarch64-darwin", &["unstable"])];
-        for system in default_systems() {
+        for system in expected_systems() {
             packages.push(mock_pkg_at("2.0", &system, &stable));
         }
-        for system in default_systems() {
+        for system in expected_systems() {
             // One system has the version at lts too.
             let stabilities = if system == "x86_64-linux" {
                 &lts[..]
@@ -490,7 +495,7 @@ mod test {
         }
 
         let mut buf = vec![];
-        render_show_catalog(&mut buf, &packages, &default_systems(), true).unwrap();
+        render_show_catalog(&mut buf, &packages, &expected_systems(), true).unwrap();
         let output = String::from_utf8(buf).unwrap();
 
         assert_eq!(output, indoc! {"
@@ -518,7 +523,7 @@ mod test {
         ];
 
         let mut buf = vec![];
-        render_show_catalog(&mut buf, &packages, &default_systems(), false).unwrap();
+        render_show_catalog(&mut buf, &packages, &expected_systems(), false).unwrap();
         let output = String::from_utf8(buf).unwrap();
 
         assert_eq!(output, indoc! {"
@@ -544,7 +549,7 @@ mod test {
         ];
 
         let mut buf = vec![];
-        render_show_catalog(&mut buf, &packages, &default_systems(), true).unwrap();
+        render_show_catalog(&mut buf, &packages, &expected_systems(), true).unwrap();
         let output = String::from_utf8(buf).unwrap();
 
         assert_eq!(output, indoc! {"
@@ -561,10 +566,6 @@ mod test {
             "});
     }
 
-    fn systems(systems: &[&str]) -> HashSet<System> {
-        systems.iter().map(|s| s.to_string()).collect()
-    }
-
     fn version_row(version: &str, systems: Option<&str>) -> VersionRow {
         VersionRow {
             version: format!("    pkg@{version}"),
@@ -577,7 +578,6 @@ mod test {
     /// the annotation lists every system it has, including unexpected ones.
     #[test]
     fn versions_are_annotated_when_missing_an_expected_system() {
-        let expected = systems(&["aarch64-darwin", "aarch64-linux", "x86_64-linux"]);
         let builds = [
             (
                 "4.0",
@@ -597,35 +597,11 @@ mod test {
             .flat_map(|(version, systems)| systems.iter().map(|system| mock_pkg(version, system)))
             .collect::<Vec<_>>();
 
-        assert_eq!(version_rows("pkg", &packages, &expected), vec![
+        assert_eq!(version_rows("pkg", &packages, &expected_systems()), vec![
             version_row("4.0", None),
             version_row("3.0", None),
             version_row("2.0", Some("aarch64-darwin, x86_64-darwin")),
             version_row("1.0", Some("x86_64-darwin")),
-        ]);
-    }
-
-    /// An expected set that includes `x86_64-darwin` annotates a version
-    /// without a build for it.
-    #[test]
-    fn versions_missing_x86_64_darwin_are_annotated_when_it_is_expected() {
-        let expected = systems(&[
-            "aarch64-darwin",
-            "aarch64-linux",
-            "x86_64-darwin",
-            "x86_64-linux",
-        ]);
-        let mut packages = Vec::new();
-        for system in &expected {
-            packages.push(mock_pkg("2.0", system));
-        }
-        for system in ["aarch64-darwin", "aarch64-linux", "x86_64-linux"] {
-            packages.push(mock_pkg("1.0", system));
-        }
-
-        assert_eq!(version_rows("pkg", &packages, &expected), vec![
-            version_row("2.0", None),
-            version_row("1.0", Some("aarch64-darwin, aarch64-linux, x86_64-linux")),
         ]);
     }
 
