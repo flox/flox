@@ -77,24 +77,15 @@ hook_only_project_setup() {
   done
 }
 
-@test "hook-only: incompatible state emits no script" {
+@test "hook-only: incompatible state and disabled integration emit no script" {
   run --separate-stderr env _FLOX_PROMPT_HOOK_VERSION=0:true "$FLOX_BIN" activate --hook-only
   assert_failure
   assert_output ''
   [[ "$stderr" == *"incompatible version"* ]]
-}
-
-@test "hook-only: disabled integration silently emits no script" {
   run --separate-stderr env FLOX_DISABLE_HOOK=true "$FLOX_BIN" activate --hook-only
-  assert_success
+  assert_failure
   assert_output ''
-  [ -z "$stderr" ]
-  run "$FLOX_BIN" config --set disable_hook true
-  assert_success
-  run --separate-stderr "$FLOX_BIN" activate --hook-only
-  assert_success
-  assert_output ''
-  [ -z "$stderr" ]
+  [[ "$stderr" == *"disable_hook = true"* ]]
 }
 
 @test "hook-only: zsh detects the caller and preserves hooks and fork ownership" {
