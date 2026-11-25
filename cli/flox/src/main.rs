@@ -1,6 +1,7 @@
 use std::backtrace::BacktraceStatus;
 use std::env;
 use std::fmt::{Debug, Display};
+use std::path::Path;
 use std::process::ExitCode;
 use std::time::Instant;
 
@@ -18,7 +19,7 @@ use commands::{
 };
 use flox_config::Config;
 use flox_core::sentry::init_sentry;
-use flox_core::util::capture_startup_tls_env;
+use flox_core::util::{capture_startup_tls_env, should_reset_home};
 use flox_core::vars::{FLOX_VERSION_STRING, FLOX_VERSION_VAR};
 use flox_events::{EventsHub, LifecycleFields};
 use flox_rust_sdk::flox::FLOX_VERSION;
@@ -362,31 +363,75 @@ impl std::error::Error for Exit {}
 /// may write into your user's home (instead of /root).
 /// Resetting `$USER`/`$HOME` will solve that.
 fn set_user() -> Result<()> {
-    {
-        let effective_uid = nix::unistd::geteuid();
-        let user_var = env::var("USER").unwrap_or_default();
+    let effective_uid = nix::unistd::geteuid();
+    let user_var = env::var("USER").ok();
 
-        if let Some(effective_user) = nix::unistd::User::from_uid(nix::unistd::geteuid())? {
-            if user_var != effective_user.name {
-                debug!(user_old = %user_var, user = %effective_user.name, home = ?effective_user.dir, "Resetting USER and HOME environment variables");
+    if let Some(effective_user) = nix::unistd::User::from_uid(effective_uid)? {
+        match user_var {
+            Some(ref old_user) if old_user != &effective_user.name => {
+                debug!(
+                    user_old = %old_user,
+                    user = %effective_user.name,
+                    "Resetting USER environment variable"
+                );
                 unsafe {
-                    env::set_var("USER", effective_user.name);
-                    env::set_var("HOME", effective_user.dir);
+                    env::set_var("USER", &effective_user.name);
+                }
+
+                let current_home = env::var_os("HOME");
+                let stale_user_home = nix::unistd::User::from_name(old_user)?
+                    .map(|u| u.dir);
+
+                if should_reset_home(
+                    current_home.as_deref().map(Path::new),
+                    stale_user_home.as_deref(),
+                ) {
+                    debug!(
+                        home = ?effective_user.dir,
+                        "Resetting HOME environment variable"
+                    );
+                    unsafe {
+                        env::set_var("HOME", &effective_user.dir);
+                    }
                 }
             }
-        } else {
-            // Corporate LDAP environments rely on finding nss_ldap in
-            // ld.so.cache *or* by configuring nscd to perform the LDAP
-            // lookups instead. The Nix version of glibc has been modified
-            // to disable ld.so.cache, so if nscd isn't configured to do
-            // this then ldap access to the passwd map will not work.
-            // Bottom line - don't abort or warn if we cannot find a passwd
-            // entry for the euid, but do log it in debug output so that we can
-            // diagnose whether it has contributed to user reported issues.
-            debug!(euid = %effective_uid, user = %user_var, "Unable to get passwd entry for USER and HOME check");
-        };
-        Ok(())
+            None => {
+                debug!(
+                    user = %effective_user.name,
+                    "Setting unset USER environment variable"
+                );
+                unsafe {
+                    env::set_var("USER", &effective_user.name);
+                }
+
+                if env::var_os("HOME").is_none() {
+                    debug!(
+                        home = ?effective_user.dir,
+                        "Setting unset HOME environment variable"
+                    );
+                    unsafe {
+                        env::set_var("HOME", &effective_user.dir);
+                    }
+                }
+            }
+            _ => {}
+        }
+    } else {
+        // Corporate LDAP environments rely on finding nss_ldap in
+        // ld.so.cache *or* by configuring nscd to perform the LDAP
+        // lookups instead. The Nix version of glibc has been modified
+        // to disable ld.so.cache, so if nscd isn't configured to do
+        // this then ldap access to the passwd map will not work.
+        // Bottom line - don't abort or warn if we cannot find a passwd
+        // entry for the euid, but do log it in debug output so that we can
+        // diagnose whether it has contributed to user reported issues.
+        debug!(
+            euid = %effective_uid,
+            user = ?user_var,
+            "Unable to get passwd entry for USER and HOME check"
+        );
     }
+    Ok(())
 }
 
 /// Avoid SIGPIPE from killing the process

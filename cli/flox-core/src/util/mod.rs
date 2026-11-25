@@ -3,6 +3,7 @@ pub mod message;
 use std::collections::HashMap;
 use std::env;
 use std::ffi::OsString;
+use std::path::Path;
 use std::process::Command;
 use std::sync::OnceLock;
 
@@ -148,6 +149,26 @@ pub fn restore_startup_tls_env(command: &mut Command) {
                 command.env_remove(name);
             },
         }
+    }
+}
+
+/// Decide whether to reset `$HOME` to the effective user's passwd directory.
+///
+/// Returns `true` if `$HOME` is unset, or if `$HOME` matches the passwd home directory
+/// of the stale user (`stale_user_home`).
+///
+/// Returns `false` if `$HOME` was explicitly set to a custom directory (e.g. systemd
+/// service units, `setpriv`, or cron jobs), preserving the caller's explicit configuration.
+pub fn should_reset_home(
+    current_home: Option<&Path>,
+    stale_user_home: Option<&Path>,
+) -> bool {
+    match current_home {
+        None => true,
+        Some(home) => match stale_user_home {
+            Some(stale) => home == stale,
+            None => false,
+        },
     }
 }
 
@@ -319,5 +340,31 @@ mod tests {
             ),
         ]);
         assert_eq!(envs, expected);
+    }
+
+    #[test]
+    fn reset_home_when_home_is_unset() {
+        assert!(should_reset_home(None, None));
+        assert!(should_reset_home(None, Some(Path::new("/home/alice"))));
+    }
+
+    #[test]
+    fn reset_home_when_matches_stale_user_home() {
+        assert!(should_reset_home(
+            Some(Path::new("/home/alice")),
+            Some(Path::new("/home/alice")),
+        ));
+    }
+
+    #[test]
+    fn preserve_home_when_explicitly_set_to_custom_dir() {
+        assert!(!should_reset_home(
+            Some(Path::new("/var/lib/service")),
+            Some(Path::new("/home/alice")),
+        ));
+        assert!(!should_reset_home(
+            Some(Path::new("/var/lib/service")),
+            None,
+        ));
     }
 }

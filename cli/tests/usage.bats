@@ -149,3 +149,10 @@ EOF
   assert_success
   refute_output --partial "beta"
 }
+
+@test "set_user: preserves explicitly-set HOME when USER is unset" {
+  custom_home="${BATS_TEST_TMPDIR}/custom_home"
+  mkdir -p "$custom_home"
+  run env -u USER HOME="$custom_home" "$FLOX_BIN" --version
+  assert_success
+}
