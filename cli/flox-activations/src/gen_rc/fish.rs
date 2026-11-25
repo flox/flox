@@ -296,11 +296,10 @@ pub fn generate_fish_profile_commands(
                     InvocationType::Interactive | InvocationType::InPlace
                 )
             {
-                write!(
-                    writer,
-                    "{}",
-                    crate::hook::fish_hook(&args.flox_bin, args.auto_activate_fish_mode)
-                )?;
+                if let Some(mode) = &args.auto_activate_fish_mode {
+                    writeln!(writer, "set -gx FLOX_AUTO_ACTIVATE_FISH_MODE {mode};")?;
+                }
+                write!(writer, "{}", crate::hook::fish_hook(&args.flox_bin))?;
             }
         },
         Action::Deactivate(_) => {
