@@ -121,7 +121,10 @@ Fish (`~/.config/fish/config.fish`):
 status is-interactive; and flox activate --hook-only | source
 ```
 
-Tcsh (`~/.tcshrc`):
+Tcsh (`~/.tcshrc`).
+Use the block form,
+because tcsh substitutes the body of a one-line `if` even when the condition
+is false:
 
 ```tcsh
 if ( $?prompt ) then
