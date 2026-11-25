@@ -232,8 +232,6 @@ pub fn fish_hook(flox_bin: &str) -> String {
 // passes the running binary's store path instead, which is always safe.
 pub fn tcsh_hook(flox_bin: &str) -> String {
     let flox_bin = tcsh_escape_in_alias(flox_bin);
-    let bash_bin = env!("X_BASH_BIN");
-    let printenv_bin = concat!(env!("COREUTILS"), "/bin/printenv");
     // A tcsh alias body must be a single line, so assemble the statements here
     // and join them with "; " rather than writing one long string literal.
     let hook = [
@@ -247,79 +245,13 @@ pub fn tcsh_hook(flox_bin: &str) -> String {
     ]
     .join("; ");
     let marker = prompt_hook_marker_value(true);
-    let lossy_precmd = tcsh_lossy_alias_test("_flox_previous_precmd");
-    let lossy_cwdcmd = tcsh_lossy_alias_test("_flox_previous_cwdcmd");
-    // Keep user alias bodies in separate, immutable aliases so profiles can save
-    // and restore old wrappers. Retain appended wrappers instead of adding
-    // another native callback, but capture replacement aliases.
-    //
-    // `alias` prints control characters in caret notation (ESC as `^[`) and,
-    // outside a UTF-8 locale, other non-ASCII bytes as `\ooo`, so a captured
-    // body containing either may not be the original. Such a captured callback is
-    // dropped, as before callbacks were preserved, rather than replayed as
-    // visible text at every prompt.
-    //
-    // This migration can be removed after a few releases. PROMPT_HOOK_VERSION
-    // stays unchanged because there are so few tcsh users: a bump would require
-    // users of every shell to restart for this tcsh-specific change.
-    // Strip only the old native prefix, keeping appended user commands. Pass alias
-    // text as data to pinned Bash because tcsh cannot remove a variable prefix
-    // without splitting or reinterpreting it. Temporary aliases delay command
-    // substitution until migration is needed. Bash -p ignores startup configuration.
     formatdoc!(
         r#"
         setenv {PROMPT_HOOK_VERSION_ENV} {marker};
-        alias _flox_hook '{hook}';
-        if ( ! $?_flox_hook_alias_generation ) set _flox_hook_alias_generation=0;
-        @ _flox_hook_alias_generation++;
-        set _flox_saved_precmd_name="_flox_saved_precmd_$_flox_hook_alias_generation";
-        set _flox_saved_cwdcmd_name="_flox_saved_cwdcmd_$_flox_hook_alias_generation";
-        set _flox_previous_precmd="`alias precmd`";
-        set _flox_previous_cwdcmd="`alias cwdcmd`";
-        setenv _FLOX_MIGRATION_CODE 'printf "%s" "${{_FLOX_LEGACY_ALIAS#*; if ( \$\?_flox_exit ) exit}}"';
-        alias _flox_migrate_precmd 'setenv _FLOX_LEGACY_ALIAS $_flox_previous_precmd:q; set _flox_previous_precmd="`{printenv_bin} _FLOX_MIGRATION_CODE | {bash_bin} -p`"; unsetenv _FLOX_LEGACY_ALIAS';
-        if ( "$_flox_previous_precmd" =~ 'if ( ! $?{FLOX_INVOCATION_TYPES_VAR} ) set {FLOX_INVOCATION_TYPES_VAR}=*; if ( $?_flox_exit ) exit*' ) eval _flox_migrate_precmd;
-        unalias _flox_migrate_precmd;
-        alias _flox_migrate_cwdcmd 'setenv _FLOX_LEGACY_ALIAS $_flox_previous_cwdcmd:q; set _flox_previous_cwdcmd="`{printenv_bin} _FLOX_MIGRATION_CODE | {bash_bin} -p`"; unsetenv _FLOX_LEGACY_ALIAS';
-        if ( "$_flox_previous_cwdcmd" =~ 'if ( ! $?{FLOX_INVOCATION_TYPES_VAR} ) set {FLOX_INVOCATION_TYPES_VAR}=*; if ( $?_flox_exit ) exit*' ) eval _flox_migrate_cwdcmd;
-        unalias _flox_migrate_cwdcmd;
-        if ( "$_flox_previous_precmd" !~ '*_flox_saved_precmd*; _flox_hook*' && ( {lossy_precmd} ) ) set _flox_previous_precmd="";
-        if ( "$_flox_previous_cwdcmd" !~ '*_flox_saved_cwdcmd*; _flox_hook*' && ( {lossy_cwdcmd} ) ) set _flox_previous_cwdcmd="";
-        if ( "$_flox_previous_precmd" !~ '*_flox_saved_precmd*; _flox_hook*' ) alias $_flox_saved_precmd_name "$_flox_previous_precmd";
-        if ( "$_flox_previous_cwdcmd" !~ '*_flox_saved_cwdcmd*; _flox_hook*' ) alias $_flox_saved_cwdcmd_name "$_flox_previous_cwdcmd";
-        if ( "$_flox_previous_precmd" !~ '*_flox_saved_precmd*; _flox_hook*' ) alias precmd "$_flox_saved_precmd_name; _flox_hook";
-        if ( "$_flox_previous_cwdcmd" !~ '*_flox_saved_cwdcmd*; _flox_hook*' ) alias cwdcmd "$_flox_saved_cwdcmd_name; _flox_hook";
-        unset _flox_previous_precmd _flox_previous_cwdcmd _flox_saved_precmd_name _flox_saved_cwdcmd_name;
-        unsetenv _FLOX_MIGRATION_CODE;
+        alias precmd '{hook}';
+        alias cwdcmd '{hook}';
         "#
     )
-}
-
-/// A tcsh expression that is true when the `alias` output held in the shell
-/// variable `var` contains caret notation (`^[`, `^G`, `^?`, ...) or the
-/// octal escape `alias` prints for a byte from 0x80 to 0xff (`\2xx`, `\3xx`),
-/// so that it may not be the alias's real body. Octal the user typed, such as
-/// `\033`, prints as itself and is kept.
-///
-/// An existing Flox wrapper is never captured again, so callers apply this
-/// only to a capture that is not one.
-///
-/// The patterns list characters instead of using ranges such as `[@-_]`,
-/// because tcsh evaluates ranges by locale collation and `^[` then goes
-/// unmatched under `en_US.UTF-8`. They stay unquoted because tcsh did not
-/// match quoted bracket expressions after `^`. `]` needs its own pattern.
-fn tcsh_lossy_alias_test(var: &str) -> String {
-    [
-        "*^[@ABCDEFGHIJKLMNOPQRSTUVWXYZ^_?]*",
-        "*^[[]*",
-        r"*^[\\]*",
-        "*^]*",
-        r"*\\[23][01234567][01234567]*",
-    ]
-    .iter()
-    .map(|pattern| format!(r#""${var}" =~ {pattern}"#))
-    .collect::<Vec<_>>()
-    .join(" || ")
 }
 
 /// See [`tcsh_hook`]: backslash-escape what tcsh lets us escape inside the
