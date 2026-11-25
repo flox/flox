@@ -173,10 +173,7 @@ EOF
 # captured text would print it at every prompt instead of setting the title.
 # bats test_tags=hook:tcsh:callbacks
 @test "tcsh: in-place activation drops a callback that alias cannot print faithfully" {
-  # Some tcsh builds default `echo_style` to `both`, so `echo` would expand the
-  # `\033` this test expects to see verbatim in the saved alias.
   printf '%s\n' \
-    'set echo_style = bsd' \
     "setenv FLOX_SHELL \`which tcsh\`" \
     "alias precmd 'echo -n \"$(printf '\033')]0;TITLE$(printf '\007')\"'" \
     "alias cwdcmd 'echo -n \"\\033]2;KEEP\\007\"'" \
