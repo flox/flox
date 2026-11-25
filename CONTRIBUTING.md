@@ -4,8 +4,8 @@
 ```console
 $ git clone https://github.com/flox/flox.git
 $ cd flox
-# Enter Dev Shell
-$ nix develop
+# Enter Dev Shell (--accept-flake-config enables the flake's binary caches)
+$ nix develop --accept-flake-config
 # Build `flox' and its subsystems
 $ just build
 # Run the build
