@@ -94,12 +94,14 @@ pub enum CommandSelect {
 }
 
 #[derive(Bpaf, Clone)]
-pub struct Activate {
-    #[bpaf(external(environment_select), fallback(Default::default()))]
-    pub environment: EnvironmentSelect,
+pub enum Activate {
+    Environment {
+        #[bpaf(external(environment_select), fallback(Default::default()))]
+        environment: EnvironmentSelect,
 
-    #[bpaf(external(activate_subcommand_or_options))]
-    pub subcommand_or_options: ActivateSubcommandOrOptions,
+        #[bpaf(external(activate_subcommand_or_options))]
+        subcommand_or_options: ActivateSubcommandOrOptions,
+    },
 }
 
 impl Activate {
@@ -109,12 +111,18 @@ impl Activate {
     /// continuity the legacy `environment_subcommand_metric!` stream
     /// already used.
     pub fn subcommand_name(&self) -> &'static str {
-        match &self.subcommand_or_options {
-            ActivateSubcommandOrOptions::AutoActivate { auto_activate } => match auto_activate {
+        match self {
+            Self::Environment {
+                subcommand_or_options: ActivateSubcommandOrOptions::AutoActivate { auto_activate },
+                ..
+            } => match auto_activate {
                 AutoActivate::Allow => "activate::allow",
                 AutoActivate::Deny => "activate::deny",
             },
-            ActivateSubcommandOrOptions::ActivateOptions { .. } => "activate",
+            Self::Environment {
+                subcommand_or_options: ActivateSubcommandOrOptions::ActivateOptions { .. },
+                ..
+            } => "activate",
         }
     }
 }
@@ -191,21 +199,31 @@ impl ActivateOptions {
 }
 
 impl Activate {
-    pub async fn handle(self, mut config: Config, mut flox: Flox) -> Result<()> {
-        let options = match self.subcommand_or_options {
-            ActivateSubcommandOrOptions::AutoActivate { auto_activate } => {
-                return self
-                    .handle_auto_activation_subcommand(auto_activate, config, flox)
-                    .await;
+    pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
+        match self {
+            Self::Environment {
+                environment,
+                subcommand_or_options: ActivateSubcommandOrOptions::AutoActivate { auto_activate },
+            } => {
+                Self::handle_auto_activation_subcommand(environment, auto_activate, config, flox)
+                    .await
             },
-            ActivateSubcommandOrOptions::ActivateOptions { options } => {
-                options.validate_service_flags()?;
-                options
-            },
-        };
+            Self::Environment {
+                environment,
+                subcommand_or_options: ActivateSubcommandOrOptions::ActivateOptions { options },
+            } => Self::handle_activation(environment, options, config, flox).await,
+        }
+    }
 
-        let concrete_environment = match self
-            .environment
+    async fn handle_activation(
+        environment: EnvironmentSelect,
+        options: ActivateOptions,
+        mut config: Config,
+        mut flox: Flox,
+    ) -> Result<()> {
+        options.validate_service_flags()?;
+
+        let concrete_environment = match environment
             .to_concrete_environment(&mut flox, options.generation)
             .await
         {
@@ -302,19 +320,18 @@ impl Activate {
                 concrete_environment,
                 invocation_type,
                 Vec::new(),
-                Some(&self.environment),
+                Some(&environment),
             )
             .await
     }
 
     async fn handle_auto_activation_subcommand(
-        self,
+        environment: EnvironmentSelect,
         subcommand: AutoActivate,
         config: Config,
         mut flox: Flox,
     ) -> Result<()> {
-        let concrete_environment = self
-            .environment
+        let concrete_environment = environment
             .to_concrete_environment(&mut flox, None)
             .await
             .context("Failed to find environment")?;
