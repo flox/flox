@@ -11,11 +11,11 @@ flox-activate - activate environments
 # SYNOPSIS
 
 ```text
-flox [<general-options>] activate --hook-only
 flox [<general-options>] activate
      [-d=<path> | -r=<owner>/<name>]
      [-t]
      [--print-script]
+     [--hook-only]
      [--start-services | --no-start-services]
      [--add-sbin]
      [-m=(dev|run)]
@@ -118,31 +118,20 @@ eval "$(flox activate --hook-only)"
 Fish (`~/.config/fish/config.fish`):
 
 ```fish
-status is-interactive; and flox activate --hook-only | source
+flox activate --hook-only | source
 ```
 
-Tcsh (`~/.tcshrc`).
-Use the block form,
-because tcsh substitutes the body of a one-line `if` even when the condition
-is false:
+Tcsh (`~/.tcshrc`):
 
 ```tcsh
-if ( $?prompt ) then
-  eval "`flox activate --hook-only`"
-endif
+eval "`flox activate --hook-only`"
 ```
 
 The shell is detected in the same way as for in-place activation.
 No default environment or FloxHub account is required.
-Generating the code reads your configuration
-(creating the configuration directory if it is missing) and nothing else:
-it does not open an environment, contact FloxHub or any other network service,
-send telemetry, or use Nix.
-It prints nothing when `disable_hook = true`.
+Generating the code does not open an environment, access the network, or
+realize packages with Nix.
 Existing directory permissions and auto-activation settings still apply.
-With the default `auto_activate = prompt`,
-a project does not need to be allowed beforehand;
-Flox asks at the first prompt in its directory.
 
 Initialization itself activates nothing.
 At the first prompt, the hook evaluates the current directory and its ancestors,
@@ -244,9 +233,8 @@ options.
 :  Print shell integration without activating an environment.
    Source the output in an interactive shell to enable auto-activation.
    Allowed environments may activate at the first prompt.
-   Cannot be combined with environment selectors or activation options.
-   Prints nothing and exits successfully when `disable_hook = true`.
-   Fails if the shell was initialized by an incompatible version of Flox.
+   Cannot be combined with environment selectors or activation options,
+   and requires `disable_hook = false`.
 
 `-s`, `--start-services`
 :  Start the services listed in the manifest when activating the environment.
