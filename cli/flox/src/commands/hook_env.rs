@@ -999,7 +999,9 @@ async fn prompt_for_auto_activation(project_dirs: &[PathBuf]) -> Result<AutoActi
 /// The emitted command is itself evaluated by the shell's prompt hook, and
 /// runs `flox activate` with stdout captured — which selects in-place mode —
 /// so this reuses the full activation path (hooks, services, attach
-/// semantics) of `eval "$(flox activate)"`.
+/// semantics) of `eval "$(flox activate)"`. `--from-hook` marks the
+/// activation as launched by the hook, which keeps the logged-out reminder
+/// quiet.
 ///
 /// It runs flox through [`FLOX_BIN_FOR_SHELL`], the same command the hook
 /// used to start this process. `command` (`exec` in tcsh) keeps a user
@@ -1012,19 +1014,19 @@ fn write_activate_command(shell: Shell, project_dir: &Path, writer: &mut impl Wr
         Shell::Bash | Shell::Zsh => {
             writeln!(
                 writer,
-                r#"eval "$(command {escaped_bin} activate --dir {escaped_dir})";"#
+                r#"eval "$(command {escaped_bin} activate --dir {escaped_dir} --from-hook)";"#
             )?;
         },
         Shell::Fish => {
             writeln!(
                 writer,
-                "command {escaped_bin} activate --dir {escaped_dir} | source;"
+                "command {escaped_bin} activate --dir {escaped_dir} --from-hook | source;"
             )?;
         },
         Shell::Tcsh => {
             writeln!(
                 writer,
-                r#"eval "`exec {escaped_bin} activate --dir {escaped_dir}`";"#
+                r#"eval "`exec {escaped_bin} activate --dir {escaped_dir} --from-hook`";"#
             )?;
         },
     }

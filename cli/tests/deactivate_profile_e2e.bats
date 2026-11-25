@@ -165,3 +165,84 @@ EOF
   assert_line "during:bar"
   assert_line "after:unset"
 }
+
+# The last deactivation leaves _FLOX_SOURCED_PROFILE_SCRIPTS set but empty,
+# which tcsh passes on as a bare --already-sourced-env-dirs.
+# bats test_tags=deactivate-profile-e2e,deactivate-profile-e2e:tcsh
+@test "tcsh: profiles run on every activation and deactivation in one shell" {
+  project_setup
+  export PROFILE_LOG="$BATS_TEST_TMPDIR/profile.log"
+  run "$FLOX_BIN" edit -f - <<'EOF'
+schema-version = "1.13.0"
+
+[profile]
+common = 'echo activate-common >> "$PROFILE_LOG"'
+tcsh = 'echo activate-tcsh >> "$PROFILE_LOG"'
+
+[profile.deactivate]
+common = 'echo deactivate-common >> "$PROFILE_LOG"'
+tcsh = 'echo deactivate-tcsh >> "$PROFILE_LOG"'
+EOF
+  assert_success
+  # The host tcsh can be older than the test environment's, such as 6.21 on
+  # macOS, which predates the :Q modifier; test it too where it exists.
+  shells=("$(command -v tcsh)")
+  if [ -x /bin/tcsh ]; then
+    shells+=(/bin/tcsh)
+  fi
+  for shell in "${shells[@]}"; do
+    rm -f "$PROFILE_LOG"
+    FLOX_SHELL="$shell" run --separate-stderr "$shell" -c '
+      eval "`$FLOX_BIN activate --print-script`"
+      setenv _FLOX_INVOCATION_TYPES_WIRE $_FLOX_INVOCATION_TYPES:q
+      eval "`$FLOX_BIN deactivate --print-script-from-env`"
+      unsetenv _FLOX_INVOCATION_TYPES_WIRE
+      eval "`$FLOX_BIN activate --print-script`"
+      setenv _FLOX_INVOCATION_TYPES_WIRE $_FLOX_INVOCATION_TYPES:q
+      eval "`$FLOX_BIN deactivate --print-script-from-env`"
+      unsetenv _FLOX_INVOCATION_TYPES_WIRE
+    '
+    assert_success
+    [[ "$stderr" != *"--already-sourced-env-dirs"* ]]
+    run cat "$PROFILE_LOG"
+    assert_output "$(printf '%s\n' \
+      activate-common activate-tcsh deactivate-tcsh deactivate-common \
+      activate-common activate-tcsh deactivate-tcsh deactivate-common)"
+  done
+}
+
+# A deactivation that finds _FLOX_SOURCED_PROFILE_SCRIPTS set but empty also
+# gets a bare --already-sourced-env-dirs from tcsh.
+# bats test_tags=deactivate-profile-e2e,deactivate-profile-e2e:tcsh
+@test "tcsh: profile.deactivate runs when no sourced profiles are tracked" {
+  project_setup
+  export PROFILE_LOG="$BATS_TEST_TMPDIR/profile.log"
+  run "$FLOX_BIN" edit -f - <<'EOF'
+schema-version = "1.13.0"
+
+[profile.deactivate]
+common = 'echo deactivate-common >> "$PROFILE_LOG"'
+tcsh = 'echo deactivate-tcsh >> "$PROFILE_LOG"'
+EOF
+  assert_success
+  # The host tcsh can be older than the test environment's, such as 6.21 on
+  # macOS, which predates the :Q modifier; test it too where it exists.
+  shells=("$(command -v tcsh)")
+  if [ -x /bin/tcsh ]; then
+    shells+=(/bin/tcsh)
+  fi
+  for shell in "${shells[@]}"; do
+    rm -f "$PROFILE_LOG"
+    FLOX_SHELL="$shell" run --separate-stderr "$shell" -c '
+      eval "`$FLOX_BIN activate --print-script`"
+      set _FLOX_SOURCED_PROFILE_SCRIPTS = ""
+      setenv _FLOX_INVOCATION_TYPES_WIRE $_FLOX_INVOCATION_TYPES:q
+      eval "`$FLOX_BIN deactivate --print-script-from-env`"
+      unsetenv _FLOX_INVOCATION_TYPES_WIRE
+    '
+    assert_success
+    [[ "$stderr" != *"--already-sourced-env-dirs"* ]]
+    run cat "$PROFILE_LOG"
+    assert_output "$(printf '%s\n' deactivate-tcsh deactivate-common)"
+  done
+}

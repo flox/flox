@@ -48,6 +48,7 @@
 
 use std::borrow::Cow;
 
+use flox_core::activate::context::AutoActivateFishMode;
 use flox_core::activate::vars::{FLOX_INVOCATION_TYPES_VAR, FLOX_INVOCATION_TYPES_WIRE_VAR};
 use flox_core::hook_actions::{PROMPT_HOOK_VERSION_ENV, prompt_hook_marker_value};
 use indoc::formatdoc;
@@ -55,6 +56,14 @@ use indoc::formatdoc;
 pub fn bash_hook(flox_bin: &str) -> String {
     let flox_bin = shell_escape::escape(Cow::Borrowed(flox_bin));
     let marker = prompt_hook_marker_value(true);
+    // Bash 5.1+ runs every element of a PROMPT_COMMAND array, so there the
+    // hook counts as registered in any element and is added as its own element,
+    // which keeps `$_` and PIPESTATUS intact for the user's callbacks. Older
+    // Bash runs only element zero, so there the hook counts only in element
+    // zero and is added by prefixing that element's text; a scalar assignment
+    // to an array replaces element zero and keeps the later elements. The
+    // helpers are unset before assigning so a readonly PROMPT_COMMAND, whose
+    // assignment error aborts the block, does not leave them behind.
     formatdoc!(
         r#"
         export {PROMPT_HOOK_VERSION_ENV}={marker};
@@ -67,12 +76,21 @@ pub fn bash_hook(flox_bin: &str) -> String {
           trap - SIGINT;
           return $_prev_exit;
         }};
-        if [[ ";${{PROMPT_COMMAND[*]:-}};" != *";_flox_hook;"* ]]; then
-          if [[ "$(declare -p PROMPT_COMMAND 2>&1)" == "declare -a"* ]]; then
+        if [[ "$(declare -p PROMPT_COMMAND 2>&1)" == "declare -a"* ]] && (( BASH_VERSINFO[0] * 100 + BASH_VERSINFO[1] >= 501 )); then
+          _flox_hook_registered=;
+          for _flox_prompt_command in "${{PROMPT_COMMAND[@]:-}}"; do
+            if [[ ";$_flox_prompt_command;" == *";_flox_hook;"* ]]; then
+              _flox_hook_registered=1;
+              break;
+            fi;
+          done;
+          if [[ -z $_flox_hook_registered ]]; then
+            unset _flox_hook_registered _flox_prompt_command;
             PROMPT_COMMAND=(_flox_hook "${{PROMPT_COMMAND[@]}}");
-          else
-            PROMPT_COMMAND="_flox_hook${{PROMPT_COMMAND:+;$PROMPT_COMMAND}}";
           fi;
+          unset _flox_hook_registered _flox_prompt_command;
+        elif [[ ";${{PROMPT_COMMAND:-}};" != *";_flox_hook;"* ]]; then
+          PROMPT_COMMAND="_flox_hook${{PROMPT_COMMAND:+;$PROMPT_COMMAND}}";
         fi;
         "#
     )
@@ -109,7 +127,7 @@ pub fn zsh_hook(flox_bin: &str) -> String {
     )
 }
 
-pub fn fish_hook(flox_bin: &str) -> String {
+pub fn fish_hook(flox_bin: &str, auto_activate_fish_mode: Option<AutoActivateFishMode>) -> String {
     // Fish's command substitution (flox activate) collapses newlines to spaces,
     // so semicolons are required as statement delimiters to survive. The
     // newlines are kept for readability — fish treats them as whitespace.
@@ -139,9 +157,12 @@ pub fn fish_hook(flox_bin: &str) -> String {
     //   - disable_arrow: no PWD reaction; only prompt-based evaluation.
     let flox_bin = shell_escape::escape(Cow::Borrowed(flox_bin));
     let marker = prompt_hook_marker_value(true);
+    let mode = auto_activate_fish_mode.map_or_else(String::new, |mode| {
+        format!("set -gx FLOX_AUTO_ACTIVATE_FISH_MODE {mode};\n")
+    });
     formatdoc!(
         r#"
-        set -gx {PROMPT_HOOK_VERSION_ENV} {marker};
+        {mode}set -gx {PROMPT_HOOK_VERSION_ENV} {marker};
         function _flox_hook --on-event fish_prompt;
             eval (command {flox_bin} hook-env --shell fish --shell-pid $fish_pid --invocation-types "${FLOX_INVOCATION_TYPES_VAR}" | string collect);
             if test "$FLOX_AUTO_ACTIVATE_FISH_MODE" != "disable_arrow";
@@ -215,6 +236,8 @@ pub fn fish_hook(flox_bin: &str) -> String {
 // passes the running binary's store path instead, which is always safe.
 pub fn tcsh_hook(flox_bin: &str) -> String {
     let flox_bin = tcsh_escape_in_alias(flox_bin);
+    let bash_bin = env!("X_BASH_BIN");
+    let printenv_bin = concat!(env!("COREUTILS"), "/bin/printenv");
     // A tcsh alias body must be a single line, so assemble the statements here
     // and join them with "; " rather than writing one long string literal.
     let hook = [
@@ -228,13 +251,111 @@ pub fn tcsh_hook(flox_bin: &str) -> String {
     ]
     .join("; ");
     let marker = prompt_hook_marker_value(true);
+    let lossy_precmd = tcsh_lossy_alias_test("_flox_previous_precmd");
+    let lossy_cwdcmd = tcsh_lossy_alias_test("_flox_previous_cwdcmd");
+    let lossy_periodic = tcsh_lossy_alias_test("_flox_previous_periodic");
+    // Keep user alias bodies in separate, immutable aliases so profiles can save
+    // and restore old wrappers. Retain appended wrappers instead of adding
+    // another native callback, but capture replacement aliases.
+    //
+    // `alias` prints control characters in caret notation (ESC as `^[`) and,
+    // outside a UTF-8 locale, other non-ASCII bytes as `\ooo`, so a captured
+    // body containing either may not be the original. Such a captured callback is
+    // dropped, as before callbacks were preserved, rather than replayed as
+    // visible text at every prompt.
+    //
+    // This migration can be removed after a few releases. PROMPT_HOOK_VERSION
+    // stays unchanged because there are so few tcsh users: a bump would require
+    // users of every shell to restart for this tcsh-specific change.
+    // Strip only the old native prefix, keeping appended user commands. Pass alias
+    // text as data to pinned Bash because tcsh cannot remove a variable prefix
+    // without splitting or reinterpreting it. Temporary aliases delay command
+    // substitution until migration is needed. Bash -p ignores startup configuration.
+    //
+    // A tcsh error in the user's `precmd` callback makes tcsh remove `precmd`,
+    // and with it the prompt hook. The wrapper therefore marks
+    // `_flox_precmd_pending` before the callback, storing `$status` in the mark
+    // and restoring it so the callback still reads the previous command's
+    // status, and clears the mark after the callback. The restore discards its
+    // output: with `printexitvalue` set, tcsh would otherwise print `Exit N`
+    // again at every prompt. A mark that survives to
+    // the next prompt means the callback did not finish. `_flox_precmd_check`
+    // runs from `periodic`, which tcsh runs before `precmd` at each prompt
+    // unless `tperiod` is set. It tests the mark without forking, and only
+    // when the mark survived does `_flox_precmd_repair` read `precmd`: if
+    // `precmd` is gone, the hook is registered again without the faulty
+    // callback. A `precmd` that is still present, for example after Ctrl-C
+    // interrupted the callback, is left alone.
+    //
+    // `periodic` is wrapped only once a user `precmd` callback has been
+    // wrapped, as recorded by `_flox_precmd_guard`, and it is wrapped again
+    // if something replaces it later. A `periodic` that `alias` cannot print
+    // faithfully is left unwrapped, without repair.
     formatdoc!(
         r#"
         setenv {PROMPT_HOOK_VERSION_ENV} {marker};
-        alias precmd '{hook}';
-        alias cwdcmd '{hook}';
+        alias _flox_hook '{hook}';
+        alias _flox_saved_precmd_0 '';
+        alias _flox_precmd_repair 'if ( "`alias precmd`" == "" ) alias precmd "_flox_saved_precmd_0; _flox_hook"; unset _flox_precmd_pending';
+        alias _flox_precmd_check 'if ( $?_flox_precmd_pending ) eval _flox_precmd_repair';
+        if ( ! $?_flox_hook_alias_generation ) set _flox_hook_alias_generation=0;
+        @ _flox_hook_alias_generation++;
+        set _flox_saved_precmd_name="_flox_saved_precmd_$_flox_hook_alias_generation";
+        set _flox_saved_cwdcmd_name="_flox_saved_cwdcmd_$_flox_hook_alias_generation";
+        set _flox_saved_periodic_name="_flox_saved_periodic_$_flox_hook_alias_generation";
+        set _flox_previous_precmd="`alias precmd`";
+        set _flox_previous_cwdcmd="`alias cwdcmd`";
+        set _flox_previous_periodic="`alias periodic`";
+        setenv _FLOX_MIGRATION_CODE 'printf "%s" "${{_FLOX_LEGACY_ALIAS#*; if ( \$\?_flox_exit ) exit}}"';
+        alias _flox_migrate_precmd 'setenv _FLOX_LEGACY_ALIAS $_flox_previous_precmd:q; set _flox_previous_precmd="`{printenv_bin} _FLOX_MIGRATION_CODE | {bash_bin} -p`"; unsetenv _FLOX_LEGACY_ALIAS';
+        if ( "$_flox_previous_precmd" =~ 'if ( ! $?{FLOX_INVOCATION_TYPES_VAR} ) set {FLOX_INVOCATION_TYPES_VAR}=*; if ( $?_flox_exit ) exit*' ) eval _flox_migrate_precmd;
+        unalias _flox_migrate_precmd;
+        alias _flox_migrate_cwdcmd 'setenv _FLOX_LEGACY_ALIAS $_flox_previous_cwdcmd:q; set _flox_previous_cwdcmd="`{printenv_bin} _FLOX_MIGRATION_CODE | {bash_bin} -p`"; unsetenv _FLOX_LEGACY_ALIAS';
+        if ( "$_flox_previous_cwdcmd" =~ 'if ( ! $?{FLOX_INVOCATION_TYPES_VAR} ) set {FLOX_INVOCATION_TYPES_VAR}=*; if ( $?_flox_exit ) exit*' ) eval _flox_migrate_cwdcmd;
+        unalias _flox_migrate_cwdcmd;
+        if ( "$_flox_previous_precmd" !~ '*_flox_saved_precmd*; _flox_hook*' && ( {lossy_precmd} ) ) set _flox_previous_precmd="";
+        if ( "$_flox_previous_cwdcmd" !~ '*_flox_saved_cwdcmd*; _flox_hook*' && ( {lossy_cwdcmd} ) ) set _flox_previous_cwdcmd="";
+        if ( "$_flox_previous_periodic" !~ '*_flox_saved_periodic*; _flox_precmd_check*' && ( {lossy_periodic} ) ) set _flox_periodic_lossy;
+        if ( "$_flox_previous_precmd" != "" && "$_flox_previous_precmd" !~ '*_flox_saved_precmd*; _flox_hook*' ) set _flox_precmd_guard;
+        set _flox_wrap_periodic=0;
+        if ( $?_flox_precmd_guard && ! $?_flox_periodic_lossy && "$_flox_previous_periodic" !~ '*_flox_saved_periodic*; _flox_precmd_check*' ) set _flox_wrap_periodic=1;
+        if ( "$_flox_previous_precmd" !~ '*_flox_saved_precmd*; _flox_hook*' ) alias $_flox_saved_precmd_name "$_flox_previous_precmd";
+        if ( "$_flox_previous_cwdcmd" !~ '*_flox_saved_cwdcmd*; _flox_hook*' ) alias $_flox_saved_cwdcmd_name "$_flox_previous_cwdcmd";
+        if ( $_flox_wrap_periodic ) alias $_flox_saved_periodic_name "$_flox_previous_periodic";
+        if ( "$_flox_previous_precmd" !~ '*_flox_saved_precmd*; _flox_hook*' ) alias precmd 'set _flox_precmd_pending=$status; set status=$_flox_precmd_pending >& /dev/null; '"$_flox_saved_precmd_name"'; unset _flox_precmd_pending; _flox_hook';
+        if ( "$_flox_previous_cwdcmd" !~ '*_flox_saved_cwdcmd*; _flox_hook*' ) alias cwdcmd "$_flox_saved_cwdcmd_name; _flox_hook";
+        if ( $_flox_wrap_periodic ) alias periodic "$_flox_saved_periodic_name; _flox_precmd_check";
+        unset _flox_previous_precmd _flox_previous_cwdcmd _flox_previous_periodic _flox_saved_precmd_name _flox_saved_cwdcmd_name _flox_saved_periodic_name _flox_wrap_periodic _flox_periodic_lossy;
+        unsetenv _FLOX_MIGRATION_CODE;
         "#
     )
+}
+
+/// A tcsh expression that is true when the `alias` output held in the shell
+/// variable `var` contains caret notation (`^[`, `^G`, `^?`, ...) or the
+/// octal escape `alias` prints for a byte from 0x80 to 0xff (`\2xx`, `\3xx`),
+/// so that it may not be the alias's real body. Octal the user typed, such as
+/// `\033`, prints as itself and is kept.
+///
+/// An existing Flox wrapper is never captured again, so callers apply this
+/// only to a capture that is not one.
+///
+/// The patterns list characters instead of using ranges such as `[@-_]`,
+/// because tcsh evaluates ranges by locale collation and `^[` then goes
+/// unmatched under `en_US.UTF-8`. They stay unquoted because tcsh did not
+/// match quoted bracket expressions after `^`. `]` needs its own pattern.
+fn tcsh_lossy_alias_test(var: &str) -> String {
+    [
+        "*^[@ABCDEFGHIJKLMNOPQRSTUVWXYZ^_?]*",
+        "*^[[]*",
+        r"*^[\\]*",
+        "*^]*",
+        r"*\\[23][01234567][01234567]*",
+    ]
+    .iter()
+    .map(|pattern| format!(r#""${var}" =~ {pattern}"#))
+    .collect::<Vec<_>>()
+    .join(" || ")
 }
 
 /// See [`tcsh_hook`]: backslash-escape what tcsh lets us escape inside the

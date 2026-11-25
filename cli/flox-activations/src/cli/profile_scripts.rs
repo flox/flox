@@ -26,9 +26,12 @@ pub struct ProfileScriptsArgs {
         long,
         help = "A list of FLOX_ENV directories that have already been sourced"
     )]
-    // If not provided, defaults to an empty string. This is required for tcsh in
-    // particular that is unable to pass empty arguments on the command line.
-    #[clap(default_value = "")]
+    // Omitted or given without a value, it means no env dirs have been
+    // sourced. The tcsh generator builds this flag in a word list from an
+    // unquoted `$var:q`, which drops an empty value, so it omits the flag when
+    // the variable is unset and passes it bare when the variable is empty, as
+    // it is after the last deactivation.
+    #[clap(default_value = "", num_args = 0..=1, default_missing_value = "")]
     pub already_sourced_env_dirs: String,
 }
 
@@ -64,9 +67,9 @@ pub struct ProfileScriptsDeactivateArgs {
         long,
         help = "Current value of _FLOX_SOURCED_PROFILE_SCRIPTS; --env will be removed from it"
     )]
-    // Empty default matches `ProfileScriptsArgs::already_sourced_env_dirs` so
-    // tcsh can pass an unset variable without quoting gymnastics.
-    #[clap(default_value = "")]
+    // Accepts the same omitted or bare forms as
+    // `ProfileScriptsArgs::already_sourced_env_dirs`.
+    #[clap(default_value = "", num_args = 0..=1, default_missing_value = "")]
     pub already_sourced_env_dirs: String,
 }
 
