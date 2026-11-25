@@ -249,7 +249,6 @@ pub fn tcsh_hook(flox_bin: &str) -> String {
     let marker = prompt_hook_marker_value(true);
     let lossy_precmd = tcsh_lossy_alias_test("_flox_previous_precmd");
     let lossy_cwdcmd = tcsh_lossy_alias_test("_flox_previous_cwdcmd");
-    let lossy_periodic = tcsh_lossy_alias_test("_flox_previous_periodic");
     // Keep user alias bodies in separate, immutable aliases so profiles can save
     // and restore old wrappers. Retain appended wrappers instead of adding
     // another native callback, but capture replacement aliases.
@@ -267,41 +266,16 @@ pub fn tcsh_hook(flox_bin: &str) -> String {
     // text as data to pinned Bash because tcsh cannot remove a variable prefix
     // without splitting or reinterpreting it. Temporary aliases delay command
     // substitution until migration is needed. Bash -p ignores startup configuration.
-    //
-    // A tcsh error in the user's `precmd` callback makes tcsh remove `precmd`,
-    // and with it the prompt hook. The wrapper therefore marks
-    // `_flox_precmd_pending` before the callback, storing `$status` in the mark
-    // and restoring it so the callback still reads the previous command's
-    // status, and clears the mark after the callback. The restore discards its
-    // output: with `printexitvalue` set, tcsh would otherwise print `Exit N`
-    // again at every prompt. A mark that survives to
-    // the next prompt means the callback did not finish. `_flox_precmd_check`
-    // runs from `periodic`, which tcsh runs before `precmd` at each prompt
-    // unless `tperiod` is set. It tests the mark without forking, and only
-    // when the mark survived does `_flox_precmd_repair` read `precmd`: if
-    // `precmd` is gone, the hook is registered again without the faulty
-    // callback. A `precmd` that is still present, for example after Ctrl-C
-    // interrupted the callback, is left alone.
-    //
-    // `periodic` is wrapped only once a user `precmd` callback has been
-    // wrapped, as recorded by `_flox_precmd_guard`, and it is wrapped again
-    // if something replaces it later. A `periodic` that `alias` cannot print
-    // faithfully is left unwrapped, without repair.
     formatdoc!(
         r#"
         setenv {PROMPT_HOOK_VERSION_ENV} {marker};
         alias _flox_hook '{hook}';
-        alias _flox_saved_precmd_0 '';
-        alias _flox_precmd_repair 'if ( "`alias precmd`" == "" ) alias precmd "_flox_saved_precmd_0; _flox_hook"; unset _flox_precmd_pending';
-        alias _flox_precmd_check 'if ( $?_flox_precmd_pending ) eval _flox_precmd_repair';
         if ( ! $?_flox_hook_alias_generation ) set _flox_hook_alias_generation=0;
         @ _flox_hook_alias_generation++;
         set _flox_saved_precmd_name="_flox_saved_precmd_$_flox_hook_alias_generation";
         set _flox_saved_cwdcmd_name="_flox_saved_cwdcmd_$_flox_hook_alias_generation";
-        set _flox_saved_periodic_name="_flox_saved_periodic_$_flox_hook_alias_generation";
         set _flox_previous_precmd="`alias precmd`";
         set _flox_previous_cwdcmd="`alias cwdcmd`";
-        set _flox_previous_periodic="`alias periodic`";
         setenv _FLOX_MIGRATION_CODE 'printf "%s" "${{_FLOX_LEGACY_ALIAS#*; if ( \$\?_flox_exit ) exit}}"';
         alias _flox_migrate_precmd 'setenv _FLOX_LEGACY_ALIAS $_flox_previous_precmd:q; set _flox_previous_precmd="`{printenv_bin} _FLOX_MIGRATION_CODE | {bash_bin} -p`"; unsetenv _FLOX_LEGACY_ALIAS';
         if ( "$_flox_previous_precmd" =~ 'if ( ! $?{FLOX_INVOCATION_TYPES_VAR} ) set {FLOX_INVOCATION_TYPES_VAR}=*; if ( $?_flox_exit ) exit*' ) eval _flox_migrate_precmd;
@@ -311,17 +285,11 @@ pub fn tcsh_hook(flox_bin: &str) -> String {
         unalias _flox_migrate_cwdcmd;
         if ( "$_flox_previous_precmd" !~ '*_flox_saved_precmd*; _flox_hook*' && ( {lossy_precmd} ) ) set _flox_previous_precmd="";
         if ( "$_flox_previous_cwdcmd" !~ '*_flox_saved_cwdcmd*; _flox_hook*' && ( {lossy_cwdcmd} ) ) set _flox_previous_cwdcmd="";
-        if ( "$_flox_previous_periodic" !~ '*_flox_saved_periodic*; _flox_precmd_check*' && ( {lossy_periodic} ) ) set _flox_periodic_lossy;
-        if ( "$_flox_previous_precmd" != "" && "$_flox_previous_precmd" !~ '*_flox_saved_precmd*; _flox_hook*' ) set _flox_precmd_guard;
-        set _flox_wrap_periodic=0;
-        if ( $?_flox_precmd_guard && ! $?_flox_periodic_lossy && "$_flox_previous_periodic" !~ '*_flox_saved_periodic*; _flox_precmd_check*' ) set _flox_wrap_periodic=1;
         if ( "$_flox_previous_precmd" !~ '*_flox_saved_precmd*; _flox_hook*' ) alias $_flox_saved_precmd_name "$_flox_previous_precmd";
         if ( "$_flox_previous_cwdcmd" !~ '*_flox_saved_cwdcmd*; _flox_hook*' ) alias $_flox_saved_cwdcmd_name "$_flox_previous_cwdcmd";
-        if ( $_flox_wrap_periodic ) alias $_flox_saved_periodic_name "$_flox_previous_periodic";
-        if ( "$_flox_previous_precmd" !~ '*_flox_saved_precmd*; _flox_hook*' ) alias precmd 'set _flox_precmd_pending=$status; set status=$_flox_precmd_pending >& /dev/null; '"$_flox_saved_precmd_name"'; unset _flox_precmd_pending; _flox_hook';
+        if ( "$_flox_previous_precmd" !~ '*_flox_saved_precmd*; _flox_hook*' ) alias precmd "$_flox_saved_precmd_name; _flox_hook";
         if ( "$_flox_previous_cwdcmd" !~ '*_flox_saved_cwdcmd*; _flox_hook*' ) alias cwdcmd "$_flox_saved_cwdcmd_name; _flox_hook";
-        if ( $_flox_wrap_periodic ) alias periodic "$_flox_saved_periodic_name; _flox_precmd_check";
-        unset _flox_previous_precmd _flox_previous_cwdcmd _flox_previous_periodic _flox_saved_precmd_name _flox_saved_cwdcmd_name _flox_saved_periodic_name _flox_wrap_periodic _flox_periodic_lossy;
+        unset _flox_previous_precmd _flox_previous_cwdcmd _flox_saved_precmd_name _flox_saved_cwdcmd_name;
         unsetenv _FLOX_MIGRATION_CODE;
         "#
     )
