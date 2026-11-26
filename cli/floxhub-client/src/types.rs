@@ -427,11 +427,17 @@ impl From<api_types::ResolutionMessageGeneral> for ResolutionMessage {
 // ---------------------------------------------------------------------------
 
 /// A resolved package group.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ResolvedPackageGroup {
     pub msgs: Vec<ResolutionMessage>,
     pub name: String,
     pub page: Option<CatalogPage>,
+    /// Pages other than [`Self::page`], newest first, that the catalog was
+    /// asked to return with `resolve_with_candidate_pages`.
+    ///
+    /// Empty when none were asked for or the catalog sent none.
+    #[serde(default)]
+    pub candidate_pages: Vec<CatalogPage>,
 }
 
 impl ResolvedPackageGroup {
@@ -449,6 +455,12 @@ impl From<api_types::ResolvedPackageGroup> for ResolvedPackageGroup {
         Self {
             name: resolved_package_group.name,
             page: resolved_package_group.page.map(CatalogPage::from),
+            candidate_pages: resolved_package_group
+                .candidate_pages
+                .unwrap_or_default()
+                .into_iter()
+                .map(CatalogPage::from)
+                .collect(),
             msgs: resolved_package_group
                 .messages
                 .into_iter()
@@ -459,7 +471,7 @@ impl From<api_types::ResolvedPackageGroup> for ResolvedPackageGroup {
 }
 
 /// Packages from a single revision of the catalog.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CatalogPage {
     pub complete: bool,
     pub packages: Option<Vec<PackageResolutionInfo>>,

@@ -47,7 +47,13 @@ use crate::data::CanonicalPath;
 use crate::flox::Flox;
 use crate::models::environment::install::compute_install_modifications;
 use crate::providers::buildenv::{BuildEnv, BuildEnvError, BuildEnvNix, BuildEnvOutputs};
-use crate::providers::lock_manifest::{LockManifest, LockResult, ResolutionFailure, ResolveError};
+use crate::providers::lock_manifest::{
+    HeldBackGroup,
+    LockManifest,
+    LockResult,
+    ResolutionFailure,
+    ResolveError,
+};
 use crate::providers::nix_auth::{AuthError, NixAuth};
 use crate::providers::services::process_compose::{ServiceError, maybe_make_service_config_file};
 
@@ -1068,6 +1074,44 @@ pub type UpgradeDiff = BTreeMap<String, BTreeMap<String, (LockedPackage, LockedP
 pub type SingleSystemUpgradeDiff = BTreeMap<String, (LockedPackage, LockedPackage)>;
 
 impl UpgradeResult {
+    /// The groups that some of their packages keep from upgrading, when this
+    /// upgrade found nothing to upgrade, found by resolving them once more.
+    /// An upgrade that found something sends no request.
+    ///
+    /// `groups_or_iids` is what the upgrade was asked to upgrade, which
+    /// leaves the groups it unlocked to be resolved again. See [HeldBackGroup].
+    ///
+    /// This only explains an upgrade that found nothing, so a failure to find
+    /// the groups is logged and treated as finding none.
+    pub fn find_held_back_groups(
+        &self,
+        flox: &Flox,
+        groups_or_iids: &[&str],
+    ) -> Vec<HeldBackGroup> {
+        if !self.diff().is_empty() {
+            return vec![];
+        }
+        let seed_lockfile = self.old_lockfile.clone().map(|mut lockfile| {
+            LockManifest::unlock_specified_packages_or_groups(&mut lockfile, groups_or_iids);
+            lockfile
+        });
+        self.new_lockfile
+            .migrated_manifest()
+            .map_err(ResolveError::from)
+            .and_then(|merged| {
+                LockManifest::find_held_back_groups(
+                    merged.as_latest_schema(),
+                    seed_lockfile.as_ref(),
+                    &flox.floxhub_client,
+                )
+                .block_on()
+            })
+            .unwrap_or_else(|err| {
+                tracing::debug!(%err, "couldn't find the packages holding a group back");
+                vec![]
+            })
+    }
+
     /// Return an iterator over sorted install IDs that have an upgrade
     pub fn packages(&self) -> impl Iterator<Item = String> {
         self.diff().into_keys().sorted()
@@ -1405,6 +1449,7 @@ fn move_dir_with(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
     use std::fs::OpenOptions;
     use std::io::Write;
     use std::os::unix::fs::PermissionsExt;
@@ -1416,6 +1461,9 @@ mod tests {
     use flox_manifest::raw::CatalogPackage;
     use flox_manifest::test_helpers::{with_latest_schema, with_schema};
     use flox_test_utils::{GENERATED_DATA, MANUALLY_GENERATED};
+    use floxhub_client::FloxhubClient;
+    use floxhub_client::client::test_helpers::client_config;
+    use httpmock::MockServer;
     use indoc::{formatdoc, indoc};
     use pretty_assertions::assert_eq;
     use tempfile::{TempDir, tempdir_in};
@@ -1427,7 +1475,11 @@ mod tests {
     use crate::models::environment::Environment;
     use crate::models::environment::path_environment::test_helpers::new_path_environment_in;
     use crate::models::environment::test_helpers::manifest_with_incompatible_system;
-    use crate::providers::catalog::test_helpers::catalog_replay_client;
+    use crate::providers::catalog::test_helpers::{
+        catalog_replay_client,
+        recorded_resolve_responses,
+    };
+    use crate::providers::lock_manifest::{BuildChange, HolderSystems};
     use crate::providers::services::process_compose::SERVICE_CONFIG_FILENAME;
     use crate::utils::serialize_json_with_newline;
 
@@ -1634,6 +1686,166 @@ mod tests {
             .diff();
 
         assert!(upgraded_packages.len() == 1);
+    }
+
+    /// With fd 8.3.1 keeping the group on the 2022-01-25 revision, nothing
+    /// upgrades, and resolving the group once more, asking for candidate pages,
+    /// shows that the newest revision has no build of fd that the environment
+    /// can use.
+    ///
+    /// Serves the two responses recorded for this environment. The recording
+    /// keeps both requests without their query strings, so the second response
+    /// is only served to the request that asks for candidate pages.
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn find_held_back_groups_finds_package_holding_group_back() {
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        let mut responses = recorded_resolve_responses(
+            GENERATED_DATA.join("resolve/upgrade_dry_run_fd_8_3_1_hello.yaml"),
+        );
+        let upgraded = responses.remove(1);
+        let locked = responses.remove(0);
+        let server = MockServer::start_async().await;
+        let with_candidate_page = server.mock(|when, then| {
+            when.method("POST")
+                .path("/api/v1/catalog/resolve")
+                .query_param("candidate_pages", "1");
+            then.status(200).json_body(upgraded);
+        });
+        let without_candidate_page = server.mock(|when, then| {
+            when.method("POST").path("/api/v1/catalog/resolve");
+            then.status(200).json_body(locked);
+        });
+        flox.floxhub_client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        let mut env_view = new_core_environment_from_env_files(
+            &flox,
+            GENERATED_DATA.join("envs/fd_8_3_1_hello_before_upgrade"),
+        );
+        let result = env_view.upgrade(&flox, &[], false, None).unwrap();
+        without_candidate_page.assert_calls(1);
+        with_candidate_page.assert_calls(0);
+
+        let held_back_groups = result.find_held_back_groups(&flox, &[]);
+
+        without_candidate_page.assert_calls(1);
+        with_candidate_page.assert_calls(1);
+        assert_eq!(held_back_groups, vec![HeldBackGroup {
+            group: "toplevel".to_string(),
+            holding_back: BTreeMap::from([("fd".to_string(), HolderSystems {
+                without_build: BTreeSet::from([
+                    "aarch64-darwin".to_string(),
+                    "aarch64-linux".to_string(),
+                    "x86_64-linux".to_string(),
+                ]),
+                with_build: BTreeSet::new(),
+            })]),
+            different_builds: BTreeMap::from([(
+                "hello".to_string(),
+                BTreeMap::from([
+                    ("aarch64-darwin".to_string(), BuildChange {
+                        version: "2.10".to_string(),
+                        newest_version: "2.12.3".to_string(),
+                    }),
+                    ("aarch64-linux".to_string(), BuildChange {
+                        version: "2.10".to_string(),
+                        newest_version: "2.12.3".to_string(),
+                    }),
+                    ("x86_64-linux".to_string(), BuildChange {
+                        version: "2.10".to_string(),
+                        newest_version: "2.12.3".to_string(),
+                    }),
+                ])
+            )]),
+        }]);
+    }
+
+    /// The explanation is optional: when the second resolve fails, there are
+    /// no groups to report.
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn find_held_back_groups_finds_none_when_second_resolve_fails() {
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        let server = MockServer::start_async().await;
+        let with_candidate_page = server.mock(|when, then| {
+            when.method("POST")
+                .path("/api/v1/catalog/resolve")
+                .query_param("candidate_pages", "1");
+            then.status(500);
+        });
+        server.mock(|when, then| {
+            when.method("POST").path("/api/v1/catalog/resolve");
+            then.status(200).json_body(
+                recorded_resolve_responses(GENERATED_DATA.join("resolve/curl_hello.yaml"))
+                    .remove(0),
+            );
+        });
+        flox.floxhub_client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        let mut env_view = new_core_environment(&flox, indoc! {r#"
+            version = 1
+
+            [install]
+            curl.pkg-path = "curl"
+            hello.pkg-path = "hello"
+        "#});
+        env_view.lock(&flox).unwrap();
+        let result = env_view.upgrade(&flox, &[], false, None).unwrap();
+
+        let held_back_groups = result.find_held_back_groups(&flox, &[]);
+
+        with_candidate_page.assert_calls(1);
+        assert_eq!(held_back_groups, vec![]);
+    }
+
+    /// An upgrade that found something has nothing left to explain, so no
+    /// request is sent, even for a group of several packages.
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn find_held_back_groups_sends_nothing_when_something_upgrades() {
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        let mut env_view = new_core_environment(&flox, indoc! {r#"
+            version = 1
+
+            [install]
+            curl.pkg-path = "curl"
+            hello.pkg-path = "hello"
+        "#});
+        flox.floxhub_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/curl_hello.yaml")).await;
+        env_view.lock(&flox).unwrap();
+        let upgrade_server = MockServer::start_async().await;
+        upgrade_server.mock(|when, then| {
+            when.method("POST").path("/api/v1/catalog/resolve");
+            then.status(200).json_body(
+                recorded_resolve_responses(
+                    GENERATED_DATA.join("resolve/curl_three_systems_after_hello.yaml"),
+                )
+                .remove(0),
+            );
+        });
+        flox.floxhub_client =
+            FloxhubClient::new(client_config(&upgrade_server.base_url())).unwrap();
+        let result = env_view.upgrade(&flox, &[], false, None).unwrap();
+        assert!(!result.diff().is_empty());
+        let server = MockServer::start_async().await;
+        let any_resolve = server.mock(|when, then| {
+            when.method("POST").path("/api/v1/catalog/resolve");
+            then.status(500);
+        });
+        flox.floxhub_client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+
+        let held_back_groups = result.find_held_back_groups(&flox, &[]);
+
+        any_resolve.assert_calls(0);
+        assert_eq!(held_back_groups, vec![]);
     }
 
     /// replacing an environment should fail if a backup exists

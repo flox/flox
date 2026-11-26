@@ -229,6 +229,21 @@ pub trait CatalogClientTrait {
     async fn resolve(
         &self,
         package_groups: Vec<PackageGroup>,
+    ) -> Result<Vec<ResolvedPackageGroup>, ResolveError> {
+        self.resolve_with_candidate_pages(package_groups, 0).await
+    }
+
+    /// Like [`Self::resolve`], additionally asking the catalog for up to
+    /// `candidate_pages` pages of each group other than the one it resolved
+    /// to, newest first, in [`ResolvedPackageGroup::candidate_pages`].
+    ///
+    /// Asking makes the catalog evaluate every page of the group, which it
+    /// otherwise stops doing at the first complete one.
+    /// A catalog that doesn't send the pages leaves the field empty.
+    async fn resolve_with_candidate_pages(
+        &self,
+        package_groups: Vec<PackageGroup>,
+        candidate_pages: u32,
     ) -> Result<Vec<ResolvedPackageGroup>, ResolveError>;
 
     /// Search for packages matching a search term, showing a spinner.
@@ -362,9 +377,10 @@ pub trait CatalogClientTrait {
 
 impl CatalogClientTrait for FloxhubClient {
     #[instrument(skip_all, fields(progress = "Resolving packages from catalog"))]
-    async fn resolve(
+    async fn resolve_with_candidate_pages(
         &self,
         package_groups: Vec<PackageGroup>,
+        candidate_pages: u32,
     ) -> Result<Vec<ResolvedPackageGroup>, ResolveError> {
         tracing::debug!(n_groups = package_groups.len(), "resolving package groups");
 
@@ -388,7 +404,10 @@ impl CatalogClientTrait for FloxhubClient {
 
         let response = self
             .catalog
-            .resolve_api_v1_catalog_resolve_post(None, &package_groups)
+            .resolve_api_v1_catalog_resolve_post(
+                (candidate_pages > 0).then_some(i64::from(candidate_pages)),
+                &package_groups,
+            )
             .await
             .map_api_error()
             .await
@@ -1208,6 +1227,73 @@ pub mod tests {
         let response = client.build_inputs_lookup(request).await.unwrap();
         assert_eq!(response.version, 1);
         mock.assert();
+    }
+
+    /// The candidate pages are requested with `candidate_pages` and read
+    /// from the response.
+    #[tokio::test]
+    async fn resolve_with_candidate_pages_asks_for_and_reads_them() {
+        let server = MockServer::start_async().await;
+        let mock = server.mock(|when, then| {
+            when.method("POST")
+                .path("/api/v1/catalog/resolve")
+                .query_param("candidate_pages", "1");
+            then.status(200).json_body(json!({ "items": [{
+                "name": "toplevel",
+                "messages": [],
+                "page": null,
+                "candidate_pages": [{
+                    "page": 101,
+                    "url": "",
+                    "complete": false,
+                    "messages": [],
+                    "packages": [],
+                }],
+            }]}));
+        });
+        let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
+
+        let groups = client
+            .resolve_with_candidate_pages(vec![], 1)
+            .await
+            .unwrap();
+
+        mock.assert();
+        assert_eq!(groups, vec![ResolvedPackageGroup {
+            candidate_pages: vec![CatalogPage {
+                complete: false,
+                packages: Some(vec![]),
+                page: 101,
+                url: "".to_string(),
+                msgs: vec![],
+            }],
+            msgs: vec![],
+            name: "toplevel".to_string(),
+            page: None,
+        }]);
+    }
+
+    /// Resolving without asking for candidate pages sends no
+    /// `candidate_pages` parameter.
+    #[tokio::test]
+    async fn resolve_sends_no_candidate_pages_parameter() {
+        let server = MockServer::start_async().await;
+        let with_parameter = server.mock(|when, then| {
+            when.method("POST")
+                .path("/api/v1/catalog/resolve")
+                .query_param_exists("candidate_pages");
+            then.status(500);
+        });
+        let without_parameter = server.mock(|when, then| {
+            when.method("POST").path("/api/v1/catalog/resolve");
+            then.status(200).json_body(json!({ "items": [] }));
+        });
+        let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
+
+        client.resolve(vec![]).await.unwrap();
+
+        with_parameter.assert_calls(0);
+        without_parameter.assert();
     }
 
     /// A catalog that reports where a package is available adds `stability`
