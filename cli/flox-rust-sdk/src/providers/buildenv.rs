@@ -36,6 +36,7 @@ use crate::data::System;
 use crate::models::nix_plugins::NIX_PLUGINS;
 use crate::providers::nix_auth::{catalog_auth_to_envs, store_needs_auth};
 use crate::utils::CommandExt;
+use crate::utils::logging::discouraged_sdk_message;
 
 static BUILDENV_NIX: LazyLock<PathBuf> = LazyLock::new(|| {
     std::env::var("FLOX_BUILDENV_NIX")
@@ -423,6 +424,13 @@ pub fn build_catalog_pkg_from_source(
         progress = format!("Building '{attr_path}' from source{reason}")
     )
     .entered();
+
+    // An environment build finds out that a package needs building only partway
+    // through, after its download failed, so the CLI can't print this in time.
+    // The spinner above is hidden without a terminal and leaves no record.
+    discouraged_sdk_message(format!(
+        "Building '{attr_path}' from source{reason}, which can take a long time and may fail."
+    ));
 
     let mut cmd = base_command();
     cmd.args(["--option", "extra-plugin-files", &*NIX_PLUGINS]);
