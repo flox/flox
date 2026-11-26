@@ -42,7 +42,7 @@ use flox_rust_sdk::providers::lock_manifest::{
     ResolutionFailures,
     ResolveError,
 };
-use floxhub_client::{MsgAttrPathNotFoundNotFoundForAllSystems, MsgAttrPathNotFoundNotInCatalog};
+use floxhub_client::MsgAttrPathNotFoundNotFoundForAllSystems;
 use indoc::formatdoc;
 use itertools::Itertools;
 use shell_gen::ShellWithPath;
@@ -59,7 +59,7 @@ use crate::commands::{
 };
 use crate::utils::detect_shell::detect_shell_for_in_place;
 use crate::utils::dialog::{Dialog, Select};
-use crate::utils::didyoumean::{DidYouMean, InstallSuggestion};
+use crate::utils::didyoumean::add_package_suggestions;
 use crate::utils::errors::format_error;
 use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message::{self};
@@ -496,52 +496,7 @@ impl Install {
             }
         }
 
-        match err {
-            // Try to make suggestions when a package isn't found
-            EnvironmentError::Core(CoreEnvironmentError::Resolve(
-                ResolveError::ResolutionFailed(failures),
-            )) => {
-                let (need_didyoumean, mut other_failures): (Vec<_>, Vec<_>) = failures
-                    .0
-                    .into_iter()
-                    .partition(|f| matches!(f, ResolutionFailure::PackageNotFound { .. }));
-                // Essentially we're going to convert the `PackageNotFound` variants into
-                // `FallbackMessage` variants, which are just strings we're going to generate
-                // with `DidYouMean`.
-                // We use `DidYouMean` to generate the suggestions,
-                // separately from attempting an install,
-                // or other kind of resolution.
-                // This is because `DidYouMean` may take an unknown amount of time,
-                // performing a search.
-                // For the same reason `DidYouMean` is also showing a spinner
-                // while the search is in progress.
-                for failure in need_didyoumean.into_iter() {
-                    let ResolutionFailure::PackageNotFound(MsgAttrPathNotFoundNotInCatalog {
-                        attr_path,
-                        ..
-                    }) = failure
-                    else {
-                        unreachable!("already checked that these failures are 'package not found'")
-                    };
-                    let suggestion = DidYouMean::<InstallSuggestion>::new(flox, &attr_path);
-                    let head = format!("Could not find package '{attr_path}'.");
-                    let msg = if suggestion.has_suggestions() {
-                        tracing::debug!(query = attr_path, "found suggestions for package");
-                        formatdoc! {"
-                        {head}
-                        {suggestion}"}
-                    } else {
-                        format!("{head}\nTry 'flox search' with a broader search term.")
-                    };
-                    other_failures.push(ResolutionFailure::FallbackMessage { msg });
-                }
-                Err(EnvironmentError::Core(CoreEnvironmentError::Resolve(
-                    ResolveError::ResolutionFailed(ResolutionFailures(other_failures)),
-                ))
-                .into())
-            },
-            err => Err(err.into()),
-        }
+        Err(add_package_suggestions(flox, err).into())
     }
 
     /// Generate warnings to print to the user about unfree and broken packages.

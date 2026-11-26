@@ -38,6 +38,7 @@ use super::{
 };
 use crate::commands::{EnvironmentSelectError, SHELL_COMPLETION_FILE, ensure_auth};
 use crate::utils::dialog::{Confirm, Dialog};
+use crate::utils::didyoumean::add_package_suggestions;
 use crate::utils::errors::format_error;
 use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message;
@@ -225,7 +226,9 @@ impl Edit {
         let result = match contents {
             // If provided with the contents of a manifest file, either via a path to a file or via
             // contents piped to stdin, use those contents to try building the environment.
-            Some(new_manifest) => environment.edit(flox, new_manifest)?,
+            Some(new_manifest) => environment
+                .edit(flox, new_manifest)
+                .map_err(|err| add_package_suggestions(flox, err))?,
             // If not provided with new manifest contents, let the user edit the file directly
             // via $EDITOR or $VISUAL (as long as `flox edit` was invoked interactively).
             None => Self::interactive_edit(flox, environment).await?,
@@ -349,7 +352,9 @@ impl Edit {
         // decides to stop.
         loop {
             let new_manifest = Edit::edited_manifest_contents(&tmp_manifest, &editor, &args)?;
-            let result = environment.edit(flox, new_manifest.clone());
+            let result = environment
+                .edit(flox, new_manifest.clone())
+                .map_err(|err| add_package_suggestions(flox, err));
             match Self::make_interactively_recoverable(result)? {
                 Ok(result) => return Ok(result),
 

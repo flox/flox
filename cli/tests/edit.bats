@@ -202,6 +202,75 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
+# The suggestions are the ones 'flox install' prints,
+# see "resolution message: single package not found, with curation" in install.bats.
+# bats test_tags=edit:manifest:unknown-package:suggestions
+@test "'flox edit' suggests alternatives for a package not in the catalog" {
+  skip_x86_64_darwin_replay
+  "$FLOX_BIN" init
+  ORIGINAL_MANIFEST_CONTENTS="$(cat "$MANIFEST_PATH")" # for check_manifest_unchanged
+
+  cat << 'EOF' > ./manifest.toml
+version = 1
+
+[install]
+node.pkg-path = "node"
+EOF
+
+  RUST_BACKTRACE=0 \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/node_suggestions.yaml" \
+    run "$FLOX_BIN" edit -f ./manifest.toml
+
+  assert_failure
+  SPACE=" "
+  assert_output --partial "$(
+    cat << EOF
+✘ ERROR: resolution failed:$SPACE
+Could not find package 'node'.
+Try 'flox install nodejs' instead.
+
+Here are a few other similar options:
+EOF
+  )"
+  assert_output --partial "  $ flox install nodejs"
+
+  run check_manifest_unchanged
+  assert_success
+}
+
+# bats test_tags=edit:manifest:unknown-package:no-suggestions
+@test "'flox edit' points to search for a package not in the catalog with no alternatives" {
+  skip_x86_64_darwin_replay
+  "$FLOX_BIN" init
+  ORIGINAL_MANIFEST_CONTENTS="$(cat "$MANIFEST_PATH")" # for check_manifest_unchanged
+
+  cat << 'EOF' > ./manifest.toml
+version = 1
+
+[install]
+badpkg.pkg-path = "badpkg"
+EOF
+
+  RUST_BACKTRACE=0 \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/badpkg.yaml" \
+    run "$FLOX_BIN" edit -f ./manifest.toml
+
+  assert_failure
+  SPACE=" "
+  assert_output --partial "$(
+    cat << EOF
+✘ ERROR: resolution failed:$SPACE
+Could not find package 'badpkg'.
+Try 'flox search' with a broader search term.
+EOF
+  )"
+
+  run check_manifest_unchanged
+  assert_success
+}
+
+# ---------------------------------------------------------------------------- #
+
 @test "'flox edit' fails when provided filename doesn't exist" {
   run "$FLOX_BIN" edit -f "does_not_exist.toml"
   assert_failure

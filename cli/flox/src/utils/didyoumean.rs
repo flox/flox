@@ -3,7 +3,14 @@ use std::num::NonZeroU8;
 
 use anyhow::Result;
 use flox_rust_sdk::flox::Flox;
-use floxhub_client::{CatalogClientTrait, SearchResults};
+use flox_rust_sdk::models::environment::{CoreEnvironmentError, EnvironmentError};
+use flox_rust_sdk::providers::lock_manifest::{
+    ResolutionFailure,
+    ResolutionFailures,
+    ResolveError,
+};
+use floxhub_client::{CatalogClientTrait, MsgAttrPathNotFoundNotInCatalog, SearchResults};
+use indoc::formatdoc;
 use pollster::FutureExt;
 use tracing::{debug, instrument};
 
@@ -139,6 +146,51 @@ impl Display for DidYouMean<'_, InstallSuggestion> {
     }
 }
 
+/// Replace each "package not in catalog" resolution failure in `err`
+/// with the message `flox install` shows for it, suggestions included.
+/// Any other error is returned unchanged.
+///
+/// The suggestions come from a catalog search, which may take a while,
+/// so they are built here, only after resolution has already failed,
+/// and under the spinner that [DidYouMean] shows.
+/// A search that fails is logged and leaves the generic hint in place,
+/// so the original failure is never lost.
+pub fn add_package_suggestions(flox: &Flox, err: EnvironmentError) -> EnvironmentError {
+    let EnvironmentError::Core(CoreEnvironmentError::Resolve(ResolveError::ResolutionFailed(
+        failures,
+    ))) = err
+    else {
+        return err;
+    };
+
+    let (not_found, mut failures): (Vec<_>, Vec<_>) = failures
+        .0
+        .into_iter()
+        .partition(|f| matches!(f, ResolutionFailure::PackageNotFound { .. }));
+    for failure in not_found {
+        let ResolutionFailure::PackageNotFound(MsgAttrPathNotFoundNotInCatalog {
+            attr_path, ..
+        }) = failure
+        else {
+            unreachable!("already checked that these failures are 'package not found'")
+        };
+        let suggestion = DidYouMean::<InstallSuggestion>::new(flox, &attr_path);
+        let head = format!("Could not find package '{attr_path}'.");
+        let msg = if suggestion.has_suggestions() {
+            debug!(query = attr_path, "found suggestions for package");
+            formatdoc! {"
+            {head}
+            {suggestion}"}
+        } else {
+            format!("{head}\nTry 'flox search' with a broader search term.")
+        };
+        failures.push(ResolutionFailure::FallbackMessage { msg });
+    }
+    EnvironmentError::Core(CoreEnvironmentError::Resolve(
+        ResolveError::ResolutionFailed(ResolutionFailures(failures)),
+    ))
+}
+
 pub struct SearchSuggestion {
     use_bold_fmt: bool,
 }
@@ -248,8 +300,18 @@ impl Display for DidYouMean<'_, SearchSuggestion> {
 mod tests {
     use std::str::FromStr;
 
+    use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::providers::catalog::SystemEnum;
-    use floxhub_client::{DeprecationInfo, DeprecationKind, SearchResult};
+    use floxhub_client::client::test_helpers::client_config;
+    use floxhub_client::{
+        DeprecationInfo,
+        DeprecationKind,
+        FloxhubClient,
+        MessageLevel,
+        SearchResult,
+    };
+    use httpmock::{Method, MockServer};
+    use serde_json::json;
 
     use super::*;
 
@@ -289,5 +351,183 @@ mod tests {
             suggestion.to_string(),
             "Related search results for 'cargo':\ncargo  a description\n       ! cargo is EOL"
         );
+    }
+
+    fn not_in_catalog(attr_path: &str) -> ResolutionFailure {
+        ResolutionFailure::PackageNotFound(MsgAttrPathNotFoundNotInCatalog {
+            level: MessageLevel::Error,
+            msg: format!("The package '{attr_path}' is not found in the catalog."),
+            attr_path: attr_path.to_string(),
+            install_id: attr_path.to_string(),
+        })
+    }
+
+    fn resolve_error(failures: Vec<ResolutionFailure>) -> EnvironmentError {
+        EnvironmentError::Core(CoreEnvironmentError::Resolve(
+            ResolveError::ResolutionFailed(ResolutionFailures(failures)),
+        ))
+    }
+
+    fn failures_of(err: EnvironmentError) -> Vec<ResolutionFailure> {
+        let EnvironmentError::Core(CoreEnvironmentError::Resolve(ResolveError::ResolutionFailed(
+            failures,
+        ))) = err
+        else {
+            panic!("expected a resolution failure, got: {err:?}");
+        };
+        failures.0
+    }
+
+    fn fallback(msg: &str) -> ResolutionFailure {
+        ResolutionFailure::FallbackMessage {
+            msg: msg.to_string(),
+        }
+    }
+
+    /// A [Flox] whose catalog search is answered by `server`.
+    fn flox_with_search_server(server: &MockServer) -> (Flox, tempfile::TempDir) {
+        let (mut flox, temp_dir) = flox_instance();
+        flox.floxhub_client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        (flox, temp_dir)
+    }
+
+    // `DidYouMean` blocks the calling thread on the search request,
+    // which needs a runtime thread other than the blocked one.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn package_not_found_gets_install_suggestions() {
+        let server = MockServer::start();
+        let search = server.mock(|when, then| {
+            when.method(Method::GET).path("/api/v1/catalog/search");
+            then.status(200).json_body(json!({
+                "items": [{
+                    "attr_path": "nodejs",
+                    "catalog": null,
+                    "pkg_path": "nodejs",
+                    "name": "nodejs-24.22.2",
+                    "pname": "nodejs",
+                    "version": "24.22.2",
+                    "description": "Event-driven I/O framework for the V8 JavaScript engine",
+                    "stabilities": [],
+                    "system": env!("NIX_TARGET_SYSTEM"),
+                    "deprecation": null,
+                }],
+                "total_count": 84,
+            }));
+        });
+        let (flox, _temp_dir) = flox_with_search_server(&server);
+
+        let failures = failures_of(add_package_suggestions(
+            &flox,
+            resolve_error(vec![not_in_catalog("node")]),
+        ));
+
+        search.assert_calls(1);
+        assert_eq!(failures.len(), 1);
+        let ResolutionFailure::FallbackMessage { msg } = &failures[0] else {
+            panic!("expected a fallback message, got: {:?}", failures[0]);
+        };
+        assert_eq!(msg.lines().collect::<Vec<_>>()[..4], [
+            "Could not find package 'node'.",
+            "Try 'flox install nodejs' instead.",
+            "",
+            "Here are a few other similar options:",
+        ]);
+        assert!(msg.contains("  $ flox install nodejs"), "{msg}");
+        assert!(
+            msg.ends_with("...or see up to 84 options with 'flox search nodejs'"),
+            "{msg}"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn package_not_found_without_suggestions_points_to_search() {
+        let server = MockServer::start();
+        server.mock(|when, then| {
+            when.method(Method::GET).path("/api/v1/catalog/search");
+            then.status(200)
+                .json_body(json!({"items": [], "total_count": 0}));
+        });
+        let (flox, _temp_dir) = flox_with_search_server(&server);
+
+        let failures = failures_of(add_package_suggestions(
+            &flox,
+            resolve_error(vec![not_in_catalog("badpkg")]),
+        ));
+
+        assert_eq!(failures, vec![fallback(
+            "Could not find package 'badpkg'.\nTry 'flox search' with a broader search term."
+        )]);
+    }
+
+    /// A search that errors must not replace the resolution error.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn failed_search_keeps_the_not_found_error() {
+        let server = MockServer::start();
+        let search = server.mock(|when, then| {
+            when.method(Method::GET).path("/api/v1/catalog/search");
+            then.status(500);
+        });
+        let (flox, _temp_dir) = flox_with_search_server(&server);
+
+        let failures = failures_of(add_package_suggestions(
+            &flox,
+            resolve_error(vec![not_in_catalog("badpkg")]),
+        ));
+
+        assert!(search.calls() >= 1);
+        assert_eq!(failures, vec![fallback(
+            "Could not find package 'badpkg'.\nTry 'flox search' with a broader search term."
+        )]);
+    }
+
+    /// Failures that are not "not found" keep their order and come first,
+    /// as `flox install` has always printed them.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn other_failures_are_kept_ahead_of_suggestions() {
+        let server = MockServer::start();
+        server.mock(|when, then| {
+            when.method(Method::GET).path("/api/v1/catalog/search");
+            then.status(200)
+                .json_body(json!({"items": [], "total_count": 0}));
+        });
+        let (flox, _temp_dir) = flox_with_search_server(&server);
+        let other = fallback("some other failure");
+
+        let failures = failures_of(add_package_suggestions(
+            &flox,
+            resolve_error(vec![not_in_catalog("badpkg"), other.clone()]),
+        ));
+
+        assert_eq!(failures, vec![
+            other,
+            fallback(
+                "Could not find package 'badpkg'.\nTry 'flox search' with a broader search term."
+            ),
+        ]);
+    }
+
+    /// Errors that are not resolution failures, and resolution failures
+    /// with nothing to suggest, must not cost a search.
+    #[test]
+    fn unrelated_errors_are_unchanged_and_not_searched() {
+        let server = MockServer::start();
+        let search = server.mock(|when, then| {
+            when.method(Method::GET).path("/api/v1/catalog/search");
+            then.status(200)
+                .json_body(json!({"items": [], "total_count": 0}));
+        });
+        let (flox, _temp_dir) = flox_with_search_server(&server);
+
+        let other = fallback("some other failure");
+        let failures = failures_of(add_package_suggestions(
+            &flox,
+            resolve_error(vec![other.clone()]),
+        ));
+        assert_eq!(failures, vec![other]);
+
+        let err = add_package_suggestions(&flox, EnvironmentError::ManifestNotFound);
+        assert!(matches!(err, EnvironmentError::ManifestNotFound));
+
+        search.assert_calls(0);
     }
 }
