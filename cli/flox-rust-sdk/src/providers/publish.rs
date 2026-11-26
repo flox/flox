@@ -65,6 +65,17 @@ use crate::providers::nix::nix_base_command;
 use crate::providers::nix_auth::catalog_auth_to_envs;
 use crate::utils::CommandExt;
 
+pub mod upload_credentials;
+
+use self::upload_credentials::{
+    SessionRenewal,
+    UploadCredentials,
+    UploadRenewal,
+    check_token_outlives_upload,
+    multipart_params,
+    running_nix_version,
+};
+
 #[derive(Debug, Error)]
 pub enum PublishError {
     #[error("The outputs from the build do not exist: {0}")]
@@ -129,6 +140,23 @@ pub enum PublishError {
     /// practice.
     #[error("deep override attribute name is empty: {0:?}")]
     InvalidDeepOverrideName(String),
+
+    /// The `publish-credentials` helper could not get a fresh upload
+    /// session from FloxHub while `nix copy` was running.
+    #[error(
+        "Failed to upload to cache: could not renew upload credentials: {0}\nRun 'flox publish' again to start the upload over."
+    )]
+    RenewUploadCredentials(String),
+
+    /// The FloxHub credential, which renews upload credentials, would
+    /// expire before the upload is estimated to finish.
+    #[error(
+        "FloxHub login expires in {expires_in_minutes} minutes, before this upload may finish.\nOn a slow connection the upload may take up to {upload_minutes} minutes.\nRun 'flox auth login' to start a new login, then publish again."
+    )]
+    TokenExpiresDuringUpload {
+        expires_in_minutes: i64,
+        upload_minutes: i64,
+    },
 }
 
 /// Whether a publish may replace the package's registered source.
@@ -416,9 +444,13 @@ impl ClientSideCatalogStoreConfig {
     ///
     /// Returns the narinfos and the URL string identifying where the narinfos
     /// were collected from, or `None` when no narinfos are available.
+    ///
+    /// With `renewal`, upload credentials provided by the catalog are renewed
+    /// while the upload runs; see [upload_credentials].
     pub fn maybe_upload_artifacts(
         &self,
         build_outputs: &[PackageOutput],
+        renewal: Option<&SessionRenewal>,
     ) -> Result<Option<(NarInfos, String)>, PublishError> {
         if build_outputs.is_empty() {
             debug!(reason = "no build outputs", "skipping artifact upload");
@@ -441,6 +473,7 @@ impl ClientSideCatalogStoreConfig {
                     ingress_uri,
                     Some(signing_private_key_path.as_path()),
                     &Some(NixCopyAuth::Netrc(auth_netrc_path.clone())),
+                    None,
                     build_outputs,
                 )?;
                 let nar_infos = Self::get_build_output_nar_infos(
@@ -480,10 +513,23 @@ impl ClientSideCatalogStoreConfig {
                     ?ingress_uri,
                     "uploading artifacts to cache"
                 );
+                let upload_credentials = match (ingress_auth, renewal) {
+                    (Some(auth), Some(renewal)) => {
+                        let upload_bytes = Self::local_closure_nar_size(build_outputs)?;
+                        check_token_outlives_upload(
+                            renewal.renewal.token_expires_at,
+                            Utc::now(),
+                            upload_bytes,
+                        )?;
+                        Some(UploadCredentials::prepare(auth, renewal)?)
+                    },
+                    _ => None,
+                };
                 Self::upload_build_outputs(
                     ingress_uri,
                     signing_private_key_path.as_deref(),
                     &ingress_auth.to_owned().map(NixCopyAuth::CatalogProvided),
+                    upload_credentials.as_ref(),
                     build_outputs,
                 )?;
                 // No narinfos for publisher type
@@ -498,8 +544,10 @@ impl ClientSideCatalogStoreConfig {
         destination_url: &Url,
         signing_key_path: Option<&Path>,
         nix_copy_auth: &Option<NixCopyAuth>,
+        upload_credentials: Option<&UploadCredentials>,
         build_outputs: &[PackageOutput],
     ) -> Result<(), PublishError> {
+        let nix_version = running_nix_version().unwrap_or_default();
         for output in build_outputs.iter() {
             debug!(
                 ?output,
@@ -510,6 +558,8 @@ impl ClientSideCatalogStoreConfig {
                 destination_url,
                 signing_key_path,
                 nix_copy_auth,
+                upload_credentials,
+                &nix_version,
                 &output.store_path,
             )?;
         }
@@ -522,6 +572,8 @@ impl ClientSideCatalogStoreConfig {
         destination_url: &Url,
         signing_key_path: Option<&Path>,
         nix_copy_auth: &Option<NixCopyAuth>,
+        upload_credentials: Option<&UploadCredentials>,
+        nix_version: &str,
         store_path: &str,
     ) -> Result<(), PublishError> {
         let mut url_with_query = destination_url.clone();
@@ -536,12 +588,21 @@ impl ClientSideCatalogStoreConfig {
             // https://nix.dev/manual/nix/2.24/command-ref/new-cli/nix3-help-stores#store-s3-binary-cache-store-ls-compression
             query.append_pair("ls-compression", "zstd");
         }
+        for (name, value) in multipart_params(destination_url, nix_version) {
+            query.append_pair(name, &value);
+        }
+        if let Some(credentials) = upload_credentials {
+            query.append_pair("profile", credentials.profile());
+        }
         drop(query);
 
         let mut copy_command = nix_base_command();
         match nix_copy_auth {
             Some(NixCopyAuth::Netrc(path)) => {
                 copy_command.arg("--netrc-file").arg(path);
+            },
+            Some(NixCopyAuth::CatalogProvided(_)) if let Some(credentials) = upload_credentials => {
+                credentials.apply(&mut copy_command);
             },
             Some(NixCopyAuth::CatalogProvided(auth)) => {
                 copy_command.envs(catalog_auth_to_envs(auth)?);
@@ -566,11 +627,27 @@ impl ClientSideCatalogStoreConfig {
             .output()
             .map_err(|e| PublishError::CacheUploadError(e.to_string()))?;
         if output.status.success() {
-            Ok(())
-        } else {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            Err(PublishError::CacheUploadError(stderr.to_string()))
+            return Ok(());
         }
+        // A failed renewal surfaces in Nix only as an S3 403.
+        if let Some(reason) = upload_credentials.and_then(UploadCredentials::renewal_failure) {
+            return Err(PublishError::RenewUploadCredentials(reason));
+        }
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        Err(PublishError::CacheUploadError(stderr.to_string()))
+    }
+
+    /// The NAR size of the outputs' closures in the local store, an upper
+    /// bound on what an upload sends.
+    fn local_closure_nar_size(build_outputs: &[PackageOutput]) -> Result<u64, PublishError> {
+        let nar_infos = Self::get_build_output_nar_infos(None, None, build_outputs)?;
+        Ok(nar_infos
+            .0
+            .values()
+            .flatten()
+            .filter_map(|info| info.nar_size)
+            .map(|size| u64::try_from(size).unwrap_or(0))
+            .sum())
     }
 
     /// Constructs a `nix path-info` command that will get the NAR info for a
@@ -675,6 +752,7 @@ pub struct PublishProvider<A> {
     pub env_metadata: CheckedEnvironmentMetadata,
     pub package_metadata: PackageMetadata,
     auth: A,
+    upload_renewal: Option<UploadRenewal>,
 }
 
 impl<A> PublishProvider<A> {
@@ -687,7 +765,14 @@ impl<A> PublishProvider<A> {
             env_metadata,
             package_metadata,
             auth,
+            upload_renewal: None,
         }
+    }
+
+    /// Renew upload credentials provided by the catalog while uploading.
+    pub fn with_upload_renewal(mut self, upload_renewal: UploadRenewal) -> Self {
+        self.upload_renewal = Some(upload_renewal);
+        self
     }
 }
 
@@ -750,6 +835,12 @@ where
             .publish_info(catalog_name, self.package_metadata.package.name().as_ref())
             .await
             .map_err(PublishError::CatalogError)?;
+        let session_renewal = self.upload_renewal.clone().map(|renewal| SessionRenewal {
+            renewal,
+            catalog: catalog_name.to_string(),
+            package: self.package_metadata.package.name().to_string(),
+            issued_at: Utc::now(),
+        });
 
         let catalog_store_config = get_client_side_catalog_store_config(
             metadata_only,
@@ -763,7 +854,8 @@ where
             catalog_store_config,
             ClientSideCatalogStoreConfig::Publisher { .. }
         );
-        let upload_result = catalog_store_config.maybe_upload_artifacts(&build_metadata.outputs)?;
+        let upload_result = catalog_store_config
+            .maybe_upload_artifacts(&build_metadata.outputs, session_renewal.as_ref())?;
         let (narinfos, narinfos_source_url) = match upload_result {
             Some((nar_infos, source_url)) => (Some(nar_infos), Some(source_url)),
             None => (None, None),
@@ -2479,7 +2571,7 @@ pub mod tests {
         let config = ClientSideCatalogStoreConfig::MetadataOnly;
 
         let result = config
-            .maybe_upload_artifacts(&build_metadata.outputs)
+            .maybe_upload_artifacts(&build_metadata.outputs, None)
             .expect("metadata-only narinfo collection should succeed");
 
         // MetadataOnly should return Some((narinfos, source_url))
@@ -2521,7 +2613,7 @@ pub mod tests {
     fn metadata_only_returns_daemon_source_url() {
         let config = ClientSideCatalogStoreConfig::MetadataOnly;
         // MetadataOnly with no build outputs returns None (no narinfos to collect)
-        let result = config.maybe_upload_artifacts(&[]).unwrap();
+        let result = config.maybe_upload_artifacts(&[], None).unwrap();
         assert!(result.is_none(), "empty outputs should return None");
 
         // With actual outputs we cannot test in a unit test (requires nix store),
@@ -2533,10 +2625,13 @@ pub mod tests {
     fn null_store_returns_no_narinfos() {
         let config = ClientSideCatalogStoreConfig::Null;
         let result = config
-            .maybe_upload_artifacts(&[PackageOutput {
-                name: "out".to_string(),
-                store_path: "/nix/store/fake-path".to_string(),
-            }])
+            .maybe_upload_artifacts(
+                &[PackageOutput {
+                    name: "out".to_string(),
+                    store_path: "/nix/store/fake-path".to_string(),
+                }],
+                None,
+            )
             .unwrap();
         assert!(result.is_none(), "Null store should return None");
     }
@@ -2550,10 +2645,13 @@ pub mod tests {
         // A store path that does not exist in the local daemon store will cause
         // get_build_output_nar_infos to fail. The error must surface to the
         // caller instead of being swallowed.
-        let result = config.maybe_upload_artifacts(&[PackageOutput {
-            name: "out".to_string(),
-            store_path: "/nix/store/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-nonexistent".to_string(),
-        }]);
+        let result = config.maybe_upload_artifacts(
+            &[PackageOutput {
+                name: "out".to_string(),
+                store_path: "/nix/store/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-nonexistent".to_string(),
+            }],
+            None,
+        );
         assert!(
             result.is_err(),
             "MetadataOnly should return Err when narinfo collection fails, got: {:?}",
