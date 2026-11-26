@@ -356,7 +356,7 @@ impl Display for Exit {
 }
 impl std::error::Error for Exit {}
 
-/// Resets the `$USER`/`HOME` variables to match `euid`
+/// Sets `$USER` to match `euid`, resetting `$HOME` only for a stale `$USER`.
 ///
 /// Files written by `sudo flox ...` / `su`,
 /// may write into your user's home (instead of /root).
@@ -364,14 +364,19 @@ impl std::error::Error for Exit {}
 fn set_user() -> Result<()> {
     {
         let effective_uid = nix::unistd::geteuid();
-        let user_var = env::var("USER").unwrap_or_default();
+        let user_var = env::var("USER").ok();
+        let home_var = env::var_os("HOME");
 
         if let Some(effective_user) = nix::unistd::User::from_uid(nix::unistd::geteuid())? {
-            if user_var != effective_user.name {
-                debug!(user_old = %user_var, user = %effective_user.name, home = ?effective_user.dir, "Resetting USER and HOME environment variables");
+            if user_var.as_deref() != Some(effective_user.name.as_str()) {
+                debug!(user_old = ?user_var, user = %effective_user.name, "Resetting USER environment variable");
                 unsafe {
                     env::set_var("USER", effective_user.name);
-                    env::set_var("HOME", effective_user.dir);
+                    // An unset USER does not imply that HOME is stale,
+                    // but make sure HOME is set if it is missing.
+                    if user_var.is_some() || home_var.is_none() {
+                        env::set_var("HOME", effective_user.dir);
+                    }
                 }
             }
         } else {
@@ -383,9 +388,56 @@ fn set_user() -> Result<()> {
             // Bottom line - don't abort or warn if we cannot find a passwd
             // entry for the euid, but do log it in debug output so that we can
             // diagnose whether it has contributed to user reported issues.
-            debug!(euid = %effective_uid, user = %user_var, "Unable to get passwd entry for USER and HOME check");
+            debug!(euid = %effective_uid, user = ?user_var, "Unable to get passwd entry for USER and HOME check");
         };
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod set_user_tests {
+    use super::*;
+
+    fn check_user_home(user: Option<&str>, home: Option<&str>, reset_home: bool) {
+        let effective_user = nix::unistd::User::from_uid(nix::unistd::geteuid())
+            .unwrap()
+            .unwrap();
+        let expected_home = if reset_home {
+            effective_user.dir.into_os_string()
+        } else {
+            home.expect("HOME must be set when it is preserved").into()
+        };
+
+        temp_env::with_vars([("USER", user), ("HOME", home)], || {
+            set_user().unwrap();
+            assert_eq!(
+                (env::var("USER").unwrap(), env::var_os("HOME").unwrap()),
+                (effective_user.name, expected_home)
+            );
+        });
+    }
+
+    #[test]
+    fn unset_user_preserves_home() {
+        check_user_home(None, Some("/flox-custom-home"), false);
+    }
+
+    #[test]
+    fn matching_user_preserves_home() {
+        let user = nix::unistd::User::from_uid(nix::unistd::geteuid())
+            .unwrap()
+            .unwrap();
+        check_user_home(Some(&user.name), Some("/flox-custom-home"), false);
+    }
+
+    #[test]
+    fn stale_user_resets_home() {
+        check_user_home(Some("flox-stale-user"), Some("/flox-custom-home"), true);
+    }
+
+    #[test]
+    fn unset_user_and_home_sets_home() {
+        check_user_home(None, None, true);
     }
 }
 
