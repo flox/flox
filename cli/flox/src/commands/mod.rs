@@ -22,6 +22,7 @@ mod install;
 mod list;
 mod lock_manifest;
 mod publish;
+mod publish_credentials;
 mod pull;
 mod push;
 mod run;
@@ -275,6 +276,15 @@ impl Commands {
 pub struct Interrupted;
 
 impl FloxArgs {
+    /// The credential helper 'flox publish' runs once per S3 request, which
+    /// `main` runs ahead of the startup every other command goes through.
+    pub fn publish_credentials(&self) -> Option<&publish_credentials::PublishCredentials> {
+        match &self.command {
+            Some(Commands::Internal(InternalCommands::PublishCredentials(args))) => Some(args),
+            _ => None,
+        }
+    }
+
     /// Initialize the command line by creating an initial FloxBuilder
     pub async fn handle(self, config: Config) -> Result<()> {
         // Sentry was initialized with the device ID that this command deletes,
@@ -1177,6 +1187,13 @@ enum InternalCommands {
     /// Flush buffered telemetry (invoked as a detached background child)
     #[bpaf(command("send-telemetry"), hide)]
     SendTelemetry(#[bpaf(external(send_telemetry::send_telemetry))] send_telemetry::SendTelemetry),
+
+    /// Serve S3 upload credentials to 'nix copy' during 'flox publish'
+    #[bpaf(command("publish-credentials"), hide)]
+    PublishCredentials(
+        #[bpaf(external(publish_credentials::publish_credentials))]
+        publish_credentials::PublishCredentials,
+    ),
 }
 
 impl InternalCommands {
@@ -1189,6 +1206,10 @@ impl InternalCommands {
             InternalCommands::ServicesSocket(args) => args.handle(flox).await?,
             InternalCommands::HookEnv(args) => args.handle(config, flox).await?,
             InternalCommands::SendTelemetry(args) => args.handle(config, flox).await?,
+            // Dispatched from `main` before startup; see `FloxArgs::publish_credentials`.
+            InternalCommands::PublishCredentials(args) => {
+                args.run();
+            },
         }
         Ok(())
     }
@@ -1212,6 +1233,7 @@ impl InternalCommands {
             InternalCommands::ServicesSocket(_) => "services-socket",
             InternalCommands::HookEnv(_) => "hook-env",
             InternalCommands::SendTelemetry(_) => "send-telemetry",
+            InternalCommands::PublishCredentials(_) => "publish-credentials",
         }
     }
 }

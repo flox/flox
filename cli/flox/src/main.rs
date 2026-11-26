@@ -136,6 +136,14 @@ fn main() -> ExitCode {
         return ExitCode::from(0);
     }
 
+    // The upload credential helper runs once per S3 request of a publish, so
+    // it skips telemetry, Sentry and credential resolution entirely.
+    if let Ok(FloxCli(args)) = &args
+        && let Some(helper) = args.publish_credentials()
+    {
+        return helper.run();
+    }
+
     let metrics_uuid = if !config.flox.disable_metrics {
         init_telemetry_uuid(&config.flox.data_dir, &config.flox.cache_dir)
             .and_then(|_| read_metrics_uuid(&config))
