@@ -1420,7 +1420,7 @@ The environment SBOM endpoint generates a Software Bill of Materials
 for a Flox environment by analyzing its lockfile and dependencies.
 
 Attributes:
-    lockfile: The environment's lockfile dictionary (v0 or v1 format)
+    lockfile: The environment's lockfile dictionary (version 1 format)
     system: Target system architecture (e.g., "x86_64-linux", "aarch64-darwin")
     environment_name: Name of the environment (for informational purposes in SBOM)
     environment_owner: Owner of the environment (for informational purposes in SBOM)
@@ -1431,7 +1431,7 @@ Attributes:
     /// ```json
     ///{
     ///  "title": "EnvironmentSbomRequest",
-    ///  "description": "Request body for environment SBOM endpoint.\n\nThe environment SBOM endpoint generates a Software Bill of Materials\nfor a Flox environment by analyzing its lockfile and dependencies.\n\nAttributes:\n    lockfile: The environment's lockfile dictionary (v0 or v1 format)\n    system: Target system architecture (e.g., \"x86_64-linux\", \"aarch64-darwin\")\n    environment_name: Name of the environment (for informational purposes in SBOM)\n    environment_owner: Owner of the environment (for informational purposes in SBOM)\n    generation: Optional generation number (for informational purposes in SBOM)",
+    ///  "description": "Request body for environment SBOM endpoint.\n\nThe environment SBOM endpoint generates a Software Bill of Materials\nfor a Flox environment by analyzing its lockfile and dependencies.\n\nAttributes:\n    lockfile: The environment's lockfile dictionary (version 1 format)\n    system: Target system architecture (e.g., \"x86_64-linux\", \"aarch64-darwin\")\n    environment_name: Name of the environment (for informational purposes in SBOM)\n    environment_owner: Owner of the environment (for informational purposes in SBOM)\n    generation: Optional generation number (for informational purposes in SBOM)",
     ///  "type": "object",
     ///  "required": [
     ///    "environment_name",
