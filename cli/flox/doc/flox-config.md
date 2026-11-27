@@ -177,6 +177,12 @@ flox config --set 'trusted_environments."owner/name"' trust
     When `installer_channel` is not set, Flox does not check for updates.
     (default: not set)
 
+`nix.cache_home`
+:   Absolute path to the cache directory for Nix commands run by Flox.
+    Use a local directory writable by the invoking user to keep cache writes
+    off network-mounted home directories.
+    Flox uses this setting when `NIX_CACHE_HOME` is unset.
+
 `search_limit`
 :   How many items `flox search` should show by default.
 
@@ -232,6 +238,10 @@ flox config --set 'trusted_environments."owner/name"' trust
     Any other value, `1` included, makes Flox commands fail with a configuration error.
     `DO_NOT_TRACK=true` overrides `FLOX_DISABLE_METRICS=false`.
     See `disable_metrics` for what telemetry is and what turning it off does not stop.
+
+`$FLOX_NIX_CACHE_HOME`
+:   Overrides `nix.cache_home` in config files.
+    A `NIX_CACHE_HOME` set in the calling environment takes precedence.
 
 `$DO_NOT_TRACK`
 :   Set to `true` to turn off telemetry.

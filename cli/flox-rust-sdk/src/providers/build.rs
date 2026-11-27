@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::LazyLock;
 
+use flox_core::util::nix_cache_home_override;
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::lockfile::Lockfile;
 use flox_manifest::parsed::Inner;
@@ -38,6 +39,14 @@ static FLOX_EXPRESSION_BUILD_NIX: LazyLock<PathBuf> = LazyLock::new(|| {
     std::env::var("FLOX_EXPRESSION_BUILD_NIX")
         .unwrap_or_else(|_| env!("FLOX_EXPRESSION_BUILD_NIX").to_string())
         .into()
+});
+
+static NIXPKGS_LIB_URL: LazyLock<Url> = LazyLock::new(|| {
+    std::env::var("NIXPKGS_LIB_URL")
+        .as_deref()
+        .unwrap_or(env!("NIXPKGS_LIB_URL"))
+        .parse()
+        .unwrap()
 });
 
 static GNUMAKE_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
@@ -406,6 +415,17 @@ impl FloxBuildMk<'_> {
         // wrote into this process since startup.
         flox_core::util::restore_startup_tls_env(&mut command);
         command.env_remove("MAKEFLAGS");
+        // Make inserts this value into a Bash ANSI-C quoted string.
+        let cache_home = nix_cache_home_override()
+            .map(|path| {
+                path.as_os_str()
+                    .as_encoded_bytes()
+                    .escape_ascii()
+                    .to_string()
+            })
+            .unwrap_or_default();
+        command.env("_FLOX_NIX_CACHE_HOME", cache_home);
+        command.arg(format!("NIXPKGS_LIB_URL={}", &*NIXPKGS_LIB_URL));
         command.arg("--file").arg(&*FLOX_BUILD_MK);
         command.arg("--directory").arg(base_dir); // Change dir before reading makefile.
         if self.verbosity <= 0 {
@@ -844,8 +864,7 @@ pub fn find_toplevel_group_nixpkgs(lockfile: &Lockfile) -> Option<BaseCatalogUrl
 ///
 /// **NOTE**
 /// The current implementation will _not_ evaluate any of the packages.
-/// Therefore `nixpkgs` passed to the nef subsystem,
-/// is only used for its library functions.
+/// Reflection uses the library bundled with the package builder.
 /// Additionally, the `expression_ref`
 /// only needs to resolve to a directory containing `pkgs` dir,
 /// and it _does not_ have to use a git fetcher
@@ -864,7 +883,7 @@ fn get_nix_expression_targets(
     let mut command = nix_base_command();
     command
         .arg("eval")
-        .args(["--argstr", "nixpkgs-url", COMMON_NIXPKGS_URL.as_str()])
+        .args(["--argstr", "nixpkgs-lib-url", NIXPKGS_LIB_URL.as_str()])
         .args(["--argstr", "source-ref", expression_ref.as_url().as_str()])
         .args([
             "--file",

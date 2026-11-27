@@ -10,7 +10,7 @@ use flox_core::features::Features;
 use flox_core::floxhub::Floxhub;
 use floxhub_client::CatalogFlakeFetcher;
 use glob::{MatchOptions, Pattern};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, de};
 use toml_edit::Key;
 use tracing::debug;
 use url::Url;
@@ -137,6 +137,9 @@ pub struct FloxConfig {
     #[serde(default)]
     pub catalog_flake_fetcher: CatalogFlakeFetcher,
 
+    /// Configuration for the Nix processes started by Flox.
+    pub nix: Option<NixConfig>,
+
     /// Authentication mode for FloxHub.
     /// Unset means the consumer's compiled-in default.
     pub floxhub_authn_mode: Option<AuthnMode>,
@@ -243,6 +246,24 @@ pub enum EnvironmentPromptConfig {
     /// Change the shell prompt to show the active environments,
     /// but omit 'default' environments
     HideDefault,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct NixConfig {
+    /// Absolute cache path used when NIX_CACHE_HOME is unset.
+    #[serde(default, deserialize_with = "deserialize_nix_cache_home")]
+    pub cache_home: Option<PathBuf>,
+}
+
+fn deserialize_nix_cache_home<'de, D>(deserializer: D) -> Result<Option<PathBuf>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let path = Option::<PathBuf>::deserialize(deserializer)?;
+    if path.as_ref().is_some_and(|path| !path.is_absolute()) {
+        return Err(de::Error::custom("nix.cache_home must be an absolute path"));
+    }
+    Ok(path)
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

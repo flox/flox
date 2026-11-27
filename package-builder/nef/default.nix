@@ -1,6 +1,8 @@
 {
   nixpkgs-url ? "nixpkgs",
   nixpkgs-flake ? builtins.getFlake nixpkgs-url,
+  nixpkgs-lib-url ? "path:${nixpkgs-flake}/lib",
+  nixpkgs-lib ? import (builtins.fetchTree nixpkgs-lib-url),
   source-ref,
   catalog-lockfile ? throw "A catalog lockfile is required to evaluate packages",
   system ? builtins.currentSystem or null,
@@ -17,7 +19,7 @@ let
     };
   };
   libOverlay = (import ./lib).overlay;
-  lib = nixpkgs-flake.lib.extend libOverlay;
+  lib = nixpkgs-lib.extend libOverlay;
 
   parsedRef =
     if builtins.isAttrs source-ref then

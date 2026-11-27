@@ -11,6 +11,7 @@
   gnutar,
   jq,
   nix,
+  nixpkgsLib,
   shellcheck,
   stdenv,
   t3,
@@ -39,6 +40,7 @@ stdenv.mkDerivation {
       gnutar=${gnutar} \
       jq=${jq} \
       nix=${nix} \
+      nixpkgsLibUrl=path:${nixpkgsLib} \
       t3=${t3} substituteAllInPlace $i
     done
   '';

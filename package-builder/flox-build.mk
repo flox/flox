@@ -72,7 +72,7 @@ _jq := $(call __package_bin,$(__jq),jq)
 _mkdir := $(call __package_bin,$(__coreutils),mkdir)
 _mktemp := $(call __package_bin,$(__coreutils),mktemp)
 _mv := $(call __package_bin,$(__coreutils),mv)
-_nix := $(call __package_bin,$(__nix),nix)
+_nix_bin := $(call __package_bin,$(__nix),nix)
 _nix_store := $(call __package_bin,$(__nix),nix-store)
 _pwd := $(call __package_bin,$(__coreutils),pwd)
 _readlink := $(call __package_bin,$(__coreutils),readlink)
@@ -95,6 +95,7 @@ endif
 
 # Path to Nix expression (NEF) library.
 _nef := $(_libexec_dir)/nef
+NIXPKGS_LIB_URL ?= @nixpkgsLibUrl@
 
 # Set makefile verbosity based on the value of _FLOX_SUBSYSTEM_VERBOSITY [sic]
 # as set in the environment by the flox CLI. First set it to 0 if not defined.
@@ -102,8 +103,13 @@ ifeq (,$(_FLOX_SUBSYSTEM_VERBOSITY))
   _FLOX_SUBSYSTEM_VERBOSITY = 0
 endif
 
+# Keep the CLI's cache override out of user build scripts. Expand the prefix
+# when each recipe runs so the path is never parsed as Make syntax by eval.
+unexport _FLOX_NIX_CACHE_HOME
+_nix_cache_env = $(if $(value _FLOX_NIX_CACHE_HOME),$(_env) NIX_CACHE_HOME=$$'$(value _FLOX_NIX_CACHE_HOME)' )
+
 # Invoke nix with the required experimental features enabled.
-_nix := $(_nix) --extra-experimental-features "flakes nix-command fetch-tree" $(intcmp 0,$(_FLOX_SUBSYSTEM_VERBOSITY),--trace-verbose)
+_nix = $(_nix_cache_env)$(_nix_bin) --extra-experimental-features "flakes nix-command fetch-tree" $(intcmp 0,$(_FLOX_SUBSYSTEM_VERBOSITY),--trace-verbose)
 
 # Ensure we use the Nix-provided SHELL.
 SHELL := $(_bash) $(intcmp 2,$(_FLOX_SUBSYSTEM_VERBOSITY),-x)
@@ -145,7 +151,7 @@ ifneq (,$(NIX_EXPRESSION_REF))
   __nix_expression_build_tuples := $(shell \
     $(_nix) eval \
       --argstr source-ref '$(NIX_EXPRESSION_REF)' \
-      --argstr nixpkgs-url '$(BUILDTIME_NIXPKGS_URL)' \
+      --argstr nixpkgs-lib-url '$(NIXPKGS_LIB_URL)' \
       --argstr system '$(NIX_SYSTEM)' \
       --file $(_nef) \
       reflect.attrPaths --json | \
@@ -464,7 +470,7 @@ define BUILD_local_template =
 	@# strlen("environment") == strlen("developcopy").
 	@#
 	$$(eval $(_pvarname)_develop_copy_env = \
-	  $$(shell $(_nix) store add --name "developcopy-build-$(_pname)" $(FLOX_ENV)))
+	  $$(shell $$(_nix) store add --name "developcopy-build-$(_pname)" $(FLOX_ENV)))
 	@#
 	@# Throw error if the temporary build wrapper env path is empty.
 	@#
@@ -541,7 +547,7 @@ define BUILD_local_template =
   # build-manifest.nix to turn it into a Nix package.
   .PHONY: $($(_pvarname)_buildJSON)
   $($(_pvarname)_buildJSON): $($(_pvarname)_out)
-	$(_V_) $(_nix) build -L --file $(_libexec_dir)/build-manifest.nix \
+	$(_V_) $$(_nix) build -L --file $(_libexec_dir)/build-manifest.nix \
 	  --argstr pname "$(_pname)" \
 	  --argstr version "$(_version)" \
 	  --argstr flox-env "$(FLOX_ENV)" \
@@ -554,7 +560,7 @@ define BUILD_local_template =
 
   # Import the build log into the Nix store.
   $($(_pvarname)_result)-log: $($(_pvarname)_logfile)
-	$(_V_) $(_nix) build -L `$(_nix) store add-file $$(shell $(_realpath) $$<)` --out-link $$@
+	$(_V_) $$(_nix) build -L $$$$($$(_nix) store add-file $$(shell $(_realpath) $$<)) --out-link $$@
 
   # Recall that the $(_pvarname)_CHECK_BUILD target as declared in the
   # MANIFEST_BUILD_template validates that the build is sane.
@@ -640,7 +646,7 @@ define BUILD_nix_sandbox_template =
 	  $(_rm) -f "$($(_pvarname)_result)-buildCache.prevOutPath"; \
 	  $(_readlink) "$($(_pvarname)_result)-buildCache" > "$($(_pvarname)_result)-buildCache.prevOutPath"; \
 	fi
-	$(_V_) $(_nix) build -L --file $(_libexec_dir)/build-manifest.nix \
+	$(_V_) $$(_nix) build -L --file $(_libexec_dir)/build-manifest.nix \
 	  --argstr pname "$(_pname)" \
 	  --argstr version "$(_version)" \
 	  --argstr srcTarball "$($(_pvarname)_src_tar)" \
@@ -673,7 +679,7 @@ define BUILD_nix_sandbox_template =
 	$(_VV_) if [ -n "$(_do_buildCache)" ]; then \
 	  if [ -f "$($(_pvarname)_result)-buildCache" ] && [ -f "$($(_pvarname)_result)-buildCache.prevOutPath" ]; then \
 	    if [ $$$$($(_readlink) "$($(_pvarname)_result)-buildCache") != $$$$($(_cat) "$($(_pvarname)_result)-buildCache.prevOutPath") ]; then \
-	      $(_daemonize) $(_nix) store delete \
+	      $(_daemonize) $$(_nix) store delete \
 	        $$$$($(_cat) "$($(_pvarname)_result)-buildCache.prevOutPath"); \
 	    fi; \
 	  fi; \
@@ -779,7 +785,7 @@ define MANIFEST_BUILD_template =
 	@#    environment that can occur when replacing the "developcopy"
 	@#    environment at the conclusion of a manifest build
 	@# Emits diagnostics to stderr and returns nonzero result upon failure.
-	$(_V_) $(_libexec_dir)/validate-build \
+	$(_V_) $$(_nix_cache_env)$(_libexec_dir)/validate-build \
 	  --build-env $$($(_pvarname)_build_wrapper_env) \
 	  --develop-env $(FLOX_ENV) \
 	  --system $(NIX_SYSTEM) \
@@ -878,7 +884,8 @@ define NIX_EXPRESSION_BUILD_template =
   .PHONY: $($(_pvarname)_evalJSON)
   $($(_pvarname)_evalJSON): $(CATALOG_LOCKFILE) $(PROJECT_TMPDIR)/check-build-prerequisites
 	$(_V_) $(_mkdir) -p $$(@D)
-	$(_V_) $(_nix) eval -L --file $(_nef) \
+	$(_V_) $$(_nix) eval -L --file $(_nef) \
+	  --argstr nixpkgs-lib-url '$(NIXPKGS_LIB_URL)' \
 	  --argstr nixpkgs-url '$(EXPRESSION_BUILD_NIXPKGS_URL)' \
 	  --argstr system '$(NIX_SYSTEM)' \
 	  --argstr source-ref '$(NIX_EXPRESSION_REF)' \
@@ -914,7 +921,7 @@ define NIX_EXPRESSION_BUILD_template =
 	$$(if $$(wildcard $$(_drvPath)),,\
 	  $$(error $$(_drvPath) has been garbage collected - please try again))
 	@echo "Building $$(_name) in Nix expression mode"
-	$(_V_) $(_nix) build --json -L --out-link $($(_pvarname)_result) \
+	$(_V_) $$(_nix) build --json -L --out-link $($(_pvarname)_result) \
 	  $$(_drvPath)'^*' > $$@
 
   # Recall that the $(_pvarname)_CHECK_RESULT_LINKS target as declared in the
@@ -929,12 +936,12 @@ define NIX_EXPRESSION_BUILD_template =
   # Harvest the logfile from the build.
   $($(_pvarname)_logfile): $($(_pvarname)_buildJSON) $(_pvarname)_CHECK_BUILD
 	$$(eval _drvPath = $$(shell $(_jq) -r '.[0].drvPath' $$<))
-	$(_V_) ( $(_nix) log $$(_drvPath) 2>/dev/null || echo "No logs available" ) > $($(_pvarname)_logfile)
+	$(_V_) ( $$(_nix) log $$(_drvPath) 2>/dev/null || echo "No logs available" ) > $($(_pvarname)_logfile)
 
   # Add the log to the store and create a GCRoot for it.
   $($(_pvarname)_result)-log: $($(_pvarname)_logfile)
-	$(_V_) $(_nix) build -L --out-link $($(_pvarname)_result)-log \
-	  $$(shell $(_nix) store add-file $($(_pvarname)_logfile))
+	$(_V_) $$(_nix) build -L --out-link $($(_pvarname)_result)-log \
+	  $$(shell $$(_nix) store add-file $($(_pvarname)_logfile))
 
   # Following a successful build, merge in the eval json. The catalog lock
   # is the CLI's concern: it created the lock this build consumed, so

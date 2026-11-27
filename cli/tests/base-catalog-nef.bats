@@ -28,6 +28,7 @@ EOF
 
   run nix build --extra-experimental-features 'nix-command flakes' \
     --file "$FLOX_EXPRESSION_BUILD_NIX" \
+    --argstr nixpkgs-lib-url "$NIXPKGS_LIB_URL" \
     --argstr nixpkgs-url "github:NixOS/nixpkgs/$TEST_NIXPKGS_REV_NEW" \
     --argstr source-ref "path:$project" \
     --argstr catalog-lockfile "$test_dir/builder-catalog-lock.json" \
@@ -51,6 +52,7 @@ EOF
 
   run nix eval --extra-experimental-features 'nix-command flakes' \
     --file "$FLOX_EXPRESSION_BUILD_NIX" \
+    --argstr nixpkgs-lib-url "$NIXPKGS_LIB_URL" \
     --argstr nixpkgs-url "github:NixOS/nixpkgs/$TEST_NIXPKGS_REV_NEW" \
     --argstr source-ref "path:$project" \
     --argstr catalog-lockfile "$test_dir/builder-catalog-lock.json" \
