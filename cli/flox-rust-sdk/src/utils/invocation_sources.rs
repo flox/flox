@@ -5,7 +5,7 @@ use std::sync::LazyLock;
 /// Heuristics table for inferring invocation sources from environment
 /// Each entry: (env_var_name, expected_value_or_none, invocation_source_tag)
 /// Use None for expected_value to check env var presence only
-const INFERENCE_HEURISTICS: &[(&str, Option<&str>, &str)] = &[
+pub const INFERENCE_HEURISTICS: &[(&str, Option<&str>, &str)] = &[
     // CI and containerd contexts. Consumers derive CI / container
     // membership from these tags — renaming them changes what they see.
     ("CI", None, "ci"),
@@ -45,13 +45,13 @@ const INFERENCE_HEURISTICS: &[(&str, Option<&str>, &str)] = &[
 ];
 
 /// Detect invocation sources from environment heuristics
-fn detect_heuristics() -> impl Iterator<Item = String> {
+fn detect_heuristics(var: impl Fn(&str) -> Option<String>) -> impl Iterator<Item = String> {
     INFERENCE_HEURISTICS
         .iter()
-        .filter_map(|(env_var, expected_value, source)| {
+        .filter_map(move |(env_var, expected_value, source)| {
             let matches = match expected_value {
-                Some(expected) => env::var(env_var).as_deref() == Ok(expected),
-                None => env::var(env_var).is_ok(),
+                Some(expected) => var(env_var).as_deref() == Some(*expected),
+                None => var(env_var).is_some(),
             };
             if matches {
                 Some(source.to_string())
@@ -73,10 +73,16 @@ fn detect_heuristics() -> impl Iterator<Item = String> {
 /// Double-counting prevention for aggregation queries is handled in the
 /// metrics materialized view using COUNT(DISTINCT uuid).
 pub fn detect_invocation_sources() -> Vec<String> {
+    detect_invocation_sources_from(|name| env::var(name).ok())
+}
+
+/// Like [detect_invocation_sources], for the environment that `var` looks
+/// variables up in.
+pub fn detect_invocation_sources_from(var: impl Fn(&str) -> Option<String>) -> Vec<String> {
     let mut sources = HashSet::new();
 
     // Explicit sources from FLOX_INVOCATION_SOURCE
-    if let Ok(explicit) = env::var("FLOX_INVOCATION_SOURCE") {
+    if let Some(explicit) = var("FLOX_INVOCATION_SOURCE") {
         for source in explicit.split(',').map(str::trim) {
             if !source.is_empty() {
                 sources.insert(source.to_string());
@@ -85,9 +91,23 @@ pub fn detect_invocation_sources() -> Vec<String> {
     }
 
     // Apply all inference heuristics (CI, containerd, agentic tools, etc.)
-    sources.extend(detect_heuristics());
+    sources.extend(detect_heuristics(&var));
 
-    // Sort for consistent ordering
+    sorted(sources)
+}
+
+/// Detect the invocation sources that the heuristics infer, for the
+/// environment that `var` looks variables up in.
+///
+/// `FLOX_INVOCATION_SOURCE` is not read, so every source returned is a tag of
+/// [INFERENCE_HEURISTICS]. Deduplicated and sorted like
+/// [detect_invocation_sources].
+pub fn infer_invocation_sources_from(var: impl Fn(&str) -> Option<String>) -> Vec<String> {
+    sorted(detect_heuristics(var).collect())
+}
+
+/// Sort for consistent ordering
+fn sorted(sources: HashSet<String>) -> Vec<String> {
     let mut result: Vec<String> = sources.into_iter().collect();
     result.sort();
     result
@@ -126,6 +146,32 @@ mod tests {
                 assert!(sources.contains(&"agentic.flox-mcp".to_string()));
             },
         );
+    }
+
+    #[test]
+    fn test_detect_invocation_sources_from_given_environment() {
+        let var = |name: &str| match name {
+            "FLOX_INVOCATION_SOURCE" => Some("vscode.terminal".to_string()),
+            "TERM_PROGRAM" => Some("kiro".to_string()),
+            "CURSOR_AGENT" => Some(String::new()),
+            _ => None,
+        };
+        assert_eq!(detect_invocation_sources_from(var), [
+            "agentic.cursor.cli",
+            "agentic.kiro",
+            "vscode.terminal"
+        ]);
+    }
+
+    #[test]
+    fn test_infer_invocation_sources_leaves_explicit_unread() {
+        let var = |name: &str| match name {
+            "FLOX_INVOCATION_SOURCE" => Some("vscode.terminal,ci.github-actions".to_string()),
+            "CI" => Some("true".to_string()),
+            "CODEX_SANDBOX" | "CODEX_CI" => Some("1".to_string()),
+            _ => None,
+        };
+        assert_eq!(infer_invocation_sources_from(var), ["agentic.codex", "ci"]);
     }
 
     #[test]

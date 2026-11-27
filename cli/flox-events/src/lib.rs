@@ -14,11 +14,12 @@ mod connection;
 mod guard;
 mod hub;
 
-pub use buffer::{EVENTS_BUFFER_FILE_NAME, EventsBuffer};
-pub use client::{BATCH_SIZE, EventsClient};
+pub use buffer::{BufferLocation, EVENTS_BUFFER_FILE_NAME, EventsBuffer, LOCK_WAIT};
+pub use client::{BATCH_SIZE, EventsClient, buffer_max_age};
 pub use connection::{EventsConnection, EventsConnectionV2, TRAILING_NETWORK_CALL_TIMEOUT};
 pub use guard::{EventsGuard, force_flush_requested};
 pub use hub::EventsHub;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize, de};
 use serde_with::{TimestampMilliSeconds, serde_as};
 use time::OffsetDateTime;
@@ -31,18 +32,52 @@ pub mod test_helpers {
 
 const CLI_SOURCE: &str = "cli";
 
+/// A program that emits events in the v2 envelope.
+///
+/// The envelope is the same for every producer; what differs is the
+/// `source` it stamps on each event and the set of event types it emits.
+/// A buffer or a decoder for one producer never takes another producer's
+/// events.
+pub trait Producer: std::fmt::Debug + Clone + PartialEq + Eq + 'static {
+    /// The `source` of every event this producer emits.
+    const SOURCE: &'static str;
+
+    /// The producer's event variants and their payloads, flattened into
+    /// the envelope as `event_type` and `payload`.
+    type Kind: std::fmt::Debug + Clone + PartialEq + Eq + Serialize + DeserializeOwned;
+
+    /// What a client of this producer keeps for the whole invocation to
+    /// build its own payloads from; `()` for a producer that needs nothing.
+    type Metadata: std::fmt::Debug;
+}
+
+/// The Flox CLI: `source` `"cli"` and the `cli.*` events of [`EventKind`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Cli;
+
+impl Producer for Cli {
+    type Kind = EventKind;
+    type Metadata = SharedMetadataTemplate;
+
+    const SOURCE: &'static str = CLI_SOURCE;
+}
+
+/// A single telemetry event of the Flox CLI.
+pub type Event = ProducerEvent<Cli>;
+
 /// A single telemetry event in the v2 envelope shape.
 ///
-/// `source` is always `"cli"`. `kind` carries the variant tag and its
-/// typed payload and is flattened into the envelope, so the wire shape
-/// is `{event_id, event_timestamp, source, invocation_id, device_id,
-/// auth_subject?, producer_version?, event_type, payload}`.
+/// `source` is always the producer's [`Producer::SOURCE`]. `kind` carries
+/// the variant tag and its typed payload and is flattened into the
+/// envelope, so the wire shape is `{event_id, event_timestamp, source,
+/// invocation_id, device_id, auth_subject?, producer_version?, event_type,
+/// payload}`.
 ///
 /// The CLI serializes events for transport and deserializes the same shape to
 /// reload its local buffer.
 #[serde_as]
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct Event {
+pub struct ProducerEvent<P: Producer> {
     /// Unique id for this event (used downstream for de-duplication).
     pub event_id: Uuid,
     /// When the event occurred. Serialized as an integer millisecond
@@ -53,7 +88,7 @@ pub struct Event {
     /// timezone-ambiguity class entirely (no offset, no DST gaps).
     #[serde_as(as = "TimestampMilliSeconds<i64>")]
     pub event_timestamp: OffsetDateTime,
-    /// The producer. Always `"cli"`.
+    /// The producer. Always [`Producer::SOURCE`].
     pub source: &'static str,
     /// Correlates every event emitted during one CLI invocation.
     pub invocation_id: Uuid,
@@ -75,12 +110,13 @@ pub struct Event {
     /// envelope: the variant's `#[serde(rename)]` becomes `event_type`
     /// and the variant's payload struct becomes `payload`.
     #[serde(flatten)]
-    pub kind: EventKind,
+    pub kind: P::Kind,
 }
 
 #[serde_as]
 #[derive(Debug, Deserialize)]
-struct EventWire {
+#[serde(bound(deserialize = ""))]
+struct EventWire<P: Producer> {
     event_id: Uuid,
     #[serde_as(as = "TimestampMilliSeconds<i64>")]
     event_timestamp: OffsetDateTime,
@@ -90,18 +126,19 @@ struct EventWire {
     auth_subject: Option<String>,
     producer_version: Option<String>,
     #[serde(flatten)]
-    kind: EventKind,
+    kind: P::Kind,
 }
 
-impl<'de> Deserialize<'de> for Event {
+impl<'de, P: Producer> Deserialize<'de> for ProducerEvent<P> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
-        let wire = EventWire::deserialize(deserializer)?;
-        if wire.source != CLI_SOURCE {
+        let wire = EventWire::<P>::deserialize(deserializer)?;
+        if wire.source != P::SOURCE {
             return Err(de::Error::custom(format!(
-                "expected v2 event source {CLI_SOURCE:?}, got {:?}",
+                "expected v2 event source {:?}, got {:?}",
+                P::SOURCE,
                 wire.source
             )));
         }
@@ -109,7 +146,7 @@ impl<'de> Deserialize<'de> for Event {
         Ok(Self {
             event_id: wire.event_id,
             event_timestamp: wire.event_timestamp,
-            source: CLI_SOURCE,
+            source: P::SOURCE,
             invocation_id: wire.invocation_id,
             device_id: wire.device_id,
             auth_subject: wire.auth_subject,
@@ -1272,6 +1309,86 @@ mod tests {
         );
     }
 
+    /// A producer other than the CLI, with event types of its own.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct Other;
+
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+    struct OtherKind {
+        event_type: String,
+        payload: serde_json::Map<String, serde_json::Value>,
+    }
+
+    impl Producer for Other {
+        type Kind = OtherKind;
+        type Metadata = ();
+
+        const SOURCE: &'static str = "other";
+    }
+
+    fn other_event(event_type: &str, payload: serde_json::Value) -> ProducerEvent<Other> {
+        let serde_json::Value::Object(payload) = payload else {
+            panic!("a payload is an object");
+        };
+        ProducerEvent {
+            event_id: Uuid::nil(),
+            event_timestamp: OffsetDateTime::from_unix_timestamp(0).expect("valid timestamp"),
+            source: Other::SOURCE,
+            invocation_id: Uuid::nil(),
+            device_id: Uuid::nil(),
+            auth_subject: None,
+            producer_version: Some("1.0.0".to_string()),
+            kind: OtherKind {
+                event_type: event_type.to_string(),
+                payload,
+            },
+        }
+    }
+
+    #[test]
+    fn another_producer_has_the_same_envelope() {
+        let event = other_event("other.ran", json!({"count": 1}));
+        let value = serde_json::to_value(&event).expect("event serializes");
+        assert_eq!(
+            value,
+            json!({
+                "event_id": "00000000-0000-0000-0000-000000000000",
+                "event_timestamp": EPOCH_UNIX_MS,
+                "source": "other",
+                "invocation_id": "00000000-0000-0000-0000-000000000000",
+                "device_id": "00000000-0000-0000-0000-000000000000",
+                "producer_version": "1.0.0",
+                "event_type": "other.ran",
+                "payload": {"count": 1},
+            })
+        );
+        let read: ProducerEvent<Other> = serde_json::from_value(value).expect("event deserializes");
+        assert_eq!(read, event);
+    }
+
+    #[test]
+    fn a_decoder_accepts_only_its_producers_source() {
+        // An event type both producers can read, so only the source differs.
+        let other = serde_json::to_string(&other_event("cli.authenticated", json!({})))
+            .expect("event serializes");
+        let err = serde_json::from_str::<Event>(&other).expect_err("the CLI reads another source");
+        assert!(
+            err.to_string()
+                .contains(r#"expected v2 event source "cli", got "other""#),
+            "{err}"
+        );
+
+        let cli = serde_json::to_string(&fixed_event(EventKind::CliAuthenticated {}))
+            .expect("event serializes");
+        let err = serde_json::from_str::<ProducerEvent<Other>>(&cli)
+            .expect_err("another producer reads the CLI's source");
+        assert!(
+            err.to_string()
+                .contains(r#"expected v2 event source "other", got "cli""#),
+            "{err}"
+        );
+    }
+
     #[test]
     fn shared_metadata_template_merges_subcommand_into_payload() {
         let template = shared_metadata_for_payload_tests();
@@ -2181,6 +2298,27 @@ mod pipeline_tests {
     }
 
     #[test]
+    fn flush_due_reuses_the_oldest_timestamp_of_events_pushed_together() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let mut client = client_with_connection(&tempdir, MockEventsConnection::default());
+        client
+            .push_all([
+                fixed_event(command_run_kind()),
+                fixed_event(command_completed_kind()),
+            ])
+            .unwrap();
+        {
+            // A non-blocking reread would return false while this lock is held.
+            let _held = EventsBuffer::read(tempdir.path()).unwrap();
+            assert!(client.is_flush_due().unwrap());
+        }
+        assert_eq!(
+            EventsBuffer::read(tempdir.path()).unwrap().iter().count(),
+            2
+        );
+    }
+
+    #[test]
     fn flush_due_preserves_retries_after_a_failed_send() {
         let tempdir = tempfile::tempdir().unwrap();
         let connection = MockEventsConnection::default();
@@ -2732,5 +2870,77 @@ mod pipeline_tests {
             result_seen,
             "missing result-known event with edited_includes"
         );
+    }
+
+    /// A producer other than the CLI, with the CLI's event types for brevity.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct Probe;
+
+    impl Producer for Probe {
+        type Kind = EventKind;
+        type Metadata = ();
+
+        const SOURCE: &'static str = "probe";
+    }
+
+    /// A connection that keeps what a [`Probe`] client sends.
+    #[derive(Debug, Clone, Default)]
+    struct ProbeConnection(std::sync::Arc<std::sync::Mutex<Vec<ProducerEvent<Probe>>>>);
+
+    impl EventsConnection<Probe> for ProbeConnection {
+        fn send(&mut self, events: Vec<&ProducerEvent<Probe>>) -> anyhow::Result<()> {
+            self.0
+                .lock()
+                .expect("lock")
+                .extend(events.into_iter().cloned());
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn a_client_of_another_producer_stamps_and_sends_its_own_events() {
+        let tempdir = TempDir::new().unwrap();
+        let connection = ProbeConnection::default();
+        let location = BufferLocation::with_names(tempdir.path(), "probe.json", "probe.lock");
+        let mut client = EventsClient::<Probe>::for_producer(
+            DEVICE_ID,
+            location.clone(),
+            INVOCATION_ID,
+            Some("2.0.0".to_string()),
+            (),
+            connection.clone(),
+        );
+        assert_eq!(client.max_age, Duration::minutes(2));
+
+        client.record_event(EventKind::CliAuthenticated {}).unwrap();
+        assert!(location.file().exists(), "buffered at the location given");
+        assert!(
+            !tempdir.path().join(EVENTS_BUFFER_FILE_NAME).exists(),
+            "buffered in the CLI's file"
+        );
+        assert!(client.is_flush_due().unwrap(), "due until the first send");
+        assert!(client.try_flush(false).unwrap());
+
+        let sent = connection.0.lock().unwrap().clone();
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0].source, "probe");
+        assert_eq!(sent[0].producer_version.as_deref(), Some("2.0.0"));
+        assert_eq!(
+            (sent[0].device_id, sent[0].invocation_id),
+            (DEVICE_ID, INVOCATION_ID)
+        );
+        assert_eq!(std::fs::read_to_string(location.file()).unwrap(), "");
+    }
+
+    #[test]
+    fn buffer_max_age_is_ten_seconds_in_ci() {
+        let sources = |s: &[&str]| s.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(buffer_max_age(&sources(&["ci"])), Duration::seconds(10));
+        assert_eq!(
+            buffer_max_age(&sources(&["CI.github-actions"])),
+            Duration::seconds(10)
+        );
+        assert_eq!(buffer_max_age(&sources(&["vscode"])), Duration::minutes(2));
+        assert_eq!(buffer_max_age(&[]), Duration::minutes(2));
     }
 }

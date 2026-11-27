@@ -6,14 +6,16 @@ use time::{Duration, OffsetDateTime};
 use tracing::debug;
 use uuid::Uuid;
 
-use crate::buffer::EventsBuffer;
+use crate::buffer::{BufferLocation, EventsBuffer};
 use crate::connection::{EventsConnection, EventsConnectionV2};
 use crate::{
+    Cli,
     CliCommandCompletedPayload,
     CliCommandRunPayload,
-    Event,
     EventKind,
     LifecycleFields,
+    Producer,
+    ProducerEvent,
     SharedMetadataTemplate,
 };
 
@@ -27,6 +29,22 @@ const CI_BUFFER_EXPIRY: Duration = Duration::seconds(10);
 /// expiry (such as a CI job on an ephemeral runner) still delivers.
 const FIRST_SEND_MARKER_FILE_NAME: &str = "events-v2-first-send";
 pub const BATCH_SIZE: usize = 100;
+
+/// How long the oldest buffered event waits before the buffer is due, for
+/// an invocation launched as `invocation_sources` say: [`CI_BUFFER_EXPIRY`]
+/// when they include `ci` (or a `ci.*` sub-token), else
+/// [`DEFAULT_BUFFER_EXPIRY`].
+pub fn buffer_max_age(invocation_sources: &[String]) -> Duration {
+    let is_ci = invocation_sources.iter().any(|source| {
+        let source = source.to_ascii_lowercase();
+        source == "ci" || source.starts_with("ci.")
+    });
+    if is_ci {
+        CI_BUFFER_EXPIRY
+    } else {
+        DEFAULT_BUFFER_EXPIRY
+    }
+}
 
 /// Client that stamps v2 event metadata, buffers events, and flushes
 /// them through an [`EventsConnection`].
@@ -51,21 +69,28 @@ pub const BATCH_SIZE: usize = 100;
 /// minutes, or 10 seconds when the shared metadata's `invocation_sources`
 /// include `ci` (or a `ci.*` sub-token). The buffer is also due regardless
 /// of age until the first successful send from this data dir.
+///
+/// A client of another producer `P` ([`EventsClient::for_producer`]) stamps
+/// `P`'s source and the producer version it is given, buffers at the
+/// location it is given, and is due after [`DEFAULT_BUFFER_EXPIRY`] unless
+/// its `max_age` is set ([`buffer_max_age`]).
 #[derive(Debug)]
-pub struct EventsClient {
+pub struct EventsClient<P: Producer = Cli> {
     pub device_id: Uuid,
     pub data_dir: PathBuf,
     pub invocation_id: Uuid,
     pub auth_subject: Option<String>,
     pub max_age: Duration,
-    pub connection: Box<dyn EventsConnection>,
-    shared_metadata: SharedMetadataTemplate,
+    pub connection: Box<dyn EventsConnection<P>>,
+    buffer: BufferLocation,
+    producer_version: Option<String>,
+    shared_metadata: P::Metadata,
     /// Snapshot from the last append, so checking expiry at command exit
     /// does not need to read the buffer again. Flushers still check on disk.
     oldest_buffered_timestamp: Option<OffsetDateTime>,
 }
 
-impl EventsClient {
+impl EventsClient<Cli> {
     pub fn new(
         device_id: Uuid,
         data_dir: impl AsRef<Path>,
@@ -94,24 +119,19 @@ impl EventsClient {
         shared_metadata: SharedMetadataTemplate,
         connection: impl EventsConnection + 'static,
     ) -> Self {
-        let is_ci = shared_metadata.invocation_sources.iter().any(|source| {
-            let source = source.to_ascii_lowercase();
-            source == "ci" || source.starts_with("ci.")
-        });
-        Self {
+        let max_age = buffer_max_age(&shared_metadata.invocation_sources);
+        let producer_version = Some(shared_metadata.flox_version.clone());
+        let mut client = Self::for_producer(
             device_id,
-            data_dir: data_dir.as_ref().to_path_buf(),
+            BufferLocation::new(data_dir.as_ref()),
             invocation_id,
-            auth_subject,
-            max_age: if is_ci {
-                CI_BUFFER_EXPIRY
-            } else {
-                DEFAULT_BUFFER_EXPIRY
-            },
-            connection: connection.boxed(),
+            producer_version,
             shared_metadata,
-            oldest_buffered_timestamp: None,
-        }
+            connection,
+        );
+        client.auth_subject = auth_subject;
+        client.max_age = max_age;
+        client
     }
 
     /// Record a `cli.command_run` event for `subcommand` — the one event
@@ -134,31 +154,70 @@ impl EventsClient {
             CliCommandCompletedPayload::new(subcommand, lifecycle),
         ))
     }
+}
 
-    pub fn record_event(&mut self, kind: EventKind) -> Result<()> {
+impl<P: Producer> EventsClient<P> {
+    /// A client for the events of producer `P`, buffered at `buffer` and
+    /// sent through `connection`, stamped with `producer_version`. It has no
+    /// `auth_subject` and the default `max_age`; both fields are public.
+    pub fn for_producer(
+        device_id: Uuid,
+        buffer: BufferLocation,
+        invocation_id: Uuid,
+        producer_version: Option<String>,
+        shared_metadata: P::Metadata,
+        connection: impl EventsConnection<P> + 'static,
+    ) -> Self {
+        Self {
+            device_id,
+            data_dir: buffer.dir().to_path_buf(),
+            invocation_id,
+            auth_subject: None,
+            max_age: DEFAULT_BUFFER_EXPIRY,
+            connection: connection.boxed(),
+            buffer,
+            producer_version,
+            shared_metadata,
+            oldest_buffered_timestamp: None,
+        }
+    }
+
+    pub fn record_event(&mut self, kind: P::Kind) -> Result<()> {
         let auth_subject = self.auth_subject.clone();
         self.record_event_with_auth_subject(kind, auth_subject.as_deref())
     }
 
     pub(crate) fn record_event_with_auth_subject(
         &mut self,
-        kind: EventKind,
+        kind: P::Kind,
         auth_subject: Option<&str>,
     ) -> Result<()> {
-        let event = Event {
+        let event = ProducerEvent {
             event_id: Uuid::new_v4(),
             event_timestamp: OffsetDateTime::now_utc(),
-            source: "cli",
+            source: P::SOURCE,
             invocation_id: self.invocation_id,
             device_id: self.device_id,
             auth_subject: auth_subject.map(str::to_owned),
-            producer_version: Some(self.shared_metadata.flox_version.clone()),
+            producer_version: self.producer_version.clone(),
             kind,
         };
 
         self.oldest_buffered_timestamp = None;
-        let mut events_buffer = EventsBuffer::read(&self.data_dir)?;
+        let mut events_buffer = EventsBuffer::<P>::read_at(&self.buffer)?;
         events_buffer.push(event)?;
+        self.oldest_buffered_timestamp = events_buffer.oldest_timestamp();
+        Ok(())
+    }
+
+    /// Append events that are already stamped, under one hold of the lock
+    /// and with one sync ([`EventsBuffer::push_all`]), and keep the oldest
+    /// buffered timestamp for [`EventsClient::is_flush_due`], as
+    /// [`EventsClient::record_event`] does.
+    pub fn push_all(&mut self, events: impl IntoIterator<Item = ProducerEvent<P>>) -> Result<()> {
+        self.oldest_buffered_timestamp = None;
+        let mut events_buffer = EventsBuffer::<P>::read_at(&self.buffer)?;
+        events_buffer.push_all(events)?;
         self.oldest_buffered_timestamp = events_buffer.oldest_timestamp();
         Ok(())
     }
@@ -192,13 +251,13 @@ impl EventsClient {
         if let Some(oldest) = self.oldest_buffered_timestamp {
             return Ok(OffsetDateTime::now_utc() - oldest > self.expiry());
         }
-        Ok(EventsBuffer::try_read(&self.data_dir)?
+        Ok(EventsBuffer::<P>::try_read_at(&self.buffer)?
             .is_some_and(|events| events.is_expired(self.expiry())))
     }
 
     pub fn flush(&mut self, force: bool) -> Result<()> {
         self.oldest_buffered_timestamp = None;
-        let mut events = EventsBuffer::read(&self.data_dir)?;
+        let mut events = EventsBuffer::<P>::read_at(&self.buffer)?;
         if !events.is_expired(self.expiry()) && !force {
             return Ok(());
         }
@@ -206,7 +265,7 @@ impl EventsClient {
         while !events.is_empty() {
             let batch_size = events.batch_size(BATCH_SIZE);
             {
-                let batch: Vec<&Event> = events.iter().take(batch_size).collect();
+                let batch: Vec<&ProducerEvent<P>> = events.iter().take(batch_size).collect();
                 self.connection.send(batch)?;
             }
             self.mark_sent();
@@ -237,7 +296,7 @@ impl EventsClient {
     pub fn try_flush(&mut self, force: bool) -> Result<bool> {
         self.oldest_buffered_timestamp = None;
         let drained = {
-            let Some(mut events) = EventsBuffer::try_read(&self.data_dir)? else {
+            let Some(mut events) = EventsBuffer::<P>::try_read_at(&self.buffer)? else {
                 debug!("v2 events buffer lock held by another process; skipping flush");
                 return Ok(false);
             };
@@ -257,15 +316,15 @@ impl EventsClient {
     /// Send entries already drained from the buffer, re-buffering any that a
     /// failed send leaves unsent. The lock is acquired only to re-buffer, never
     /// across the network call.
-    fn send_drained(&mut self, mut drained: VecDeque<Event>) -> Result<()> {
+    fn send_drained(&mut self, mut drained: VecDeque<ProducerEvent<P>>) -> Result<()> {
         while !drained.is_empty() {
             let batch_size = std::cmp::min(drained.len(), BATCH_SIZE);
-            let batch: Vec<&Event> = drained.iter().take(batch_size).collect();
+            let batch: Vec<&ProducerEvent<P>> = drained.iter().take(batch_size).collect();
             if let Err(err) = self.connection.send(batch) {
                 // The send failed, so the whole remaining snapshot is unsent.
                 // Re-buffer it at the front (oldest-first) so a later flush
                 // retries it ahead of anything appended in the meantime.
-                EventsBuffer::read(&self.data_dir)?.prepend(drained)?;
+                EventsBuffer::<P>::read_at(&self.buffer)?.prepend(drained)?;
                 return Err(err);
             }
             self.mark_sent();
