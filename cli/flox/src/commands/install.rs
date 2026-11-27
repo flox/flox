@@ -31,6 +31,7 @@ use flox_rust_sdk::models::environment::{
     EnvironmentError,
     InstallationAttempt,
     ManagedPointer,
+    diff_lockfiles_for_system,
 };
 use flox_rust_sdk::models::user_state::{
     lock_and_read_user_state_file,
@@ -279,6 +280,13 @@ impl Install {
         message::packages_outputs_updated(&partitioned.outputs_updated, &description);
         message::packages_newly_overridden_by_composer(&new_package_overrides);
         message::print_default_systems_changed(old_lockfile.as_ref(), &lockfile);
+        // Packages in a group share one resolution point, so adding one can
+        // move the others. The diff only covers packages that were locked
+        // before, which leaves out the ones just installed.
+        message::packages_changed_by_install(
+            &diff_lockfiles_for_system(old_lockfile.as_ref(), &lockfile, &flox.system),
+            &description,
+        );
 
         if !installation.modifications.is_empty() {
             for warning in Self::generate_unfree_and_broken_warnings(
@@ -828,15 +836,16 @@ fn add_activation_to_rc_file(
 
 #[cfg(test)]
 mod tests {
+    use chrono::{TimeZone as _, Utc};
     use flox_manifest::lockfile::test_helpers::fake_catalog_package_lock;
     use flox_manifest::lockfile::{LockedPackage, LockedPackageCatalog, Lockfile};
     use flox_manifest::raw::{CatalogPackage, PackageToInstall, RawSelectedOutputs};
     use flox_rust_sdk::flox::test_helpers::flox_instance;
-    use flox_rust_sdk::models::environment::Environment;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::{
         new_named_path_environment_from_env_files,
         new_path_environment_in,
     };
+    use flox_rust_sdk::models::environment::{Environment, diff_lockfiles_for_system};
     use flox_rust_sdk::providers::catalog::SystemEnum;
     use flox_rust_sdk::providers::catalog::test_helpers::catalog_replay_client;
     use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
@@ -849,6 +858,144 @@ mod tests {
     use crate::commands::EnvironmentSelect;
     use crate::commands::install::{Install, package_list_for_prompt};
     use crate::utils::message;
+
+    const ENV: &str = "'env'";
+    const SYSTEM: &str = "aarch64-darwin";
+
+    /// A locked package on [SYSTEM]; `derivation` stands in for the build.
+    fn locked(install_id: &str, version: &str, derivation: &str) -> LockedPackage {
+        locked_at(install_id, version, derivation, (2021, 8, 31))
+    }
+
+    fn locked_at(
+        install_id: &str,
+        version: &str,
+        derivation: &str,
+        (y, m, d): (i32, u32, u32),
+    ) -> LockedPackage {
+        let (_, _, mut pkg) = fake_catalog_package_lock(install_id, None);
+        pkg.install_id = install_id.to_string();
+        pkg.version = version.to_string();
+        pkg.derivation = derivation.to_string();
+        pkg.system = SYSTEM.to_string();
+        pkg.rev_date = Utc.with_ymd_and_hms(y, m, d, 12, 0, 0).unwrap();
+        pkg.into()
+    }
+
+    fn lockfile(packages: Vec<LockedPackage>) -> Lockfile {
+        Lockfile {
+            packages,
+            ..Lockfile::default()
+        }
+    }
+
+    /// What `flox install` prints about previously locked packages that changed.
+    fn changed_packages_output(old: Option<&Lockfile>, new: &Lockfile) -> String {
+        let (subscriber, writer) = test_subscriber_message_only();
+        tracing::subscriber::with_default(subscriber, || {
+            message::packages_changed_by_install(&diff_lockfiles_for_system(old, new, SYSTEM), ENV);
+        });
+        writer.to_string()
+    }
+
+    #[test]
+    fn nothing_printed_when_only_the_new_package_was_added() {
+        let old = lockfile(vec![locked("dotnet-sdk", "6.0.422", "dotnet-a")]);
+        let new = lockfile(vec![
+            locked("dotnet-sdk", "6.0.422", "dotnet-a"),
+            locked("nodejs", "16.15.0", "nodejs-a"),
+        ]);
+        assert_eq!(changed_packages_output(Some(&old), &new), "");
+    }
+
+    #[test]
+    fn nothing_printed_when_there_was_no_lockfile() {
+        let new = lockfile(vec![locked("nodejs", "16.15.0", "nodejs-a")]);
+        assert_eq!(changed_packages_output(None, &new), "");
+    }
+
+    #[test]
+    fn package_moved_to_older_revision_is_listed_and_marked() {
+        let old = lockfile(vec![locked_at(
+            "dotnet-sdk",
+            "6.0.422",
+            "dotnet-a",
+            (2025, 3, 1),
+        )]);
+        let new = lockfile(vec![
+            locked_at("dotnet-sdk", "6.0.202", "dotnet-b", (2024, 11, 2)),
+            locked("nodejs", "16.15.0", "nodejs-a"),
+        ]);
+        assert_eq!(changed_packages_output(Some(&old), &new), formatdoc! {"
+                ℹ Other packages in environment 'env' changed:
+                - dotnet-sdk: 6.0.422 -> 6.0.202 (older rev, 2025-03-01 -> 2024-11-02)
+            "});
+    }
+
+    #[test]
+    fn upgrade_of_another_package_is_listed_without_a_mark() {
+        let old = lockfile(vec![locked_at(
+            "dotnet-sdk",
+            "6.0.202",
+            "dotnet-a",
+            (2024, 11, 2),
+        )]);
+        let new = lockfile(vec![
+            locked_at("dotnet-sdk", "6.0.422", "dotnet-b", (2025, 3, 1)),
+            locked("nodejs", "16.15.0", "nodejs-a"),
+        ]);
+        assert_eq!(changed_packages_output(Some(&old), &new), formatdoc! {"
+                ℹ Other packages in environment 'env' changed:
+                - dotnet-sdk: 6.0.202 -> 6.0.422
+            "});
+    }
+
+    /// Several packages installed together are left out of the list, while a
+    /// package that only rebuilt, or whose version has no numeric order, is
+    /// listed without a mark.
+    #[test]
+    fn several_installed_packages_are_excluded_and_other_changes_listed() {
+        let old = lockfile(vec![
+            locked("curl", "8.9.0", "curl-a"),
+            locked("gocode", "unstable-2020-04-06", "gocode-a"),
+            locked("jq", "1.7.1", "jq-a"),
+            locked("untouched", "1.0", "untouched-a"),
+        ]);
+        let new = lockfile(vec![
+            locked("curl", "8.10.1", "curl-b"),
+            locked("gocode", "unstable-2019-01-01", "gocode-b"),
+            locked("jq", "1.7.1", "jq-b"),
+            locked("untouched", "1.0", "untouched-a"),
+            locked("nodejs", "16.15.0", "nodejs-a"),
+            locked("python3", "3.12.1", "python3-a"),
+        ]);
+        assert_eq!(changed_packages_output(Some(&old), &new), formatdoc! {"
+                ℹ Other packages in environment 'env' changed:
+                - curl: 8.9.0 -> 8.10.1
+                - gocode: unstable-2020-04-06 -> unstable-2019-01-01
+                - jq: 1.7.1 (rebuild)
+            "});
+    }
+
+    #[test]
+    fn changes_on_other_systems_are_not_listed() {
+        let on_other_system = |version: &str, derivation: &str| {
+            let mut pkg = locked("dotnet-sdk", version, derivation);
+            if let LockedPackage::Catalog(pkg) = &mut pkg {
+                pkg.system = "x86_64-linux".to_string();
+            }
+            pkg
+        };
+        let old = lockfile(vec![
+            locked("dotnet-sdk", "6.0.422", "dotnet-a"),
+            on_other_system("6.0.422", "dotnet-a"),
+        ]);
+        let new = lockfile(vec![
+            locked("dotnet-sdk", "6.0.422", "dotnet-a"),
+            on_other_system("6.0.202", "dotnet-b"),
+        ]);
+        assert_eq!(changed_packages_output(Some(&old), &new), "");
+    }
 
     /// [Install::generate_warnings] shouldn't warn for packages not in packages_to_install
     #[test]
@@ -1098,6 +1245,45 @@ mod tests {
             ℹ 'curl' has additional outputs, use 'flox list -a' to see more
             ! packages have been removed from lockfile for 'x86_64-darwin'
             To reinstall, add 'x86_64-darwin' to 'options.systems' with 'flox edit'
+        "});
+    }
+
+    /// Installing `fd@8.3.1` next to `hello` forces their group onto an older
+    /// catalog revision, so `hello` is moved backwards.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn lists_other_package_moved_to_older_revision() {
+        let (mut flox, _tempdir) = flox_instance();
+        // The recordings were made without x86_64-darwin, which is no longer
+        // an implicit default system.
+        if flox.system == "x86_64-darwin" {
+            return;
+        }
+        let (subscriber, writer) = test_subscriber_message_only();
+
+        let environment = new_named_path_environment_from_env_files(
+            &flox,
+            GENERATED_DATA.join("envs/hello_before_three_system_relock"),
+            "name",
+        );
+        flox.floxhub_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/fd_8_3_1_after_hello.yaml")).await;
+
+        Install {
+            environment: EnvironmentSelect::Dir(environment.parent_path().unwrap()),
+            id: vec![],
+            packages: vec!["fd@8.3.1".to_string()],
+        }
+        .handle(flox)
+        .with_subscriber(subscriber)
+        .await
+        .expect("installation failed");
+
+        assert_eq!(writer.to_string(), formatdoc! {"
+            ✔ 'fd' installed to environment 'name'
+            ! packages have been removed from lockfile for 'x86_64-darwin'
+            To reinstall, add 'x86_64-darwin' to 'options.systems' with 'flox edit'
+            ℹ Other packages in environment 'name' changed:
+            - hello: 2.12.3 -> 2.10 (older rev, 2026-07-05 -> 2022-01-25)
         "});
     }
 

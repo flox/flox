@@ -57,6 +57,7 @@ pub use core_environment::{
     EditResult,
     SingleSystemUpgradeDiff,
     UpgradeResult,
+    diff_lockfiles_for_system,
 };
 
 pub mod fetcher;

@@ -101,6 +101,17 @@ post_cmd = '''
 pre_cmd = "flox init && flox install hello"
 cmd = "flox install curl"
 
+# Installs a package whose version requirement forces the group onto an older
+# catalog revision than the package already installed. Starts from the
+# lockfile that curl_three_systems_after_hello records its request against.
+[resolve.fd_8_3_1_after_hello]
+pre_cmd = '''
+    flox init
+    cp ../envs/hello_before_three_system_relock/manifest.toml .flox/env/manifest.toml
+    cp ../envs/hello_before_three_system_relock/manifest.lock .flox/env/manifest.lock
+'''
+cmd = "flox install fd@8.3.1"
+
 # Records the request made after dropping x86_64-darwin from the implicit
 # default systems, along with the four-system lockfile that precedes it.
 [resolve.curl_three_systems_after_hello]

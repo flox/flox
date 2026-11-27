@@ -13,9 +13,12 @@ use flox_manifest::parsed::Inner;
 use flox_manifest::parsed::common::DEFAULT_GROUP_NAME;
 use flox_manifest::parsed::latest::{PkgGroups, SelectedOutputs};
 use flox_manifest::raw::PackageToInstall;
+use flox_rust_sdk::models::environment::SingleSystemUpgradeDiff;
 use indoc::formatdoc;
 use minus::{ExitStrategy, Pager, page_all};
 use tracing::{debug, info};
+
+use crate::utils::upgrade_output::render_diff_flagging_older_revisions;
 
 /// The terminal's current width in columns, or 80 if it can't be
 /// determined (not connected to a terminal). `textwrap`'s `terminal_size`
@@ -165,6 +168,24 @@ pub(crate) fn packages_installed_with_system_subsets(pkgs: &[PackageToInstall]) 
             pkg.id(),
             systems.join(", ")
         ))
+    }
+}
+
+/// Display the packages that were already in the environment and changed as a
+/// result of an install. The list is laid out as `flox upgrade` lays out its
+/// own, with one addition: a package that moved to an older catalog revision
+/// is marked `(older rev, <date> -> <date>)`.
+///
+/// Prints nothing when `changed` is empty.
+pub(crate) fn packages_changed_by_install(
+    changed: &SingleSystemUpgradeDiff,
+    environment_description: &str,
+) {
+    if !changed.is_empty() {
+        let rendered = render_diff_flagging_older_revisions(changed);
+        info(format!(
+            "Other packages in environment {environment_description} changed:\n{rendered}"
+        ));
     }
 }
 
