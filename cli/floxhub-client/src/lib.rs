@@ -107,9 +107,9 @@ pub use factory::{
     ParseFactoryRunIdError,
 };
 pub use factory_api_v1::types::{
-    AttrPathItem,
     EffectiveRunStatus as EffectiveFactoryRunStatus,
     ErrorResponse as FactoryErrorResponse,
+    PkgPathItem,
     RunDetailResponse as FactoryRunDetailResponse,
     RunResponse as FactoryRunResponse,
     RunTrigger as FactoryRunTrigger,

@@ -14,9 +14,9 @@ use std::str::FromStr;
 
 use chrono::{DateTime, Utc};
 use factory_api_v1::types::{
-    AttrPathItem,
     EffectiveRunStatus,
     ErrorResponse,
+    PkgPathItem,
     RunDetailResponse,
     RunResponse,
     SourceCommitShaItem,
@@ -250,8 +250,9 @@ pub struct FactoryRunFilters {
     /// Match runs for any of these systems, compared exactly. The server owns
     /// the system vocabulary and rejects a name outside it.
     pub system: Vec<SystemItem>,
-    /// Match runs whose attribute path starts with any of these prefixes.
-    pub attr_path: Vec<AttrPathItem>,
+    /// Match runs whose `<catalog>/<attr_path>` contains any of these terms,
+    /// ignoring case.
+    pub pkg_path: Vec<PkgPathItem>,
     /// Match runs whose source commit SHA starts with any of these prefixes.
     pub source_commit_sha: Vec<SourceCommitShaItem>,
     /// Restrict to runs created at or after this instant. Resolving a time
@@ -316,7 +317,7 @@ impl FactoryClientTrait for crate::FloxhubClient {
         // closure reuses them each call.
         let status = (!filters.status.is_empty()).then_some(&filters.status);
         let system = (!filters.system.is_empty()).then_some(&filters.system);
-        let attr_path = (!filters.attr_path.is_empty()).then_some(&filters.attr_path);
+        let pkg_path = (!filters.pkg_path.is_empty()).then_some(&filters.pkg_path);
         let source_commit_sha =
             (!filters.source_commit_sha.is_empty()).then_some(&filters.source_commit_sha);
         let since = filters.since.as_ref();
@@ -326,11 +327,11 @@ impl FactoryClientTrait for crate::FloxhubClient {
                 let response = self
                     .factory
                     .list_runs_api_v1_factory_runs_get(
-                        attr_path,
                         None,
                         // The Factory API types `page` as `i64`.
                         Some(page_number as i64),
                         NonZeroU64::new(page_size),
+                        pkg_path,
                         since,
                         None,
                         source_commit_sha,
@@ -525,7 +526,7 @@ pub mod tests {
         });
     }
 
-    /// Verify `list_factory_runs` forwards the system, attr_path, source_commit_sha,
+    /// Verify `list_factory_runs` forwards the system, pkg_path, source_commit_sha,
     /// and since filters as query params.
     #[tokio::test]
     async fn list_factory_runs_forwards_remaining_filter_params() {
@@ -535,7 +536,7 @@ pub mod tests {
             when.method("GET")
                 .path("/api/v1/factory/runs")
                 .query_param("system", "aarch64-darwin")
-                .query_param("attr_path", "hello")
+                .query_param("pkg_path", "hello")
                 .query_param("source_commit_sha", "abc123")
                 .query_param("since", SINCE);
             then.status(200).json_body(json!({
@@ -553,7 +554,7 @@ pub mod tests {
         let client = crate::FloxhubClient::new(config).unwrap();
         let filters = FactoryRunFilters {
             system: vec!["aarch64-darwin".parse().unwrap()],
-            attr_path: vec!["hello".parse().unwrap()],
+            pkg_path: vec!["hello".parse().unwrap()],
             source_commit_sha: vec!["abc123".parse().unwrap()],
             since: Some(SINCE.parse().unwrap()),
             ..Default::default()
@@ -587,7 +588,7 @@ pub mod tests {
                 .query_param("page", "0")
                 .query_param("status", "running")
                 .query_param("system", "aarch64-darwin")
-                .query_param("attr_path", "hello")
+                .query_param("pkg_path", "hello")
                 .query_param("source_commit_sha", "abc123")
                 .query_param("since", SINCE);
             then.status(200).json_body(json!({
@@ -604,7 +605,7 @@ pub mod tests {
                 .query_param("page", "1")
                 .query_param("status", "running")
                 .query_param("system", "aarch64-darwin")
-                .query_param("attr_path", "hello")
+                .query_param("pkg_path", "hello")
                 .query_param("source_commit_sha", "abc123")
                 .query_param("since", SINCE);
             then.status(200).json_body(json!({
@@ -623,7 +624,7 @@ pub mod tests {
         let filters = FactoryRunFilters {
             status: vec![EffectiveRunStatus::Running],
             system: vec!["aarch64-darwin".parse().unwrap()],
-            attr_path: vec!["hello".parse().unwrap()],
+            pkg_path: vec!["hello".parse().unwrap()],
             source_commit_sha: vec!["abc123".parse().unwrap()],
             since: Some(SINCE.parse().unwrap()),
         };
@@ -648,7 +649,7 @@ pub mod tests {
                 .path("/api/v1/factory/runs")
                 .query_param_missing("status")
                 .query_param_missing("system")
-                .query_param_missing("attr_path")
+                .query_param_missing("pkg_path")
                 .query_param_missing("source_commit_sha")
                 .query_param_missing("since");
             then.status(200).json_body(json!({

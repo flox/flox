@@ -56,6 +56,34 @@ use indoc::formatdoc;
 pub fn bash_hook(flox_bin: &str) -> String {
     let flox_bin = shell_escape::escape(Cow::Borrowed(flox_bin));
     let marker = prompt_hook_marker_value(true);
+    // Before 5.1, Bash runs only element zero of a PROMPT_COMMAND array, so the
+    // hook counts only there and is added by prefixing that element, which keeps
+    // the user's callback running. Bash 5.1+ runs every element, so the hook
+    // counts in any of them. There, it is added to an array as its own element,
+    // which keeps `$_` and PIPESTATUS intact for the user's callbacks; a string
+    // is prefixed.
+    //
+    // Every in-place activation registers again, including each one the hook
+    // itself performs, so missing an existing hook adds calls to every prompt.
+    // Two external integrations rewrite PROMPT_COMMAND after the hook registers,
+    // so we hardcode an exception for each:
+    //
+    // 1. VS Code's shell integration moves element zero's text into
+    //    `__vsc_original_prompt_command` and replaces it with the
+    //    `__vsc_prompt_cmd_original` function, which runs that text. The saved
+    //    text counts only while that function is still element zero.
+    // 2. bash-preexec, which iTerm2 also bundles, joins commands with newlines,
+    //    so newlines count as separators. Its own lines aren't matched because
+    //    they differ between versions.
+    //
+    // Other layouts that hide the hook, such as Starship's or a command beside
+    // VS Code's function, get one extra call per prompt. `_flox_hook` alone on a
+    // line of quoted data counts as registered; we accept that to keep this
+    // simple.
+    //
+    // The version test asks for old Bash, so that if it ever fails, Bash 5.1+ is
+    // unaffected. The check runs in a subshell so that it leaves no variables
+    // behind.
     formatdoc!(
         r#"
         export {PROMPT_HOOK_VERSION_ENV}={marker};
@@ -68,11 +96,23 @@ pub fn bash_hook(flox_bin: &str) -> String {
           trap - SIGINT;
           return $_prev_exit;
         }};
-        if [[ ";${{PROMPT_COMMAND[*]:-}};" != *";_flox_hook;"* ]]; then
-          if [[ "$(declare -p PROMPT_COMMAND 2>&1)" == "declare -a"* ]]; then
-            PROMPT_COMMAND=(_flox_hook "${{PROMPT_COMMAND[@]}}");
+        if ! (
+          _flox_nl=$'\n';
+          if (( BASH_VERSINFO[0] < 5 || (BASH_VERSINFO[0] == 5 && BASH_VERSINFO[1] < 1) )); then
+            _flox_commands="${{PROMPT_COMMAND:-}}";
           else
+            builtin printf -v _flox_commands '%s;' "${{PROMPT_COMMAND[@]:-}}";
+          fi;
+          if [[ "${{PROMPT_COMMAND:-}}" == "__vsc_prompt_cmd_original" ]]; then
+            _flox_commands="$_flox_commands;${{__vsc_original_prompt_command:-}}";
+          fi;
+          _flox_commands=";${{_flox_commands//$_flox_nl/;}};";
+          [[ "${{_flox_commands//; /;}}" == *";_flox_hook;"* ]];
+        ); then
+          if (( BASH_VERSINFO[0] < 5 || (BASH_VERSINFO[0] == 5 && BASH_VERSINFO[1] < 1) )) || [[ "$(declare -p PROMPT_COMMAND 2>&1)" != "declare -a"* ]]; then
             PROMPT_COMMAND="_flox_hook${{PROMPT_COMMAND:+;$PROMPT_COMMAND}}";
+          else
+            PROMPT_COMMAND=(_flox_hook "${{PROMPT_COMMAND[@]}}");
           fi;
         fi;
         "#

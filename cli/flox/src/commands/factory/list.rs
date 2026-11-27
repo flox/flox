@@ -6,11 +6,11 @@ use anyhow::{Result, anyhow, bail};
 use bpaf::Bpaf;
 use chrono::{DateTime, Months, TimeDelta, Utc};
 use floxhub_client::{
-    AttrPathItem,
     EffectiveFactoryRunStatus,
     FactoryClientTrait,
     FactoryRunFilters,
     FactoryRunResponse,
+    PkgPathItem,
     SourceCommitShaItem,
     SystemItem,
 };
@@ -40,10 +40,11 @@ pub struct List {
     #[bpaf(long, argument::<String>("SYSTEM"), parse(parse_non_empty("System")), many)]
     pub system: Vec<SystemItem>,
 
-    /// Filter by attribute path, without the catalog shown in the PACKAGE
-    /// column; a prefix matches; repeat to match any of several.
-    #[bpaf(long, argument::<String>("PATH"), parse(parse_non_empty("Attribute path")), many)]
-    pub attr_path: Vec<AttrPathItem>,
+    /// Filter by package; repeat to match any of several.
+    /// A run matches when its PACKAGE column (`<catalog>/<attr_path>`) contains
+    /// the term, ignoring case.
+    #[bpaf(long("package"), argument::<String>("PACKAGE"), parse(parse_non_empty("Package")), many)]
+    pub pkg_path: Vec<PkgPathItem>,
 
     /// Filter by source revision (commit SHA); a prefix matches; repeat to
     /// match any of several.
@@ -72,7 +73,7 @@ impl List {
         let filters = FactoryRunFilters {
             status: self.status,
             system: self.system,
-            attr_path: self.attr_path,
+            pkg_path: self.pkg_path,
             source_commit_sha: self.source_commit_sha,
             since: self.since,
         };
@@ -393,7 +394,7 @@ mod tests {
                 EffectiveFactoryRunStatus::Failed,
             ],
             system: vec!["aarch64-darwin".parse().unwrap()],
-            attr_path: vec!["hello".parse().unwrap()],
+            pkg_path: vec!["hello".parse().unwrap()],
             source_commit_sha: vec!["abc123".parse().unwrap()],
             since: Some("2026-07-17T12:00:00Z".parse().unwrap()),
             json: false,
@@ -410,7 +411,7 @@ mod tests {
                     EffectiveFactoryRunStatus::Failed
                 ],
                 system: vec!["aarch64-darwin".parse().unwrap()],
-                attr_path: vec!["hello".parse().unwrap()],
+                pkg_path: vec!["hello".parse().unwrap()],
                 source_commit_sha: vec!["abc123".parse().unwrap()],
                 since: Some("2026-07-17T12:00:00Z".parse().unwrap()),
             })
@@ -450,7 +451,7 @@ mod tests {
         // applies inside the optional lift; it is covered here to pin that the
         // lift does not skip the parse.
         let cases = [
-            ("--attr-path", "Attribute path must not be empty."),
+            ("--package", "Package must not be empty."),
             ("--source-rev", "Source revision must not be empty."),
             ("--system", "System must not be empty."),
             ("--since", "Time must not be empty."),

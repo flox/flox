@@ -37,83 +37,6 @@ pub mod types {
             }
         }
     }
-    ///`AttrPathItem`
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "type": "string",
-    ///  "minLength": 1
-    ///}
-    /// ```
-    /// </details>
-    #[derive(::serde::Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-    #[serde(transparent)]
-    pub struct AttrPathItem(::std::string::String);
-    impl ::std::ops::Deref for AttrPathItem {
-        type Target = ::std::string::String;
-        fn deref(&self) -> &::std::string::String {
-            &self.0
-        }
-    }
-    impl ::std::convert::From<AttrPathItem> for ::std::string::String {
-        fn from(value: AttrPathItem) -> Self {
-            value.0
-        }
-    }
-    impl ::std::convert::From<&AttrPathItem> for AttrPathItem {
-        fn from(value: &AttrPathItem) -> Self {
-            value.clone()
-        }
-    }
-    impl ::std::str::FromStr for AttrPathItem {
-        type Err = self::error::ConversionError;
-        fn from_str(
-            value: &str,
-        ) -> ::std::result::Result<Self, self::error::ConversionError> {
-            if value.chars().count() < 1usize {
-                return Err("shorter than 1 characters".into());
-            }
-            Ok(Self(value.to_string()))
-        }
-    }
-    impl ::std::convert::TryFrom<&str> for AttrPathItem {
-        type Error = self::error::ConversionError;
-        fn try_from(
-            value: &str,
-        ) -> ::std::result::Result<Self, self::error::ConversionError> {
-            value.parse()
-        }
-    }
-    impl ::std::convert::TryFrom<&::std::string::String> for AttrPathItem {
-        type Error = self::error::ConversionError;
-        fn try_from(
-            value: &::std::string::String,
-        ) -> ::std::result::Result<Self, self::error::ConversionError> {
-            value.parse()
-        }
-    }
-    impl ::std::convert::TryFrom<::std::string::String> for AttrPathItem {
-        type Error = self::error::ConversionError;
-        fn try_from(
-            value: ::std::string::String,
-        ) -> ::std::result::Result<Self, self::error::ConversionError> {
-            value.parse()
-        }
-    }
-    impl<'de> ::serde::Deserialize<'de> for AttrPathItem {
-        fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
-        where
-            D: ::serde::Deserializer<'de>,
-        {
-            ::std::string::String::deserialize(deserializer)?
-                .parse()
-                .map_err(|e: self::error::ConversionError| {
-                    <D::Error as ::serde::de::Error>::custom(e.to_string())
-                })
-        }
-    }
     ///A repository URL and the revision locked from it.
     ///
     /// <details><summary>JSON schema</summary>
@@ -338,6 +261,83 @@ stats endpoints.*/
     impl ::std::convert::From<&ErrorResponse> for ErrorResponse {
         fn from(value: &ErrorResponse) -> Self {
             value.clone()
+        }
+    }
+    ///`PkgPathItem`
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "type": "string",
+    ///  "minLength": 1
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+    #[serde(transparent)]
+    pub struct PkgPathItem(::std::string::String);
+    impl ::std::ops::Deref for PkgPathItem {
+        type Target = ::std::string::String;
+        fn deref(&self) -> &::std::string::String {
+            &self.0
+        }
+    }
+    impl ::std::convert::From<PkgPathItem> for ::std::string::String {
+        fn from(value: PkgPathItem) -> Self {
+            value.0
+        }
+    }
+    impl ::std::convert::From<&PkgPathItem> for PkgPathItem {
+        fn from(value: &PkgPathItem) -> Self {
+            value.clone()
+        }
+    }
+    impl ::std::str::FromStr for PkgPathItem {
+        type Err = self::error::ConversionError;
+        fn from_str(
+            value: &str,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            if value.chars().count() < 1usize {
+                return Err("shorter than 1 characters".into());
+            }
+            Ok(Self(value.to_string()))
+        }
+    }
+    impl ::std::convert::TryFrom<&str> for PkgPathItem {
+        type Error = self::error::ConversionError;
+        fn try_from(
+            value: &str,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl ::std::convert::TryFrom<&::std::string::String> for PkgPathItem {
+        type Error = self::error::ConversionError;
+        fn try_from(
+            value: &::std::string::String,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl ::std::convert::TryFrom<::std::string::String> for PkgPathItem {
+        type Error = self::error::ConversionError;
+        fn try_from(
+            value: ::std::string::String,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl<'de> ::serde::Deserialize<'de> for PkgPathItem {
+        fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
+        where
+            D: ::serde::Deserializer<'de>,
+        {
+            ::std::string::String::deserialize(deserializer)?
+                .parse()
+                .map_err(|e: self::error::ConversionError| {
+                    <D::Error as ::serde::de::Error>::custom(e.to_string())
+                })
         }
     }
     ///The catalog package a run published.
@@ -1773,7 +1773,8 @@ Filters:
   server's system vocabulary returns 422 naming the accepted
   values, which are the systems this deployment's catalog holds
   and so may differ between deployments.
-- ``attr_path``: match attr_path by prefix.
+- ``pkg_path``: match pkgPath, ``<catalog>/<attr_path>``, by a
+  case-insensitive substring, as ``flox search`` does.
 - ``source_commit_sha``: match source commit SHA by prefix.
 - ``since``: return runs created at or after this time. An ISO
   8601 timestamp carrying a UTC offset, e.g.
@@ -1790,10 +1791,10 @@ effect in v1; results are always ordered newest-first.
 Sends a `GET` request to `/api/v1/factory/runs`
 
 Arguments:
-- `attr_path`: Filter by attr_path prefix; repeatable, matched as OR. Values must be non-empty.
 - `cursor`: Reserved for future use; not implemented in v1 (results are always ordered newest-first).
 - `page`
 - `page_size`
+- `pkg_path`: Filter by pkgPath, `<catalog>/<attr_path>`, containing the value, ignoring case; repeatable, matched as OR. Values must be non-empty.
 - `since`: Return runs created at or after this time (inclusive). An ISO 8601 timestamp carrying a UTC offset, e.g. '2026-07-17T08:30:00Z'.
 - `sort`: Reserved for future use; not implemented in v1 (results are always ordered newest-first).
 - `source_commit_sha`: Filter by source commit SHA prefix; repeatable, matched as OR. Values must be non-empty.
@@ -1802,10 +1803,10 @@ Arguments:
 */
     pub async fn list_runs_api_v1_factory_runs_get<'a>(
         &'a self,
-        attr_path: Option<&'a ::std::vec::Vec<types::AttrPathItem>>,
         cursor: Option<&'a str>,
         page: Option<i64>,
         page_size: Option<::std::num::NonZeroU64>,
+        pkg_path: Option<&'a ::std::vec::Vec<types::PkgPathItem>>,
         since: Option<&'a ::chrono::DateTime<::chrono::offset::Utc>>,
         sort: Option<&'a str>,
         source_commit_sha: Option<&'a ::std::vec::Vec<types::SourceCommitShaItem>>,
@@ -1827,10 +1828,10 @@ Arguments:
                 ::reqwest::header::ACCEPT,
                 ::reqwest::header::HeaderValue::from_static("application/json"),
             )
-            .query(&progenitor_client::QueryParam::new("attr_path", &attr_path))
             .query(&progenitor_client::QueryParam::new("cursor", &cursor))
             .query(&progenitor_client::QueryParam::new("page", &page))
             .query(&progenitor_client::QueryParam::new("page_size", &page_size))
+            .query(&progenitor_client::QueryParam::new("pkg_path", &pkg_path))
             .query(&progenitor_client::QueryParam::new("since", &since))
             .query(&progenitor_client::QueryParam::new("sort", &sort))
             .query(

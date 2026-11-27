@@ -1,0 +1,29 @@
+# Start an interactive shell whose rc file installs the prompt hook next to a
+# user prompt callback, from inside a second project. At the first prompt the
+# hook must already have activated that project, and a failing command's exit
+# status must still reach the user's callback after the hook ran.
+
+set timeout 30
+set env(NO_COLOR) 1
+set env(TERM) xterm-mono
+set stty_init "cols 1000"
+
+cd $env(PROJECT2_DIR)
+spawn $env(FLOX_SHELL) --noprofile --rcfile $env(PROMPT_RCFILE) -i
+expect_after {
+  timeout { exit 1 }
+  eof { exit 2 }
+}
+
+expect "callback> "
+# The expansion happens in the shell, so the pattern cannot match the echoed
+# command line.
+send "echo PROJECT:\$FLOX_ENV_PROJECT\r"
+expect -exact "PROJECT:$env(PROJECT2_REAL)\r\n"
+
+expect "callback> "
+send "(exit 42)\r"
+expect -exact "USER:42\r\n"
+
+send "exit\r"
+expect eof
