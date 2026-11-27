@@ -285,6 +285,7 @@ pub mod types {
     ///  "properties": {
     ///    "catalog": {
     ///      "title": "Catalog",
+    ///      "description": "A user catalog. Never the base catalog: the Factory does not build base-catalog packages.",
     ///      "type": "string"
     ///    },
     ///    "completed_seconds": {
@@ -300,6 +301,7 @@ pub mod types {
     /// </details>
     #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct CatalogRunStats {
+        ///A user catalog. Never the base catalog: the Factory does not build base-catalog packages.
         pub catalog: ::std::string::String,
         pub completed_seconds: i64,
         pub counts: RunStatusCounts,
@@ -453,6 +455,7 @@ stats endpoints.*/
     ///    },
     ///    "catalog_name": {
     ///      "title": "Catalog Name",
+    ///      "description": "The user catalog the run's package belongs to. Never the base catalog: the Factory does not build base-catalog packages.",
     ///      "type": "string"
     ///    },
     ///    "created_at": {
@@ -538,6 +541,7 @@ stats endpoints.*/
     pub struct RunDetailResponse {
         pub attr_path: ::std::string::String,
         pub build_type: ::std::string::String,
+        ///The user catalog the run's package belongs to. Never the base catalog: the Factory does not build base-catalog packages.
         pub catalog_name: ::std::string::String,
         pub created_at: ::chrono::DateTime<::chrono::offset::Utc>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
@@ -737,6 +741,7 @@ coordinator-reported status appears.*/
     ///    },
     ///    "catalog_name": {
     ///      "title": "Catalog Name",
+    ///      "description": "The user catalog the run's package belongs to. Never the base catalog: the Factory does not build base-catalog packages.",
     ///      "type": "string"
     ///    },
     ///    "created_at": {
@@ -814,6 +819,7 @@ coordinator-reported status appears.*/
     pub struct RunResponse {
         pub attr_path: ::std::string::String,
         pub build_type: ::std::string::String,
+        ///The user catalog the run's package belongs to. Never the base catalog: the Factory does not build base-catalog packages.
         pub catalog_name: ::std::string::String,
         pub created_at: ::chrono::DateTime<::chrono::offset::Utc>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
