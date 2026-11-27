@@ -724,7 +724,8 @@
           },
           "catalog": {
             "type": "string",
-            "title": "Catalog"
+            "title": "Catalog",
+            "description": "A user catalog. Never the base catalog: the Factory does not build base-catalog packages."
           }
         },
         "type": "object",
@@ -846,7 +847,8 @@
           },
           "catalog_name": {
             "type": "string",
-            "title": "Catalog Name"
+            "title": "Catalog Name",
+            "description": "The user catalog the run's package belongs to. Never the base catalog: the Factory does not build base-catalog packages."
           },
           "exit_code": {
             "title": "Exit Code",
@@ -999,7 +1001,8 @@
           },
           "catalog_name": {
             "type": "string",
-            "title": "Catalog Name"
+            "title": "Catalog Name",
+            "description": "The user catalog the run's package belongs to. Never the base catalog: the Factory does not build base-catalog packages."
           },
           "exit_code": {
             "title": "Exit Code",
