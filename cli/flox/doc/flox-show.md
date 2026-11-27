@@ -24,6 +24,11 @@ Show detailed information about a single package.
 The default output includes the package description,
 available outputs (with defaults marked by `*`),
 and available versions.
+A version that has no build for one of the default systems
+is followed by `(<systems> only)`,
+which lists every system that the version is available on.
+The default systems are the ones that an environment without `options.systems`
+is locked for.
 With `--all`, each version also lists the stabilities that have it,
 strictest first.
 To install a version, its pkg-group must use one of those stabilities.
