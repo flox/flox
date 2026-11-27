@@ -667,8 +667,11 @@ jobs:
           SLACK_LINK_NAMES: true
 
   nix-build-bats-tests:
-    name: "remote"
-    runs-on: "blacksmith-2vcpu-ubuntu-2404"
+    name: "bats"
+    # Linux tests run on the runner itself, with /nix on a sticky disk.
+    # Darwin tests still run on the Tailscale remote builders, driven from
+    # a small Linux runner.
+    runs-on: ${{ matrix.runner || 'blacksmith-2vcpu-ubuntu-2404' }}
     timeout-minutes: 90
 
     permissions:
@@ -711,10 +714,41 @@ jobs:
           # and on x86_64-darwin through the remaining integration tests
           - system: "x86_64-darwin"
             test-tags: "!containerize,!activate"
+          # Run the Linux legs locally (`local`) on 16 vCPU runners.
+          - system: "x86_64-linux"
+            runner: "blacksmith-16vcpu-ubuntu-2404"
+            local: true
+          - system: "aarch64-linux"
+            runner: "blacksmith-16vcpu-ubuntu-2404-arm"
+            local: true
 
     steps:
       - name: "Checkout"
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: "Create Nix store mount point"
+        if: ${{ matrix.local }}
+        run: |
+          sudo mkdir -p /nix/store
+          sudo chmod -R 777 /nix
+
+      # One disk per CPU type and test set: the containerize tests pull
+      # container images the other tests never need.
+      - name: "Mount Nix store"
+        if: ${{ matrix.local }}
+        uses: useblacksmith/stickydisk@74f3f01ab1392726dd6ee06904f0452b0ec1e151 # v1
+        with:
+          key: "${{ github.repository }}-nix-${{ github.job }}-${{ runner.arch }}-${{ matrix.test-tags == 'containerize' && 'containerize' || 'cli' }}"
+          path: "/nix"
+          # This job is skipped on push to main, so the merge queue, which
+          # tests what is about to become main, saves the snapshot instead.
+          # PR runs only read it.
+          commit: "${{ startsWith(github.ref, 'refs/heads/gh-readonly-queue/main/') }}"
+
+      # Only where the snapshot is saved, see above.
+      - name: "Verify Nix store"
+        if: ${{ matrix.local && startsWith(github.ref, 'refs/heads/gh-readonly-queue/main/') && needs.scope.outputs.heavy != 'false' }}
+        run: ".github/scripts/verify-nix-store.sh"
 
       - name: "Setup upterm session"
         if: ${{ (true == inputs.enableUpterm) && (inputs.breakOnJob == github.job) }}
@@ -734,10 +768,42 @@ jobs:
           AWS_ACCESS_KEY_ID: "${{ secrets.MANAGED_CACHE_PUBLIC_R2_ACCESS_KEY_ID }}"
           AWS_SECRET_ACCESS_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_R2_SECRET_ACCESS_KEY }}"
           SSH_KEY: "${{ secrets.MANAGED_FLOXBOT_SSH_KEY }}"
-          TAILSCALE_URL: "${{ vars.MANAGED_TAILSCALE_URL }}"
-          TAILSCALE_AUTH_KEY: "${{ secrets.MANAGED_TAILSCALE_AUTH_KEY }}"
-          REMOTE_BUILDERS: "${{ vars.MANAGED_REMOTE_BUILDERS }}"
-          SYSTEM: "${{ matrix.system }}"
+          TAILSCALE_URL: "${{ !matrix.local && vars.MANAGED_TAILSCALE_URL || '' }}"
+          TAILSCALE_AUTH_KEY: "${{ !matrix.local && secrets.MANAGED_TAILSCALE_AUTH_KEY || '' }}"
+          REMOTE_BUILDERS: "${{ !matrix.local && vars.MANAGED_REMOTE_BUILDERS || '' }}"
+          SYSTEM: "${{ !matrix.local && matrix.system || '' }}"
+          SETUP_NIX: "${{ matrix.local == true }}"
+
+      # The remote builders are NixOS, where rootless podman gets newuidmap
+      # from /run/wrappers. On Ubuntu it comes from the uidmap package, the
+      # runner user needs subordinate ID ranges, and 24.04's AppArmor
+      # blocks unprivileged user namespaces by default.
+      - name: "Prepare rootless podman"
+        if: ${{ matrix.local && needs.scope.outputs.heavy != 'false' }}
+        run: |
+          command -v newuidmap || { sudo apt-get update && sudo apt-get install -y uidmap; }
+          user="$(id -un)"
+          for f in /etc/subuid /etc/subgid; do
+            grep -q "^$user:" "$f" || echo "$user:100000:65536" | sudo tee -a "$f"
+          done
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          # The test runner's PATH has /run/wrappers/bin (NixOS) but not
+          # /usr/bin, so put the setuid helpers where podman looks.
+          sudo mkdir -p /run/wrappers/bin
+          sudo ln -sf "$(command -v newuidmap)" /run/wrappers/bin/newuidmap
+          sudo ln -sf "$(command -v newgidmap)" /run/wrappers/bin/newgidmap
+
+      # The tests start real login and interactive shells, which on this
+      # runner load two things the NixOS builders don't have. Blacksmith's
+      # profile script resets HOME to the runner's own home and exports its
+      # BLACKSMITH_* variables; it is only for SSH debug sessions, so it is
+      # moved aside for the tests and restored afterwards. The Nix
+      # installer's hooks in /etc/bash.bashrc and /etc/zshrc prepend the Nix
+      # profiles to PATH; __ETC_PROFILE_NIX_SOURCED (set on the test step)
+      # makes them a no-op, as on NixOS.
+      - name: "Isolate test shells from the runner's profile scripts"
+        if: ${{ matrix.local && needs.scope.outputs.heavy != 'false' }}
+        run: sudo mv /etc/profile.d/blacksmith.sh /etc/blacksmith-profile.sh.disabled
 
       - name: "Run Bats Tests (./#flox-cli-tests)"
         timeout-minutes: 30
@@ -745,7 +811,35 @@ jobs:
         env:
           MATRIX_SYSTEM: ${{ matrix.system }}
           MATRIX_TEST_TAGS: ${{ matrix.test-tags }}
-        run: ./.github/scripts/remote-execute-integration-tests.sh
+          # Only used by the local legs, see "Isolate test shells" above.
+          __ETC_PROFILE_NIX_SOURCED: "${{ matrix.local && '1' || '' }}"
+          # NixOS sets this system-wide, so the shell-state tests expect it
+          # before activation. Ubuntu doesn't; point it at Ubuntu's own.
+          LOCALE_ARCHIVE: "${{ matrix.local && '/usr/lib/locale/locale-archive' || '' }}"
+        run: |
+          if [ "${{ matrix.local }}" = true ]; then
+            # The runner is ours alone, unlike the shared builders, so use
+            # every CPU instead of the default 4 parallel tests.
+            FLOX_TEST_JOBS="$(nproc)" ./.github/scripts/local-execute-integration-tests.sh
+          else
+            ./.github/scripts/remote-execute-integration-tests.sh
+          fi
+
+      - name: "Restore the runner's profile script"
+        if: ${{ always() && matrix.local }}
+        run: |
+          if [ -e /etc/blacksmith-profile.sh.disabled ]; then
+            sudo mv /etc/blacksmith-profile.sh.disabled /etc/profile.d/blacksmith.sh
+          fi
+
+      # The sticky-disk post step must unmount /nix to commit the
+      # snapshot; the multi-user nix-daemon keeps the mount busy, so
+      # stop it as the job's last act.
+      - name: "Stop nix-daemon for sticky disk commit"
+        if: ${{ always() && matrix.local }}
+        run: |
+          sudo systemctl stop nix-daemon.socket nix-daemon.service 2>/dev/null || true
+          sudo pkill -9 nix-daemon 2>/dev/null || true
 
   summary:
     name: "Summary"
