@@ -16,6 +16,7 @@ use flox_rust_sdk::providers::build::{
     nix_expression_dir,
 };
 use flox_rust_sdk::providers::nix_auth::NixAuth;
+use flox_rust_sdk::providers::publish::upload_credentials::{RenewalCredential, UploadRenewal};
 use flox_rust_sdk::providers::publish::{
     LineageOverride,
     PublishError,
@@ -32,6 +33,7 @@ use floxhub_client::{
     CatalogFlakeFetcher,
     CheckBuildQuery,
     CheckBuildResponse,
+    CredentialKind,
     FloxhubClientError,
     PackageSystem,
     RegisteredSource,
@@ -477,7 +479,8 @@ impl Publish {
         prefetch_expression_build_flake_ref([&package_metadata.package], &selected_flake_ref)?;
 
         let auth = NixAuth::from_flox(&flox)?;
-        let publish_provider = PublishProvider::new(env_metadata, package_metadata, auth);
+        let publish_provider = PublishProvider::new(env_metadata, package_metadata, auth)
+            .with_upload_renewal(upload_renewal(&flox)?);
 
         // Prepare the local lock before creating any server package record.
         let catalog = &flox.floxhub_client;
@@ -699,6 +702,26 @@ impl Publish {
             ", package = &publish_provider.package_metadata.package,});
         Ok(())
     }
+}
+
+/// How the upload credential helper renews FloxHub's upload sessions:
+/// as this binary, against the same FloxHub, with the same credential.
+fn upload_renewal(flox: &Flox) -> Result<UploadRenewal> {
+    let credential = match flox.auth_context.kind() {
+        CredentialKind::Kerberos => RenewalCredential::Kerberos,
+        _ => flox
+            .auth_context
+            .token_secret()
+            .map(|token| RenewalCredential::Token(token.to_string()))
+            .unwrap_or(RenewalCredential::None),
+    };
+    Ok(UploadRenewal {
+        flox_bin: std::env::current_exe().context("could not locate the flox binary")?,
+        floxhub_api_url: flox.floxhub.api_url_str(),
+        credential,
+        token_expires_at: flox.auth_context.credential().cached_facts().expires_at,
+        temp_dir: flox.temp_dir.clone(),
+    })
 }
 
 #[cfg(test)]
