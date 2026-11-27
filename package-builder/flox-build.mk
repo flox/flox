@@ -547,6 +547,7 @@ define BUILD_local_template =
 	  --argstr flox-env "$(FLOX_ENV)" \
 	  --argstr nixpkgs-url '$(BUILDTIME_NIXPKGS_URL)' \
 	  --argstr build-wrapper-env "$$($(_pvarname)_build_wrapper_env)" \
+	  --arg auto-patchelf $(_auto_patchelf) \
 	  --argstr install-prefix "$($(_pvarname)_out)" \
 	  $$(if $$($(_pvarname)_buildDeps),--arg buildDeps '[$$($(_pvarname)_buildDeps)]') \
 	  --out-link "result-$(_pname)" \
@@ -647,6 +648,7 @@ define BUILD_nix_sandbox_template =
 	  --argstr flox-env "$(FLOX_ENV)" \
 	  --argstr nixpkgs-url '$(BUILDTIME_NIXPKGS_URL)' \
 	  --argstr build-wrapper-env "$$($(_pvarname)_build_wrapper_env)" \
+	  --arg auto-patchelf $(_auto_patchelf) \
 	  $$(if $$($(_pvarname)_buildDeps),--arg buildDeps '[$$($(_pvarname)_buildDeps)]') \
 	  --argstr buildScript "$($(_pvarname)_buildScript)" \
 	  $(if $(_do_buildCache),--argstr buildCache "$($(_pvarname)_buildCache)") \
@@ -828,6 +830,9 @@ define JSON_VERSION_TO_COMMAND_jq =
     ) else "echo \(. | @sh)" end
   )
 endef
+# Glean the build's "auto-patchelf" flag (a boolean, false when unset) to
+# pass to build-manifest.nix, which runs the step on Linux only.
+#
 # Select the build mode based on the manifest's "sandbox" setting:
 #
 #   pure                 -> nix_sandbox : the build runs inside the real Nix
@@ -853,6 +858,8 @@ $(foreach build,$(MANIFEST_BUILDS), \
     $(_jq) -r '.manifest.build."$(_pname)".sandbox' $(MANIFEST_LOCK))) \
   $(eval _sandbox_allow = $(shell \
     $(_jq) -r '(.manifest.build."$(_pname)"."sandbox-allow" // []) | join(" ") | @sh' $(MANIFEST_LOCK))) \
+  $(eval _auto_patchelf = $(shell \
+    $(_jq) -r '.manifest.build."$(_pname)"."auto-patchelf" // false' $(MANIFEST_LOCK))) \
   $(eval _version = $(shell $(shell \
     $(_jq) -r --arg pname "$(_pname)" '$(strip $(JSON_VERSION_TO_COMMAND_jq))' $(MANIFEST_LOCK)))) \
   $(if $(filter pure,$(_sandbox)), \

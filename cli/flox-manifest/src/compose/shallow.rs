@@ -26,13 +26,15 @@ use crate::parsed::latest::{
     PkgGroups,
 };
 // merge_build operates on the latest schema's Build (which carries
-// `sandbox-allow`), so composing environments preserves the field.
-use crate::parsed::v1_13_0::{Build, Profile, ProfileDeactivate};
+// `sandbox-allow` and `auto-patchelf`), so composing environments preserves
+// those fields.
+use crate::parsed::v1_13_0::{Profile, ProfileDeactivate};
 use crate::parsed::v1_14_0::Plugins;
 // merge_services operates on the latest schema's Services (with
 // `depends-on` and `shutdown.{timeout-seconds,signal}`), so composing
 // environments preserves those fields.
 use crate::parsed::v1_16_0::Services;
+use crate::parsed::v1_20_0::Build;
 
 /// Merges two manifests by applying `manifest2` on top of `manifest1` and
 /// overwriting any conflicts for keys within the top-level of each `ManifestV1`
@@ -507,10 +509,10 @@ mod tests {
     use super::*;
     use crate::parsed::common::{Allows, ContainerizeConfig, SemverOptions};
     use crate::parsed::latest::{ManifestPackageDescriptor, PkgGroup};
-    // Build merging operates on the latest schema's BuildDescriptor.
-    use crate::parsed::v1_13_0::BuildDescriptor;
     // Service merging operates on the latest schema's ServiceDescriptor.
     use crate::parsed::v1_16_0::ServiceDescriptor;
+    // Build merging operates on the latest schema's BuildDescriptor.
+    use crate::parsed::v1_20_0::BuildDescriptor;
 
     proptest! {
         // Ensures that the vars unique to each manifest are present in the merged output,
