@@ -787,6 +787,21 @@ jobs:
             grep -q "^$user:" "$f" || echo "$user:100000:65536" | sudo tee -a "$f"
           done
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          # The test runner's PATH has /run/wrappers/bin (NixOS) but not
+          # /usr/bin, so put the setuid helpers where podman looks.
+          sudo mkdir -p /run/wrappers/bin
+          sudo ln -sf "$(command -v newuidmap)" /run/wrappers/bin/newuidmap
+          sudo ln -sf "$(command -v newgidmap)" /run/wrappers/bin/newgidmap
+
+      # TEMPORARY: what the runner's shells load at startup, to compare with
+      # the NixOS builders.
+      - name: "Debug shell startup files"
+        if: ${{ matrix.local && needs.scope.outputs.heavy != 'false' }}
+        run: |
+          for f in /etc/profile /etc/bash.bashrc /etc/zsh/zshenv /etc/zsh/zshrc /etc/zshrc /etc/profile.d/*.sh ~/.profile ~/.bashrc ~/.bash_profile; do
+            [ -e "$f" ] && { echo "===== $f"; cat "$f"; }
+          done
+          echo "===== env"; env | grep -i -E "nix|locale|^lang|^lc_|bash_env|^env=|^path=" | sort
 
       - name: "Run Bats Tests (./#flox-cli-tests)"
         timeout-minutes: 30
@@ -796,7 +811,9 @@ jobs:
           MATRIX_TEST_TAGS: ${{ matrix.test-tags }}
         run: |
           if [ "${{ matrix.local }}" = true ]; then
-            ./.github/scripts/local-execute-integration-tests.sh
+            # The runner is ours alone, unlike the shared builders, so use
+            # every CPU instead of the default 4 parallel tests.
+            FLOX_TEST_JOBS="$(nproc)" ./.github/scripts/local-execute-integration-tests.sh
           else
             ./.github/scripts/remote-execute-integration-tests.sh
           fi
