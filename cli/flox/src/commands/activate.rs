@@ -1,4 +1,4 @@
-use std::io::{BufWriter, stdout};
+use std::io::{BufWriter, Write, stdout};
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -7,6 +7,7 @@ use std::{env, fs};
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use crossterm::tty::IsTty;
+use flox_activations::hook::{bash_hook, fish_hook, tcsh_hook, zsh_hook};
 use flox_config::{AutoActivationPreference, Config, EnvironmentPromptConfig};
 use flox_core::activate::context::{
     ActivateCtx,
@@ -42,6 +43,7 @@ use flox_rust_sdk::providers::services::process_compose::{PROCESS_COMPOSE_BIN, P
 use flox_rust_sdk::providers::upgrade_checks::UpgradeInformationGuard;
 use flox_rust_sdk::utils::FLOX_INTERPRETER;
 use indoc::{formatdoc, indoc};
+use shell_gen::ShellWithPath;
 use toml_edit::Key;
 use tracing::{debug, trace, warn};
 
@@ -94,12 +96,18 @@ pub enum CommandSelect {
 }
 
 #[derive(Bpaf, Clone)]
-pub struct Activate {
-    #[bpaf(external(environment_select), fallback(Default::default()))]
-    pub environment: EnvironmentSelect,
+pub enum Activate {
+    /// Print the Flox prompt hook without activating an environment
+    #[bpaf(command("print-hook"))]
+    PrintHook,
 
-    #[bpaf(external(activate_subcommand_or_options))]
-    pub subcommand_or_options: ActivateSubcommandOrOptions,
+    Environment {
+        #[bpaf(external(environment_select), fallback(Default::default()))]
+        environment: EnvironmentSelect,
+
+        #[bpaf(external(activate_subcommand_or_options))]
+        subcommand_or_options: ActivateSubcommandOrOptions,
+    },
 }
 
 impl Activate {
@@ -107,15 +115,58 @@ impl Activate {
     /// the `activate::allow` / `activate::deny` form for the auto-activate
     /// permission-management sub-commands, preserving the join-key
     /// continuity the legacy `environment_subcommand_metric!` stream
-    /// already used.
+    /// already used, and `activate::print-hook` for `print-hook`.
     pub fn subcommand_name(&self) -> &'static str {
-        match &self.subcommand_or_options {
-            ActivateSubcommandOrOptions::AutoActivate { auto_activate } => match auto_activate {
+        match self {
+            Self::PrintHook => "activate::print-hook",
+            Self::Environment {
+                subcommand_or_options: ActivateSubcommandOrOptions::AutoActivate { auto_activate },
+                ..
+            } => match auto_activate {
                 AutoActivate::Allow => "activate::allow",
                 AutoActivate::Deny => "activate::deny",
             },
-            ActivateSubcommandOrOptions::ActivateOptions { .. } => "activate",
+            Self::Environment {
+                subcommand_or_options: ActivateSubcommandOrOptions::ActivateOptions { .. },
+                ..
+            } => "activate",
         }
+    }
+
+    /// Whether the prompt hook launched this activation for a directory it
+    /// entered, rather than the user running it.
+    pub fn launched_by_hook(&self) -> bool {
+        matches!(
+            self,
+            Self::Environment {
+                subcommand_or_options: ActivateSubcommandOrOptions::ActivateOptions { options },
+                ..
+            } if options.from_hook
+        )
+    }
+
+    fn print_hook(config: &Config) -> Result<()> {
+        if config.flox.disable_hook.unwrap_or(false) {
+            bail!(indoc! {"
+                The Flox prompt hook is disabled ('disable_hook = true').
+                Re-enable it with 'flox config --delete disable_hook', then restart your shell."});
+        }
+        let prompt_hook_version = env::var(PROMPT_HOOK_VERSION_ENV).ok();
+        if prompt_hook_version_mismatched(prompt_hook_version.as_deref()) {
+            bail!(indoc! {"
+                This shell's Flox prompt hook was set up by an incompatible version of Flox.
+                Restart your shell to pick up the current version."});
+        }
+        let shell = detect_shell_for_in_place()?;
+        let flox_bin = flox_bin_for_hook(&shell);
+        let script = match shell {
+            ShellWithPath::Bash(_) => bash_hook(&flox_bin),
+            ShellWithPath::Zsh(_) => zsh_hook(&flox_bin),
+            ShellWithPath::Fish(_) => fish_hook(&flox_bin, config.flox.auto_activate_fish_mode),
+            ShellWithPath::Tcsh(_) => tcsh_hook(&flox_bin),
+        };
+        stdout().write_all(script.as_bytes())?;
+        Ok(())
     }
 }
 
@@ -175,6 +226,10 @@ pub struct ActivateOptions {
     #[bpaf(long, short)]
     pub generation: Option<GenerationId>,
 
+    /// Set by the prompt hook on the activations it launches.
+    #[bpaf(long("from-hook"), hide)]
+    pub from_hook: bool,
+
     #[bpaf(external(command_select), optional)]
     pub command: Option<CommandSelect>,
 }
@@ -191,21 +246,32 @@ impl ActivateOptions {
 }
 
 impl Activate {
-    pub async fn handle(self, mut config: Config, mut flox: Flox) -> Result<()> {
-        let options = match self.subcommand_or_options {
-            ActivateSubcommandOrOptions::AutoActivate { auto_activate } => {
-                return self
-                    .handle_auto_activation_subcommand(auto_activate, config, flox)
-                    .await;
+    pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
+        match self {
+            Self::PrintHook => Self::print_hook(&config),
+            Self::Environment {
+                environment,
+                subcommand_or_options: ActivateSubcommandOrOptions::AutoActivate { auto_activate },
+            } => {
+                Self::handle_auto_activation_subcommand(environment, auto_activate, config, flox)
+                    .await
             },
-            ActivateSubcommandOrOptions::ActivateOptions { options } => {
-                options.validate_service_flags()?;
-                options
-            },
-        };
+            Self::Environment {
+                environment,
+                subcommand_or_options: ActivateSubcommandOrOptions::ActivateOptions { options },
+            } => Self::handle_activation(environment, options, config, flox).await,
+        }
+    }
 
-        let concrete_environment = match self
-            .environment
+    async fn handle_activation(
+        environment: EnvironmentSelect,
+        options: ActivateOptions,
+        mut config: Config,
+        mut flox: Flox,
+    ) -> Result<()> {
+        options.validate_service_flags()?;
+
+        let concrete_environment = match environment
             .to_concrete_environment(&mut flox, options.generation)
             .await
         {
@@ -302,19 +368,18 @@ impl Activate {
                 concrete_environment,
                 invocation_type,
                 Vec::new(),
-                Some(&self.environment),
+                Some(&environment),
             )
             .await
     }
 
     async fn handle_auto_activation_subcommand(
-        self,
+        environment: EnvironmentSelect,
         subcommand: AutoActivate,
         config: Config,
         mut flox: Flox,
     ) -> Result<()> {
-        let concrete_environment = self
-            .environment
+        let concrete_environment = environment
             .to_concrete_environment(&mut flox, None)
             .await
             .context("Failed to find environment")?;
@@ -1277,6 +1342,7 @@ mod tests {
             add_sbin: false,
             mode: None,
             generation: None,
+            from_hook: false,
             command: None,
         }
     }

@@ -48,6 +48,7 @@
 
 use std::borrow::Cow;
 
+use flox_core::activate::context::AutoActivateFishMode;
 use flox_core::activate::vars::{FLOX_INVOCATION_TYPES_VAR, FLOX_INVOCATION_TYPES_WIRE_VAR};
 use flox_core::hook_actions::{PROMPT_HOOK_VERSION_ENV, prompt_hook_marker_value};
 use indoc::formatdoc;
@@ -149,7 +150,7 @@ pub fn zsh_hook(flox_bin: &str) -> String {
     )
 }
 
-pub fn fish_hook(flox_bin: &str) -> String {
+pub fn fish_hook(flox_bin: &str, auto_activate_fish_mode: Option<AutoActivateFishMode>) -> String {
     // Fish's command substitution (flox activate) collapses newlines to spaces,
     // so semicolons are required as statement delimiters to survive. The
     // newlines are kept for readability — fish treats them as whitespace.
@@ -179,9 +180,12 @@ pub fn fish_hook(flox_bin: &str) -> String {
     //   - disable_arrow: no PWD reaction; only prompt-based evaluation.
     let flox_bin = shell_escape::escape(Cow::Borrowed(flox_bin));
     let marker = prompt_hook_marker_value(true);
+    let mode = auto_activate_fish_mode.map_or_else(String::new, |mode| {
+        format!("set -gx FLOX_AUTO_ACTIVATE_FISH_MODE {mode};\n")
+    });
     formatdoc!(
         r#"
-        set -gx {PROMPT_HOOK_VERSION_ENV} {marker};
+        {mode}set -gx {PROMPT_HOOK_VERSION_ENV} {marker};
         function _flox_hook --on-event fish_prompt;
             eval (command {flox_bin} hook-env --shell fish --shell-pid $fish_pid --invocation-types "${FLOX_INVOCATION_TYPES_VAR}" | string collect);
             if test "$FLOX_AUTO_ACTIVATE_FISH_MODE" != "disable_arrow";
@@ -293,4 +297,25 @@ fn tcsh_escape_in_alias(word: &str) -> String {
 /// Whether [`tcsh_hook`] can embed `word` at all; see the comment above it.
 pub fn tcsh_alias_can_embed(word: &str) -> bool {
     !word.contains(['\'', '"', '$', '`', '!'])
+}
+
+#[cfg(test)]
+mod tests {
+    use expect_test::expect;
+    use flox_core::activate::context::AutoActivateFishMode;
+
+    use super::fish_hook;
+
+    // The configured mode travels inside the hook as a leading export, so a
+    // `fish_hook` that dropped it would leave `FLOX_AUTO_ACTIVATE_FISH_MODE`
+    // unset and silently fall back to the default mode.
+    #[test]
+    fn fish_hook_exports_configured_mode_before_version_marker() {
+        let script = fish_hook("/flox", Some(AutoActivateFishMode::DisableArrow));
+        let head = script.lines().take(2).collect::<Vec<_>>().join("\n");
+        expect![[r#"
+            set -gx FLOX_AUTO_ACTIVATE_FISH_MODE disable_arrow;
+            set -gx _FLOX_PROMPT_HOOK_VERSION 1:true;"#]]
+        .assert_eq(&head);
+    }
 }
