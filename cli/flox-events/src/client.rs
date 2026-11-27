@@ -210,6 +210,18 @@ impl<P: Producer> EventsClient<P> {
         Ok(())
     }
 
+    /// Append events that are already stamped, under one hold of the lock
+    /// and with one sync ([`EventsBuffer::push_all`]), and keep the oldest
+    /// buffered timestamp for [`EventsClient::is_flush_due`], as
+    /// [`EventsClient::record_event`] does.
+    pub fn push_all(&mut self, events: impl IntoIterator<Item = ProducerEvent<P>>) -> Result<()> {
+        self.oldest_buffered_timestamp = None;
+        let mut events_buffer = EventsBuffer::<P>::read_at(&self.buffer)?;
+        events_buffer.push_all(events)?;
+        self.oldest_buffered_timestamp = events_buffer.oldest_timestamp();
+        Ok(())
+    }
+
     /// The age past which the oldest buffered event makes the buffer due.
     /// `Duration::MIN` makes any buffered event due: used until the first
     /// successful send, since an ephemeral runner may never get a second

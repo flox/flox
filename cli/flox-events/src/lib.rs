@@ -2298,6 +2298,27 @@ mod pipeline_tests {
     }
 
     #[test]
+    fn flush_due_reuses_the_oldest_timestamp_of_events_pushed_together() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let mut client = client_with_connection(&tempdir, MockEventsConnection::default());
+        client
+            .push_all([
+                fixed_event(command_run_kind()),
+                fixed_event(command_completed_kind()),
+            ])
+            .unwrap();
+        {
+            // A non-blocking reread would return false while this lock is held.
+            let _held = EventsBuffer::read(tempdir.path()).unwrap();
+            assert!(client.is_flush_due().unwrap());
+        }
+        assert_eq!(
+            EventsBuffer::read(tempdir.path()).unwrap().iter().count(),
+            2
+        );
+    }
+
+    #[test]
     fn flush_due_preserves_retries_after_a_failed_send() {
         let tempdir = tempfile::tempdir().unwrap();
         let connection = MockEventsConnection::default();
