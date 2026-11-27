@@ -793,15 +793,17 @@ jobs:
           sudo ln -sf "$(command -v newuidmap)" /run/wrappers/bin/newuidmap
           sudo ln -sf "$(command -v newgidmap)" /run/wrappers/bin/newgidmap
 
-      # TEMPORARY: what the runner's shells load at startup, to compare with
-      # the NixOS builders.
-      - name: "Debug shell startup files"
+      # The tests start real login and interactive shells, which on this
+      # runner load two things the NixOS builders don't have. Blacksmith's
+      # profile script resets HOME to the runner's own home and exports its
+      # BLACKSMITH_* variables; it is only for SSH debug sessions, so it is
+      # moved aside for the tests and restored afterwards. The Nix
+      # installer's hooks in /etc/bash.bashrc and /etc/zshrc prepend the Nix
+      # profiles to PATH; __ETC_PROFILE_NIX_SOURCED (set on the test step)
+      # makes them a no-op, as on NixOS.
+      - name: "Isolate test shells from the runner's profile scripts"
         if: ${{ matrix.local && needs.scope.outputs.heavy != 'false' }}
-        run: |
-          for f in /etc/profile /etc/bash.bashrc /etc/zsh/zshenv /etc/zsh/zshrc /etc/zshrc /etc/profile.d/*.sh ~/.profile ~/.bashrc ~/.bash_profile; do
-            [ -e "$f" ] && { echo "===== $f"; cat "$f"; }
-          done
-          echo "===== env"; env | grep -i -E "nix|locale|^lang|^lc_|bash_env|^env=|^path=" | sort
+        run: sudo mv /etc/profile.d/blacksmith.sh /etc/blacksmith-profile.sh.disabled
 
       - name: "Run Bats Tests (./#flox-cli-tests)"
         timeout-minutes: 30
@@ -809,6 +811,11 @@ jobs:
         env:
           MATRIX_SYSTEM: ${{ matrix.system }}
           MATRIX_TEST_TAGS: ${{ matrix.test-tags }}
+          # Only used by the local legs, see "Isolate test shells" above.
+          __ETC_PROFILE_NIX_SOURCED: "${{ matrix.local && '1' || '' }}"
+          # NixOS sets this system-wide, so the shell-state tests expect it
+          # before activation. Ubuntu doesn't; point it at Ubuntu's own.
+          LOCALE_ARCHIVE: "${{ matrix.local && '/usr/lib/locale/locale-archive' || '' }}"
         run: |
           if [ "${{ matrix.local }}" = true ]; then
             # The runner is ours alone, unlike the shared builders, so use
@@ -816,6 +823,13 @@ jobs:
             FLOX_TEST_JOBS="$(nproc)" ./.github/scripts/local-execute-integration-tests.sh
           else
             ./.github/scripts/remote-execute-integration-tests.sh
+          fi
+
+      - name: "Restore the runner's profile script"
+        if: ${{ always() && matrix.local }}
+        run: |
+          if [ -e /etc/blacksmith-profile.sh.disabled ]; then
+            sudo mv /etc/blacksmith-profile.sh.disabled /etc/profile.d/blacksmith.sh
           fi
 
       # The sticky-disk post step must unmount /nix to commit the
