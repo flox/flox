@@ -426,11 +426,23 @@ mod tests {
               trap - SIGINT;
               return $_prev_exit;
             };
-            if [[ ";${PROMPT_COMMAND[*]:-};" != *";_flox_hook;"* ]]; then
-              if [[ "$(declare -p PROMPT_COMMAND 2>&1)" == "declare -a"* ]]; then
-                PROMPT_COMMAND=(_flox_hook "${PROMPT_COMMAND[@]}");
+            if ! (
+              _flox_nl=$'\n';
+              if (( BASH_VERSINFO[0] < 5 || (BASH_VERSINFO[0] == 5 && BASH_VERSINFO[1] < 1) )); then
+                _flox_commands="${PROMPT_COMMAND:-}";
               else
+                builtin printf -v _flox_commands '%s;' "${PROMPT_COMMAND[@]:-}";
+              fi;
+              if [[ "${PROMPT_COMMAND:-}" == "__vsc_prompt_cmd_original" ]]; then
+                _flox_commands="$_flox_commands;${__vsc_original_prompt_command:-}";
+              fi;
+              _flox_commands=";${_flox_commands//$_flox_nl/;};";
+              [[ "${_flox_commands//; /;}" == *";_flox_hook;"* ]];
+            ); then
+              if (( BASH_VERSINFO[0] < 5 || (BASH_VERSINFO[0] == 5 && BASH_VERSINFO[1] < 1) )) || [[ "$(declare -p PROMPT_COMMAND 2>&1)" != "declare -a"* ]]; then
                 PROMPT_COMMAND="_flox_hook${PROMPT_COMMAND:+;$PROMPT_COMMAND}";
+              else
+                PROMPT_COMMAND=(_flox_hook "${PROMPT_COMMAND[@]}");
               fi;
             fi;
         "#]].assert_eq(&output);
@@ -475,11 +487,23 @@ mod tests {
               trap - SIGINT;
               return $_prev_exit;
             };
-            if [[ ";${PROMPT_COMMAND[*]:-};" != *";_flox_hook;"* ]]; then
-              if [[ "$(declare -p PROMPT_COMMAND 2>&1)" == "declare -a"* ]]; then
-                PROMPT_COMMAND=(_flox_hook "${PROMPT_COMMAND[@]}");
+            if ! (
+              _flox_nl=$'\n';
+              if (( BASH_VERSINFO[0] < 5 || (BASH_VERSINFO[0] == 5 && BASH_VERSINFO[1] < 1) )); then
+                _flox_commands="${PROMPT_COMMAND:-}";
               else
+                builtin printf -v _flox_commands '%s;' "${PROMPT_COMMAND[@]:-}";
+              fi;
+              if [[ "${PROMPT_COMMAND:-}" == "__vsc_prompt_cmd_original" ]]; then
+                _flox_commands="$_flox_commands;${__vsc_original_prompt_command:-}";
+              fi;
+              _flox_commands=";${_flox_commands//$_flox_nl/;};";
+              [[ "${_flox_commands//; /;}" == *";_flox_hook;"* ]];
+            ); then
+              if (( BASH_VERSINFO[0] < 5 || (BASH_VERSINFO[0] == 5 && BASH_VERSINFO[1] < 1) )) || [[ "$(declare -p PROMPT_COMMAND 2>&1)" != "declare -a"* ]]; then
                 PROMPT_COMMAND="_flox_hook${PROMPT_COMMAND:+;$PROMPT_COMMAND}";
+              else
+                PROMPT_COMMAND=(_flox_hook "${PROMPT_COMMAND[@]}");
               fi;
             fi;
         "#]].assert_eq(&output);
