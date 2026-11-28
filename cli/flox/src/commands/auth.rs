@@ -619,7 +619,7 @@ pub async fn login_flox(
     .await
     .context("Could not authorize via oauth")?;
 
-    debug!("Credentials received: {cred:#?}");
+    debug!("Credentials received successfully");
 
     // Route by what the issuer minted: an Auth0-shaped JWT answers its
     // handle locally, a bare JWT or opaque token resolves it from /me. An
