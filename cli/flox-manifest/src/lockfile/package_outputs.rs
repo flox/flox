@@ -32,12 +32,13 @@ pub trait PackageOutputs {
     /// Returns `true` if `outputs_to_install` exists and matches the
     /// full list of outputs.
     fn outputs_match_outputs_to_install(&self) -> Option<bool> {
-        self.deduped_outputs_to_install().map(|outputs_to_install| {
-            let mut sorted_oti = outputs_to_install.clone();
-            sorted_oti.sort();
+        self.deduped_outputs_to_install().map(|mut outputs_to_install| {
+            outputs_to_install.sort();
+            outputs_to_install.dedup();
             let mut sorted_all_outputs = self.all_outputs();
             sorted_all_outputs.sort();
-            sorted_oti == sorted_all_outputs
+            sorted_all_outputs.dedup();
+            outputs_to_install == sorted_all_outputs
         })
     }
 }

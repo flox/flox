@@ -63,7 +63,9 @@ pub static DEFAULT_SYSTEMS_STR: LazyLock<Vec<String>> = LazyLock::new(|| {
 pub(crate) fn get_schema_version_kind(toml: &DocumentMut) -> Result<VersionKind, ManifestError> {
     if let Some(item) = toml.get("version") {
         if let Some(int) = item.as_integer() {
-            Ok(VersionKind::Version(int as u8))
+            let version = u8::try_from(int)
+                .map_err(|_| ManifestError::InvalidSchemaVersion(int.to_string()))?;
+            Ok(VersionKind::Version(version))
         } else {
             Err(ManifestError::Other(
                 "'version' field must be an integer".into(),
@@ -87,7 +89,9 @@ pub(crate) fn get_json_schema_version_kind(
 ) -> Result<VersionKind, ManifestError> {
     if let Some(value) = json.get("version") {
         if let Some(int) = value.as_i64() {
-            Ok(VersionKind::Version(int as u8))
+            let version = u8::try_from(int)
+                .map_err(|_| ManifestError::InvalidSchemaVersion(int.to_string()))?;
+            Ok(VersionKind::Version(version))
         } else {
             Err(ManifestError::Other(
                 "'version' field must be an integer".into(),
@@ -135,6 +139,13 @@ mod schema_version_tests {
             panic!()
         };
         assert_eq!(value, 42);
+    }
+
+    #[test]
+    fn version_out_of_range() {
+        let toml = parse_toml("version = 257");
+        let err = get_schema_version_kind(&toml).err().unwrap();
+        assert!(matches!(err, ManifestError::InvalidSchemaVersion(_)));
     }
 
     #[test]
@@ -539,8 +550,9 @@ impl FromStr for CatalogPackage {
         let mut version = None;
         if attr_path.contains('@') {
             (attr_path, version) = split_version(descriptor)?;
-        } else {
-            (attr_path, outputs) = split_outputs(descriptor)?;
+        }
+        if version.is_none() {
+            (attr_path, outputs) = split_outputs(attr_path)?;
         }
 
         let install_id = install_id_from_attr_path(attr_path, descriptor)?;
@@ -1812,7 +1824,7 @@ fn update_v1_10_0_catalog_descriptor(
     if let Some(outputs) = outputs {
         match outputs {
             v1_10_0::SelectedOutputs::All(_) => {
-                raw.insert("outputs", toml_string("all").into());
+                table_like_set(raw, "outputs", toml_string("all").into());
             },
             v1_10_0::SelectedOutputs::Specific(items) => {
                 table_like_set_string_array(raw, "outputs", items);
@@ -2551,6 +2563,16 @@ curl.outputs = [\"bin\", \"man\"]
                 "man".to_string(),
                 "dev".to_string()
             ])),
+        });
+
+        // Scoped package with outputs and no version
+        let parsed: CatalogPackage = "nodePackages.@angular/cli^out".parse().unwrap();
+        assert_eq!(parsed, CatalogPackage {
+            id: "cli".to_string(),
+            pkg_path: "nodePackages.@angular/cli".to_string(),
+            version: None,
+            systems: None,
+            outputs: Some(RawSelectedOutputs::Specific(vec!["out".to_string()])),
         });
 
         // Error: empty outputs specification
