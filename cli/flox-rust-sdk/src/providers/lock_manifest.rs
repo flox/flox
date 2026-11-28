@@ -752,11 +752,12 @@ impl LockManifest {
     ) -> Result<Vec<LockedPackage>, ResolveError> {
         let catalog_groups = Self::collect_resolution_package_groups(manifest, seed_lockfile)?;
         let (mut already_locked_packages, groups_to_lock) =
-            Self::split_fully_locked_groups(catalog_groups, seed_lockfile)?;
+            Self::split_fully_locked_groups(catalog_groups.clone(), seed_lockfile)?;
 
-        let flake_installables = Self::collect_flake_installables(manifest);
+        let flake_installables =
+            Self::collect_flake_installables(manifest).collect::<Vec<_>>();
         let (already_locked_installables, installables_to_lock) =
-            Self::split_locked_flake_installables(flake_installables, seed_lockfile)?;
+            Self::split_locked_flake_installables(flake_installables.clone(), seed_lockfile)?;
 
         // Store paths are locked by definition
         let locked_store_paths = Self::collect_store_paths(manifest)
@@ -833,12 +834,44 @@ impl LockManifest {
             &manifest.options.allow,
         )?;
 
+        let mut catalog_map: std::collections::HashMap<(&str, PackageSystem), LockedPackage> =
+            already_locked_packages
+                .into_iter()
+                .chain(locked_packages)
+                .map(|pkg| ((pkg.install_id(), *pkg.system()), pkg))
+                .collect();
+
+        let mut ordered_catalog_packages = catalog_groups
+            .iter()
+            .flat_map(|group| &group.descriptors)
+            .flat_map(|descriptor| {
+                std::iter::repeat(descriptor.install_id.as_str()).zip(&descriptor.systems)
+            })
+            .filter_map(|(install_id, system)| {
+                catalog_map.remove(&(install_id, *system))
+            })
+            .collect::<Vec<_>>();
+        ordered_catalog_packages.extend(catalog_map.into_values());
+
+        let mut flake_map: std::collections::HashMap<(&str, PackageSystem), LockedPackage> =
+            already_locked_installables
+                .into_iter()
+                .chain(locked_installables)
+                .map(|pkg| ((pkg.install_id(), *pkg.system()), pkg))
+                .collect();
+
+        let mut ordered_flake_packages = flake_installables
+            .iter()
+            .filter_map(|i| {
+                flake_map.remove(&(i.install_id.as_str(), i.system))
+            })
+            .collect::<Vec<_>>();
+        ordered_flake_packages.extend(flake_map.into_values());
+
         Ok([
             locked_store_paths,
-            already_locked_packages,
-            locked_packages,
-            already_locked_installables,
-            locked_installables,
+            ordered_catalog_packages,
+            ordered_flake_packages,
         ]
         .concat())
     }
